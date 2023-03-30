@@ -1,0 +1,9 @@
+ActiveBrd     0
+ActiveCh      0
+PlotType      0
+SMonType      0
+RunNumber     1
+Xcalib        0
+PlotTraces    0 0 0 B
+Staircase     150 300 1 500
+HoldDelayScan 0 256 8 500

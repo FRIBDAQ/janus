@@ -1,0 +1,412 @@
+# Parameters Definition
+Vers 1
+# Format:
+# Scope:         'g' = global, 'b' = board, 'c' = channel
+# Type:          'd' = int decimal, 'h' = int hex, 'f' = float, 's' = string, 'c' = combo, 'b' = booleand, 'u' = int or float with units
+# Special Types: 'm' = monitor (showed in GUI but not saved to cfg file), '-' no parameter (graphic separators)
+
+# Name							Default_Value		Scope	Type	Description
+#---------------------------------------------------------------------------------------	
+[Connect]
+#---------------------------------------------------------------------------------------
+Open 							"eth:192.168.50.3"	b		s	
+
+#---------------------------------------------------------------------------------------
+[HV_bias]
+#---------------------------------------------------------------------------------------
+HV_Vbias						"62.5 V"			b		fu		# Bias voltage (common to all channels, fine adjustable channel by channel by "HV_IndivAdj")
+HV_Imax							"10.0 mA"			b		fu		# Max current provided by the HV. The HV will be shut down if the current exceeds this limit.
+HV_Adjust_Range					"4.5"				g		c		# DAC range for the individual HV adjust. 
+	- "4.5"
+	- "2.5"
+	- "DISABLED"
+HV_IndivAdj						128					c		d		# DAC setting for the Individual HV Adjust. Range from 0 to 255
+Vnom							128					c		m		# Estimated Vbias = ~(HV_Vbias - HV_IndivAdj)
+TempSensType					"TMP37"				g		c		# Temperature Sensor Type (or generic coefficients in the form "c0 c1 c2")
+	- "TMP37"
+	- "LM94021_G11"
+	- "LM94021_G00"
+TempFeedbackCoeff				0					g 		f		# Temperature Feedback Coeff (mV/degC): Vout = Vset + k * (T-25)
+EnableTempFeedback				0					g	 	b		# Enable Vbias Temperature Feedback
+
+#---------------------------------------------------------------------------------------
+[RunCtrl]
+#---------------------------------------------------------------------------------------
+StartRunMode					ASYNC				g		c		# Start of Run mode 
+	- ASYNC
+	- CHAIN_T0
+	- CHAIN_T1
+	- TDL
+
+StopRunMode						MANUAL				g		c		# Run Stop Mode
+	- MANUAL
+	- PRESET_TIME
+	- PRESET_COUNTS
+
+EventBuildingMode				DISABLED			g		c		# DISABLED: no event building, TRGTIME_SORTING: event sorting by Trigger Time stamp, TRGID_SORTING: event sorting by Trigger ID
+	- DISABLED
+	- TRGTIME_SORTING
+	- TRGID_SORTING
+
+TstampCoincWindow				100					g		fu		# Coincidence Window for Event Building based on time stamp
+PresetTime						0					g		fu		# Preset Time
+PresetCounts					0					g		f		# Preset Counts (number of acquired events)
+JobFirstRun						0					g		d		# First Run of the Job
+JobLastRun						0					g		d		# Last Run of the Job
+RunSleep						0					g		du		# Wait Time between runs of a job
+EnableJobs						0					g		b		# Enable Jobs
+RunNumber_AutoIncr				0					g		b		# Run Number auto increment
+
+_BLANK							-					-		-
+OutputFiles  					-					-		-
+#______________________________________________________________
+
+DataFilePath					DataFiles			g		s		# Destination folder to save the output files 
+OF_OutFileUnit					LSB					g		c		# ToA and ToT unit
+	- LSB
+	- ns
+OF_ListBin						0					g		b		# Event List file (binary)
+OF_ListAscii 					0					g		b		# Event List file (ASCII) 
+OF_Sync 						0					g		b		# List with BrdID-Tstamp-TrgID (for sync check) 
+OF_RunInfo						0					g		b		# Run Info
+OF_SpectHisto					0					g		b		# PHA spectrum
+OF_ToAHisto						0					g		b		# ToA spectrum
+OF_ToTHisto						0					g		b		# ToT spectrum
+OF_MCS							0					g		b		# MCS Spectrum
+OF_Staircase					0					g		b		# Staircase
+
+#---------------------------------------------------------------------------------------
+[AcqMode]
+#---------------------------------------------------------------------------------------
+AcquisitionMode					SPECTROSCOPY		g		c		# Acquisition mode
+	- SPECTROSCOPY
+	- SPECT_TIMING
+	- TIMING_CSTART
+	- TIMING_CSTOP
+	- COUNTING
+	- WAVEFORM					
+	
+EnableToT						1					g	 	b		# Enable ToT in timing mode (Enabled: ToA = 16 bits, ToT = 9 bits; Disabled: ToA = 25 bits)
+	
+BunchTrgSource					T-OR				g		c		# Bunch Trigger source (for spectroscopy and counting modes)
+	- T0-IN
+	- T1-IN
+	- Q-OR
+	- T-OR
+	- TLOGIC
+	- PTRG
+
+VetoSource						DISABLED			g		c		# The veto signal inhibits the bunch trigger (active high)
+	- DISABLED
+	- SW_CMD
+	- T0-IN
+	- T1-IN
+
+ValidationSource				T0-IN				g		c		# Source of the trigger validation signal. It must arrive within the window is opened by the bunch trigger and closed after Tv ~= 130 ns + HoldDelay.
+	- SW_CMD
+	- T0-IN
+	- T1-IN
+
+ValidationMode					DISABLED			g		c		# ACCEPT: Trigger validated by the signal in the val. window. REJECT: trigger rejected if no signal arrives in the val. window. Options: DISABLED, ACCEPT, REJECT
+	- DISABLED
+	- ACCEPT
+	- REJECT
+
+CountingMode					SINGLES				g		c		# SINGLES: each channel counts its own self trigger. PAIRED_AND: couples of channels count in coincidence
+	- SINGLES
+	- PAIRED_AND
+	
+PairedCnt_CoincWin				"8 ns"				g		du		# Coincidence window for Paired_And counting mode. Min = 8 ns, Max = 2032 ns, Step = 8 ns
+
+TrgIdMode						TRIGGER_CNT			g		c		# Trigger ID mode: TRIGGER_CNT counts all triggers arrived to the board (accepted or not); VALIDATION_CNT counts validation signals (with or without associated trigger)
+	- TRIGGER_CNT
+	- VALIDATION_CNT
+
+TriggerLogic					OR64				g		c		# Trigger Logic (Combinatorial network with 64 self trigger inputs)
+	- OR64
+	- AND2_OR32
+	- OR32_AND2
+	- MAJ64
+	- MAJ32_AND2
+
+MajorityLevel					2					g		d		# Majority Level (1 to 64)
+
+PtrgPeriod						"1 s"				g		du		# Period of the internal periodic trigger
+
+TrefSource						T0-IN				g		c		# Tref source for timing mode (common start/stop)
+	- T0-IN
+	- T1-IN
+	- Q-OR
+	- T-OR
+	- PTRG
+	- TLOGIC
+
+TrefWindow						"100 ns"			g		du		# Tref window (gate) in timing mode (common start/stop)
+
+TrefDelay						"0 ns"				g		du		# Tref delay in timing mode (can be negative)
+
+T0_Out							T-OR				g		c		# T0_Out assignment
+	- T0-IN
+	- BUNCHTRG
+	- T-OR
+	- TLOGIC
+	- RUN
+	- PTRG
+	- BUSY
+	- DPROBE
+	- SQ_WAVE
+	- TDL_SYNC
+	- RUN_SYNC
+	- ZERO
+	
+T1_Out							BUNCHTRG			g		c		# T1_Out assignment
+	- T1-IN
+	- BUNCHTRG
+	- Q-OR
+	- TLOGIC
+	- RUN
+	- PTRG
+	- BUSY
+	- DPROBE
+	- SQ_WAVE
+	- TDL_SYNC
+	- RUN_SYNC
+	- ZERO
+	
+_BLANK							-					-		-
+	
+ChEnableMask0					FFFFFFFF			b		h		# Channel enable mask (ch 0..31)
+ChEnableMask1					FFFFFFFF			b		h		# Channel enable mask (ch 32..63)
+
+
+#---------------------------------------------------------------------------------------
+[Discr]
+#---------------------------------------------------------------------------------------
+
+T-Discriminators				-					-		-
+#______________________________________________________________
+
+FastShaperInput					HG-PA				g		c		# The fast shaper can be connected to High gain or Low gain preamp
+	- HG-PA
+	- LG-PA
+
+TD_CoarseThreshold				185					b		d		# Timing Discriminator coarse threshold (common to all channels)
+TD_FineThreshold				0					c		d		# Timing Discriminator fine threshold (individual)
+Trg_HoldOff						0					g		u		# Trigger hold-off time (imposed dead time)
+
+Tlogic_Mask0					FFFFFFFF			b		h		# Trigger Logic channel enable mask (ch 0..31) 
+Tlogic_Mask1					FFFFFFFF			b		h		# Trigger Logic channel enable mask (ch 32..63) 
+
+_BLANK							-					-		-
+_BLANK							-					-		-
+
+Q-Discriminators				-					-		-
+#______________________________________________________________
+
+QD_CoarseThreshold				250					g		d       # Charge Discriminator coarse threshold (common to all channels)
+QD_FineThreshold				0					c		d		# Charge Discriminator fine threshold (individual)
+
+Q_DiscrMask0					FFFFFFFF			b		h		# Q-OR Channel enable mask (ch 0..31)
+Q_DiscrMask1					FFFFFFFF			b		h		# Q-OR Channel enable mask (ch 32..63)
+
+
+
+#---------------------------------------------------------------------------------------
+[Spectroscopy]
+#---------------------------------------------------------------------------------------
+GainSelect						HIGH				g		c		# Gain selection in output data format. It can be both HG and LG, HG or LG only or automatic (HG if not saturated, LG otherwise)
+	- HIGH
+	- LOW
+	- AUTO
+	- BOTH
+
+HG_Gain							51					c		d		# High Gain Setting (1 to 63)
+LG_Gain							51					c		d		# Low Gain Setting (1 to 63)
+
+Pedestal						100					g		d		# Common Pedestal in channels (ADC reading with no input signal)
+
+ZS_Threshold_LG					0					c		d		# Threshold for Zero Suppression (LG)
+ZS_Threshold_HG					0					c		d		# Threshold for Zero Suppression (HG)
+
+HG_ShapingTime					"25 ns"				g		c		# Shaping Time of the slow shaper (High Gain)
+	- "87.5 ns"
+	- "75 ns"
+	- "62.5 ns"
+	- "50 ns"
+	- "37.5 ns"
+	- "25 ns"
+	- "12.5 ns"
+	
+LG_ShapingTime					"25 ns"				g		c		# Shaping Time of the slow shaper (Low Gain)
+	- "87.5 ns"
+	- "75 ns"
+	- "62.5 ns"
+	- "50 ns"
+	- "37.5 ns"
+	- "25 ns"
+	- "12.5 ns"
+
+_BLANK 							-					-		-
+
+HoldDelay						"200 ns"			g		du		# Delay between bunch trigger (start of peak detection) and hold (stop of peak detection)
+MuxClkPeriod					"300 ns"			g		du		# Multiplexer readout speed. Best setting = 300 ns
+#MuxNSmean						4					g		c		# Number of ADC samples for the mean
+#	- 1
+#	- 4
+#	- 16
+
+_BLANK 							-					-		-
+EHistoNbin						4K					g		c		# Number of channels (bins) in the PHA histogram
+	- DISABLED
+	- 256
+	- 512
+	- 1K
+	- 2K
+	- 4K
+	- 8K
+ToAHistoNbin					4K					g		c		# Number of channels (bins) in the ToA histogram
+	- DISABLED
+	- 256
+	- 512
+	- 1K
+	- 2K
+	- 4K
+	- 8K
+	- 16K
+ToARebin						1					g		d		# Rebin factor for the ToA histogram
+ToAHistoMin						"0 ns"				g		du		# Minimum value of ToA (in ns) in the ToA histogram
+MCSHistoNbin					4K					g		c		# Number of channels (bins) in the MCS histogram (active in counting mode)
+	- DISABLED
+	- 256
+	- 512
+	- 1K
+	- 2K
+	- 4K
+	- 8K
+	- 16K
+
+#---------------------------------------------------------------------------------------
+[Test-Probe]
+#---------------------------------------------------------------------------------------
+AnalogProbe						OFF					g		c		# Select the signal connected to the analog probe 
+	- OFF
+	- FAST
+	- SLOW_LG
+	- SLOW_HG
+	- PREAMP_LG
+	- PREAMP_HG
+
+DigitalProbe					OFF					g		c		# Select the signal connected to the digital probe
+	- OFF
+	- PEAK_LG
+	- PEAK_HG
+	- HOLD
+	- START_CONV
+	- DATA_COMMIT
+	- DATA_VALID
+	- CLK_1024
+	- VAL_WINDOW
+
+ProbeChannel					0					g		d		# Select the channel connected to the analog and digital probes
+
+_BLANK 							-					-		-
+
+TestPulseSource					EXT					g		c		# Select the source for the test pulse signal 
+	- OFF
+	- EXT
+	- T0-IN
+	- T1-IN
+	- PTRG
+	- SW-CMD
+	
+TestPulseAmplitude				3000				g		d		# DAC setting for the internal test pulser (12 bit)
+TestPulseDestination			ALL					g		c 		# Select which channels are connected to the test pulse input
+	- NONE
+	- ALL
+	- EVEN
+	- ODD
+	- "CH 0"
+	- "CH 1"
+	- "CH 2"
+	- "CH 3"
+	- "CH 4"
+	- "CH 5"
+	- "CH 6"
+	- "CH 7"
+	- "CH 8"
+	- "CH 9"
+	- "CH 10"
+	- "CH 11"
+	- "CH 12"
+	- "CH 13"
+	- "CH 14"
+	- "CH 15"
+	- "CH 16"
+	- "CH 17"
+	- "CH 18"
+	- "CH 19"
+	- "CH 20"
+	- "CH 21"
+	- "CH 22"
+	- "CH 23"
+	- "CH 24"
+	- "CH 25"
+	- "CH 26"
+	- "CH 27"
+	- "CH 28"
+	- "CH 29"
+	- "CH 30"
+	- "CH 31"
+	- "CH 32"
+	- "CH 33"
+	- "CH 34"
+	- "CH 35"
+	- "CH 36"
+	- "CH 37"
+	- "CH 38"
+	- "CH 39"
+	- "CH 40"
+	- "CH 41"
+	- "CH 42"
+	- "CH 43"
+	- "CH 44"
+	- "CH 45"
+	- "CH 46"
+	- "CH 47"
+	- "CH 48"
+	- "CH 49"
+	- "CH 50"
+	- "CH 51"
+	- "CH 52"
+	- "CH 53"
+	- "CH 54"
+	- "CH 55"
+	- "CH 56"
+	- "CH 57"
+	- "CH 58"
+	- "CH 59"
+	- "CH 60"
+	- "CH 61"
+	- "CH 62"
+	- "CH 63"
+TestPulsePreamp					BOTH				g		c		# Test pulse can feed both HG and LG preamps or only one of them
+	- LG
+	- HG
+	- BOTH
+
+#---------------------------------------------------------------------------------------
+[Regs]
+#---------------------------------------------------------------------------------------
+# Empty section (Tab used by GUI)
+
+#---------------------------------------------------------------------------------------
+[Statistics]
+#---------------------------------------------------------------------------------------
+# Empty section (Tab used by GUI)
+
+#---------------------------------------------------------------------------------------
+[Log]
+#---------------------------------------------------------------------------------------
+# Empty section (Tab used by GUI)
+
+

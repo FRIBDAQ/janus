@@ -1,0 +1,45 @@
+# List of the parameters that won't be visualized in the different GUI views
+# xNNN, where x=a, b, N=0 to 5 (multiple N allowed)
+# x: a=Advanced, b=Basic
+# N: SPECT=0, SPECT_TIME=1, TIME_CSTART=2, TIME_CSTOP=3, COUNT=4, WAVE=5 (see par_defs.txt for details)
+# Es: Run Sleep			b01 (parameter removed in basic, spect and specttime modes
+# Please, use 'tab' for spacing param_name and hiding attriute
+# Param name		Hiding Attribute
+
+Job First Run			b
+Job Last Run			b
+Run Sleep				b
+Enable Jobs				b
+Event Building Mode		b
+Trg Time Window         b
+Veto Source				b45
+Validation Source		b2345
+Validation Mode			b2345
+Counting Mode			b1235
+Paired-Cnt Coinc Win	b01235
+
+Enable ToT				b045
+TrefDelay				045
+TrefSource				045
+TrefWindow				045
+
+TD Fine Threshold		b
+QD Coarse Threshold		b
+QD Fine Threshold		b
+QD Mask Chip 0			b
+QD Mask Chip 1			b
+ZS Threshold LG			b
+ZS Threshold HG			b
+MUX Clock Period		b2345
+Trigger ID Mode			b2345
+Hold Delay				b2345
+
+Energy N Channels		2345
+ToA N Channels			045
+ToA Rebin				045
+ToA Min					045
+MCS N Channels			01235
+
+# Tabs 
+Regs					b
+Test-Probe				b
