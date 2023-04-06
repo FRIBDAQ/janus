@@ -194,6 +194,12 @@ class TabsPanel():
 			if "OF_" in param.name:
 				m_xdef = 480
 				lx = 310
+			if "SourceID" in param.name:
+				m_xdef = 460
+				lx = 330
+			if "RingBufferName" in param.name:
+				m_xdef = 480
+				lx = 310
 
 			if param.type == '-':  # separator or labels
 				if param.name.find('_BLANK') < 0:	
@@ -1332,6 +1338,12 @@ class TabsPanel():
 		if "OF_" in param.name:
 			if 'FileUnit' in param.name: m_xdef = 465
 			else: m_xdef = 520
+			lx = 330
+		if "SourceID" in param.name:
+			m_xdef = 460
+			lx = 330
+		if "RingBufferName" in param.name:
+			m_xdef = 460
 			lx = 330
 		# Replace everything except hideparam!
 		if param.name in self.button_names:

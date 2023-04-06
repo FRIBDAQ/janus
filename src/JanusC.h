@@ -101,7 +101,8 @@
 #define OUTFILE_RUN_INFO				0x0100
 #define OUTFILE_MCS_HISTO				0x0200
 #define OUTFILE_SYNC					0x0400
-
+#define OUTFILE_RAW_DATA_RINGBUFFER		0x8000 // Genie: In case Caen adds something after the last one
+ 
 #define PLOT_E_SPEC_LG					0
 #define PLOT_E_SPEC_HG					1
 #define PLOT_TOA_SPEC					2
@@ -178,6 +179,8 @@ typedef struct Config_t {
 	int EnLiveParamChange;			// Enable param change while running (when disabled, Janus will stops and restarts the acq. when a param changes)
 	int AskHVShutDownOnExit;		// Ask if the HV must be shut down before quitting
 	int OutFileEnableMask;			// Enable/Disable output files 
+	int SourceID;                   // Source ID in FRIBDAQ stack (FRIB)
+	char RingBufferName[500];       // RingBuffer Name (FRIB)
 	char DataFilePath[500];			// Output file data path
 	uint8_t OutFileUnit;			// Unit for time measurement in output files (0 = LSB, 1 = ns)
 	int EnableJobs;					// Enable Jobs

@@ -47,6 +47,9 @@ OF_ToAHisto                        0                   # ToA spectrum
 OF_ToTHisto                        0                   # ToT spectrum
 OF_MCS                             0                   # MCS Spectrum
 OF_Staircase                       0                   # Staircase
+OF_RingBuffer                      0                   # Data routed to a RingBuffer (FRIB)
+SourceID                           0                   # Source ID in FRIBDAQ stack (FRIB)
+RingBufferName                     janus               # RingBuffer Name (FRIB)
 
 # ------------------------------------------------------------------------------------------
 # AcqMode

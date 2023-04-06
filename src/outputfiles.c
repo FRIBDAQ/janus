@@ -91,6 +91,9 @@ int OpenOutputFiles(int RunNumber)
 		CreateOutFileName("sync", RunNumber, 0, filename);
 		of_sync = fopen(filename, "w");
 	}
+	if ((WDcfg.OutFileEnableMask & OUTFILE_RAW_DATA_RINGBUFFER)) {
+		// Create file and assign handler
+	}
 	WriteHeader = 1;
 	return 0;
 }

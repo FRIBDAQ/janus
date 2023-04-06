@@ -106,6 +106,12 @@ void GetDatapath(FILE* f_ini, Config_t* WDcfg) {
 	}
 }
 
+void GetRingBufferName(FILE* f_ini, Config_t* WDcfg) {
+		char mchar[200];
+		fscanf(f_ini, "%s", mchar);
+		strcpy(WDcfg->RingBufferName, mchar);
+}
+
 // ---------------------------------------------------------------------------------
 // Description: Read an integer (decimal) from the conig file
 // Inputs:		f_ini: config file
@@ -976,6 +982,9 @@ int ParseConfigFile(FILE* f_ini, Config_t* WDcfg, bool fcall)
 		if (streq(str, "OF_Staircase"))				WDcfg->OutFileEnableMask	= SETBIT(WDcfg->OutFileEnableMask, OUTFILE_STAIRCASE, GetInt(f_ini));
 		if (streq(str, "OF_RunInfo"))				WDcfg->OutFileEnableMask	= SETBIT(WDcfg->OutFileEnableMask, OUTFILE_RUN_INFO, GetInt(f_ini));
 		if (streq(str, "OF_MCS"))					WDcfg->OutFileEnableMask	= SETBIT(WDcfg->OutFileEnableMask, OUTFILE_MCS_HISTO, GetInt(f_ini));
+		if (streq(str, "OF_RingBuffer"))			WDcfg->OutFileEnableMask    = SETBIT(WDcfg->OutFileEnableMask, OUTFILE_RAW_DATA_RINGBUFFER, GetInt(f_ini));
+		if (streq(str, "SourceID"))			        WDcfg->SourceID             = GetInt(f_ini);
+		if (streq(str, "RingBufferName"))			GetRingBufferName(f_ini, WDcfg);
 		if (streq(str, "TstampCoincWindow"))		WDcfg->TstampCoincWindow	= (uint32_t)GetTime(f_ini, "ns");
 		if (streq(str, "PresetTime"))				WDcfg->PresetTime			= GetTime(f_ini, "s");
 		if (streq(str, "PresetCounts"))				WDcfg->PresetCounts			= GetInt(f_ini);
