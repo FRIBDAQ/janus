@@ -23,6 +23,8 @@
 #include "JanusC.h"
 #include "Statistics.h"
 
+#include "RBHWrapper.h"
+
 
 // ****************************************************
 // Global Variables
@@ -41,6 +43,12 @@ uint16_t cacchio = 0;
 int WriteHeader = 1;
 char dtq_mode_ch[5][15] = { " ", "Spectroscopy", "Timing", "Spect_Timing", "Counting" };
 
+/*
+CRingBuffer *m_RingBuffer;
+const size_t RING_BUFFER_SIZE(32*1024*1024);
+int m_sourceid = 0;
+*/
+bool m_writeToRingBuffer = false;
 
 // ****************************************************
 // Local functions
@@ -92,7 +100,9 @@ int OpenOutputFiles(int RunNumber)
 		of_sync = fopen(filename, "w");
 	}
 	if ((WDcfg.OutFileEnableMask & OUTFILE_RAW_DATA_RINGBUFFER)) {
-		// Create file and assign handler
+		RBH_setSourceID(WDcfg.SourceID);
+		RBH_setRingname(WDcfg.RingBufferName);
+		m_writeToRingBuffer = true;
 	}
 	WriteHeader = 1;
 	return 0;
@@ -130,6 +140,9 @@ int SaveRawData(uint32_t *buff, int nw)
 		for(i=0; i<nw; i++)
 			fprintf(of_raw_a, "%3d %08X\n", i, buff[i]);
 		fprintf(of_raw_a, "----------------------------------\n");
+	}
+	if (m_writeToRingBuffer) {
+		RBH_writeToRing(buff, sizeof(uint32_t), nw);
 	}
 	return 0;
 }
