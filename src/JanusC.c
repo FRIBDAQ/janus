@@ -1301,7 +1301,7 @@ Restart:  // when config file changes or a new run of the job is scheduled, the 
 					if (ToAbin > 0) Stats.HitCnt[b][ch].cnt++;
 				}
 				//int isTSpect = (dtq & 0x2) >> 1;
-				if ((WDcfg.OutFileEnableMask & OUTFILE_LIST_ASCII) || (WDcfg.OutFileEnableMask & OUTFILE_LIST_BIN) || (WDcfg.OutFileEnableMask & OUTFILE_SYNC)) {
+				if ((WDcfg.OutFileEnableMask & OUTFILE_LIST_ASCII) || (WDcfg.OutFileEnableMask & OUTFILE_LIST_BIN) || (WDcfg.OutFileEnableMask & OUTFILE_SYNC) || (WDcfg.OutFileEnableMask & OUTFILE_RAW_DATA_RINGBUFFER)) {
 					//SaveList_Spect(b, Stats.current_tstamp_us[b], Stats.current_trgid[b], Ev, isTSpect);
 					SaveList(b, Stats.current_tstamp_us[b], Stats.current_trgid[b], Ev, dtq);
 				}
@@ -1319,7 +1319,7 @@ Restart:  // when config file changes or a new run of the job is scheduled, the 
 					if (ToAbin > 0) Histo1D_AddCount(&Stats.H1_ToA[b][ch], ToAbin);
 					if (ToTbin > 0) Histo1D_AddCount(&Stats.H1_ToT[b][ch], ToTbin);
 				}
-				if ((WDcfg.OutFileEnableMask & OUTFILE_LIST_ASCII) || (WDcfg.OutFileEnableMask & OUTFILE_LIST_BIN) || (WDcfg.OutFileEnableMask & OUTFILE_SYNC)) {
+				if ((WDcfg.OutFileEnableMask & OUTFILE_LIST_ASCII) || (WDcfg.OutFileEnableMask & OUTFILE_LIST_BIN) || (WDcfg.OutFileEnableMask & OUTFILE_SYNC) || (WDcfg.OutFileEnableMask & OUTFILE_RAW_DATA_RINGBUFFER)) {
 					SaveList(b, Stats.current_tstamp_us[b], Stats.current_trgid[b], Ev, dtq);
 				}
 
@@ -1334,7 +1334,7 @@ Restart:  // when config file changes or a new run of the job is scheduled, the 
 				Stats.T_OR_Cnt[b].cnt += Ev->t_or_counts;
 				Stats.Q_OR_Cnt[b].cnt += Ev->q_or_counts;
 				Stats.trgcnt_update_us[b] = curr_tstamp_us;
-				if ((WDcfg.OutFileEnableMask & OUTFILE_LIST_ASCII) || (WDcfg.OutFileEnableMask & OUTFILE_LIST_BIN) || (WDcfg.OutFileEnableMask & OUTFILE_SYNC)) {
+				if ((WDcfg.OutFileEnableMask & OUTFILE_LIST_ASCII) || (WDcfg.OutFileEnableMask & OUTFILE_LIST_BIN) || (WDcfg.OutFileEnableMask & OUTFILE_SYNC) || (WDcfg.OutFileEnableMask & OUTFILE_RAW_DATA_RINGBUFFER)) {
 					SaveList(b, Stats.current_tstamp_us[b], Stats.current_trgid[b], Ev, dtq);
 				}
 			} else if (dtq == DTQ_WAVE) {
