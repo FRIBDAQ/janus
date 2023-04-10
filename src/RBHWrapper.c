@@ -41,8 +41,8 @@ void RBH_addToBuffer(const void *ptr, size_t size, size_t num) {
     RingBufferHandler::getInstance() -> addToBuffer(ptr, size, num);
 }
 
-void RBH_writeToRing() {
-    RingBufferHandler::getInstance() -> writeToRing();
+void RBH_writeToRing(bool isHeader) {
+    RingBufferHandler::getInstance() -> writeToRing(isHeader);
 }
 
 #ifdef __cplusplus

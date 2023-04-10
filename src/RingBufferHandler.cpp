@@ -64,8 +64,16 @@ void RingBufferHandler::addToBuffer(const void *buf, size_t size, size_t num) {
     m_SizeToWrite += size*num;
 }
 
-void RingBufferHandler::writeToRing() {
-    CPhysicsEventItem item(0, m_SourceId, 0, m_SizeToWrite + 1024);
+void RingBufferHandler::writeToRing(bool isHeader) {
+    timestamp tstamp;
+
+    for (int iByte = 0; iByte < 8; iByte++) {
+        tstamp.element[iByte] = m_Buffer[3 + iByte];
+    }
+
+    uint64_t tstamp_int = tstamp.value*10000;
+
+    CPhysicsEventItem item(isHeader ? 0 : tstamp_int, m_SourceId, 0, m_SizeToWrite + 1024);
     void *dest = item.getBodyCursor();
     memcpy(dest, m_Buffer, m_SizeToWrite);
     dest = static_cast<void *>(static_cast<uint8_t *>(dest) + m_SizeToWrite);

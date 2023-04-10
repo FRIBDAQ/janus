@@ -24,6 +24,11 @@
 
 #define RING_BUFFER_SIZE 64*1024
 
+typedef union _timestamp {
+    double value;
+    uint8_t element[8];
+} timestamp;
+
 class RingBufferHandler {
     public:
         RingBufferHandler();
@@ -39,7 +44,7 @@ class RingBufferHandler {
 
         void clearBuffer();
         void addToBuffer(const void *ptr, size_t size, size_t num);
-        void writeToRing();
+        void writeToRing(bool isHeader = false);
 
     private:
         int m_SourceId;

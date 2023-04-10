@@ -26,7 +26,7 @@ void RBH_setRingname(char *ringname);
 const char *RBH_getRingname();
 
 void RBH_addToBuffer(const void *ptr, size_t size, size_t num);
-void RBH_writeToRing();
+void RBH_writeToRing(bool isHeader = false);
 
 #ifdef __cplusplus
 }

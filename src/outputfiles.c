@@ -221,7 +221,7 @@ int SaveList(int brd, double ts, uint64_t trgid, void *generic_ev, int dtq)
 			RBH_addToBuffer(&tmpLSB, sizeof(tmpLSB), 1);	// Keep it as float for homogenity with A5203, the value of the LSB of which is not fixed
 			//RBH_addToBuffer(&tmask, sizeof(tmask), 1);	// uncomment if we want the Channel Mask
 			RBH_addToBuffer(&Stats.start_time, sizeof(Stats.start_time), 1);
-			RBH_writeToRing();
+			RBH_writeToRing(1);
 		}
 
 		WriteHeader = 0;
