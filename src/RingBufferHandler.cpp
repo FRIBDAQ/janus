@@ -74,4 +74,6 @@ void RingBufferHandler::writeToRing() {
     
     CRingBuffer* pR = m_RingBuffer.get();
     item.commitToRing(*pR);
+
+    clearBuffer();
 }
