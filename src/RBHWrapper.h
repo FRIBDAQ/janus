@@ -25,7 +25,8 @@ int RBH_getSourceID();
 void RBH_setRingname(char *ringname);
 const char *RBH_getRingname();
 
-void RBH_writeToRing(const void *ptr, size_t size, size_t num);
+void RBH_addToBuffer(const void *ptr, size_t size, size_t num);
+void RBH_writeToRing();
 
 #ifdef __cplusplus
 }

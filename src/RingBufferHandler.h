@@ -22,6 +22,8 @@
 
 #include "CRingBuffer.h"
 
+#define RING_BUFFER_SIZE 64*1024
+
 class RingBufferHandler {
     public:
         RingBufferHandler();
@@ -35,12 +37,16 @@ class RingBufferHandler {
         void setRingname(std::string ringname);
         const char *getRingname();
 
-        void writeToRing(const void *ptr, size_t size, size_t num);
+        void clearBuffer();
+        void addToBuffer(const void *ptr, size_t size, size_t num);
+        void writeToRing();
 
     private:
         int m_SourceId;
         std::string m_RingName;
 
+        uint8_t m_Buffer[RING_BUFFER_SIZE];
+        uint16_t m_SizeToWrite;
         std::unique_ptr<CRingBuffer> m_RingBuffer;
 };
 

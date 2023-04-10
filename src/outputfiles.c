@@ -210,17 +210,18 @@ int SaveList(int brd, double ts, uint64_t trgid, void *generic_ev, int dtq)
 			float tmpLSB = float(TOA_LSB_ns);
 			uint16_t enbin = WDcfg.EHistoNbin;
 			//uint32_t tmask = WDcfg.ChEnableMask1[brd];	// see below
-			RBH_writeToRing(&fnumFVer, sizeof(fnumFVer), 1);
-			RBH_writeToRing(&snumFVer, sizeof(snumFVer), 1);
-			RBH_writeToRing(&fnumSW, sizeof(fnumSW), 1);
-			RBH_writeToRing(&snumSW, sizeof(snumSW), 1);
-			RBH_writeToRing(&tnumSW, sizeof(tnumSW), 1);
-			RBH_writeToRing(&type_file, sizeof(type_file), 1);
-			RBH_writeToRing(&enbin, sizeof(enbin), 1);
-			RBH_writeToRing(&WDcfg.OutFileUnit, sizeof(WDcfg.OutFileUnit), 1);	// Type of unit used for Time. 0 LSB, 1 ns
-			RBH_writeToRing(&tmpLSB, sizeof(tmpLSB), 1);	// Keep it as float for homogenity with A5203, the value of the LSB of which is not fixed
-			//RBH_writeToRing(&tmask, sizeof(tmask), 1);	// uncomment if we want the Channel Mask
-			RBH_writeToRing(&Stats.start_time, sizeof(Stats.start_time), 1);
+			RBH_addToBuffer(&fnumFVer, sizeof(fnumFVer), 1);
+			RBH_addToBuffer(&snumFVer, sizeof(snumFVer), 1);
+			RBH_addToBuffer(&fnumSW, sizeof(fnumSW), 1);
+			RBH_addToBuffer(&snumSW, sizeof(snumSW), 1);
+			RBH_addToBuffer(&tnumSW, sizeof(tnumSW), 1);
+			RBH_addToBuffer(&type_file, sizeof(type_file), 1);
+			RBH_addToBuffer(&enbin, sizeof(enbin), 1);
+			RBH_addToBuffer(&WDcfg.OutFileUnit, sizeof(WDcfg.OutFileUnit), 1);	// Type of unit used for Time. 0 LSB, 1 ns
+			RBH_addToBuffer(&tmpLSB, sizeof(tmpLSB), 1);	// Keep it as float for homogenity with A5203, the value of the LSB of which is not fixed
+			//RBH_addToBuffer(&tmask, sizeof(tmask), 1);	// uncomment if we want the Channel Mask
+			RBH_addToBuffer(&Stats.start_time, sizeof(Stats.start_time), 1);
+			RBH_writeToRing();
 		}
 
 		WriteHeader = 0;
@@ -360,11 +361,11 @@ int SaveList(int brd, double ts, uint64_t trgid, void *generic_ev, int dtq)
 				}
 				data_t[i] = datatype;
 			}
-			RBH_writeToRing(&size, sizeof(size), 1);
-			RBH_writeToRing(&b8, sizeof(b8), 1);
-			RBH_writeToRing(&ts, sizeof(ts), 1);
-			RBH_writeToRing(&trgid, sizeof(trgid), 1);
-			RBH_writeToRing(&ev->chmask, sizeof(ev->chmask), 1);
+			RBH_addToBuffer(&size, sizeof(size), 1);
+			RBH_addToBuffer(&b8, sizeof(b8), 1);
+			RBH_addToBuffer(&ts, sizeof(ts), 1);
+			RBH_addToBuffer(&trgid, sizeof(trgid), 1);
+			RBH_addToBuffer(&ev->chmask, sizeof(ev->chmask), 1);
 			for(i=0; i<MAX_NCH; i++) {
 				if ((ev->chmask >> i) & 1) {
 					uint8_t tmp_type = data_t[i];
@@ -372,20 +373,21 @@ int SaveList(int brd, double ts, uint64_t trgid, void *generic_ev, int dtq)
 					uint16_t tmp_nrgH = tmp_enH[i];
 					float tmpToA = float(ev->tstamp[i] * TOA_LSB_ns);
 					float tmpToT = float(ev->ToT[i] * TOA_LSB_ns);
-					RBH_writeToRing(&i, sizeof(i), 1);	// Channel
-					RBH_writeToRing(&tmp_type, sizeof(tmp_type), 1);
-					if (data_t[i] & 0x01) RBH_writeToRing(&tmp_nrgL, sizeof(ev->energyLG[i]), 1);
-					if (data_t[i] & 0x02) RBH_writeToRing(&tmp_nrgH, sizeof(ev->energyHG[i]), 1);
+					RBH_addToBuffer(&i, sizeof(i), 1);	// Channel
+					RBH_addToBuffer(&tmp_type, sizeof(tmp_type), 1);
+					if (data_t[i] & 0x01) RBH_addToBuffer(&tmp_nrgL, sizeof(ev->energyLG[i]), 1);
+					if (data_t[i] & 0x02) RBH_addToBuffer(&tmp_nrgH, sizeof(ev->energyHG[i]), 1);
 					if (data_t[i] & 0x10) {
-						if (WDcfg.OutFileUnit) RBH_writeToRing(&tmpToA, sizeof(float), 1);
-						else RBH_writeToRing(&ev->tstamp[i], sizeof(ev->tstamp[i]), 1);
+						if (WDcfg.OutFileUnit) RBH_addToBuffer(&tmpToA, sizeof(float), 1);
+						else RBH_addToBuffer(&ev->tstamp[i], sizeof(ev->tstamp[i]), 1);
 					}
 					if (data_t[i] & 0x20) {
-						if (WDcfg.OutFileUnit) RBH_writeToRing(&tmpToT, sizeof(float), 1);
-						else RBH_writeToRing(&ev->ToT[i], sizeof(ev->ToT[i]), 1);
+						if (WDcfg.OutFileUnit) RBH_addToBuffer(&tmpToT, sizeof(float), 1);
+						else RBH_addToBuffer(&ev->ToT[i], sizeof(ev->ToT[i]), 1);
 					}
 				}
 			}
+			RBH_writeToRing();
 		}
 	}
 
@@ -462,21 +464,22 @@ int SaveList(int brd, double ts, uint64_t trgid, void *generic_ev, int dtq)
 					else
 						size += (sizeof(i) + sizeof(ev->counts[i]));
 				}
-			RBH_writeToRing(&size, sizeof(size), 1);
-			RBH_writeToRing(&b8, sizeof(b8), 1);
-			RBH_writeToRing(&ts, sizeof(ts), 1);
-			RBH_writeToRing(&trgid, sizeof(trgid), 1);
-			RBH_writeToRing(&ev->chmask, sizeof(ev->chmask), 1);
+			RBH_addToBuffer(&size, sizeof(size), 1);
+			RBH_addToBuffer(&b8, sizeof(b8), 1);
+			RBH_addToBuffer(&ts, sizeof(ts), 1);
+			RBH_addToBuffer(&trgid, sizeof(trgid), 1);
+			RBH_addToBuffer(&ev->chmask, sizeof(ev->chmask), 1);
 			for(i=0; i<MAX_NCH; i++) {
 				if ((ev->chmask >> i) & 1) {
 					if (WDcfg.SupprZeroCntListFile == 1 && ev->counts[i] == 0)
 						continue;
 					else {
-						RBH_writeToRing(&i, sizeof(i), 1);
-						RBH_writeToRing(&ev->counts[i], sizeof(ev->counts[i]), 1);
+						RBH_addToBuffer(&i, sizeof(i), 1);
+						RBH_addToBuffer(&ev->counts[i], sizeof(ev->counts[i]), 1);
 					}
 				}
 			}
+			RBH_writeToRing();
 		}
 	}
 
@@ -582,27 +585,28 @@ int SaveList(int brd, double ts, uint64_t trgid, void *generic_ev, int dtq)
 				mydtype[chit] = datatype;
 			}
 
-			RBH_writeToRing(&size, sizeof(size), 1);
-			RBH_writeToRing(&b8, sizeof(b8), 1);
-			RBH_writeToRing(&ts, sizeof(ts), 1);
-			//RBH_writeToRing(&trgid, sizeof(trgid), 1);
-			RBH_writeToRing(&ev->nhits, sizeof(ev->nhits), 1);
+			RBH_addToBuffer(&size, sizeof(size), 1);
+			RBH_addToBuffer(&b8, sizeof(b8), 1);
+			RBH_addToBuffer(&ts, sizeof(ts), 1);
+			//RBH_addToBuffer(&trgid, sizeof(trgid), 1);
+			RBH_addToBuffer(&ev->nhits, sizeof(ev->nhits), 1);
 			for(i=0; i<ev->nhits; i++) {
 				float tmpToA = float(ev->tstamp[i] * TOA_LSB_ns);
 				float tmpToT = float(ev->ToT[i] * TOA_LSB_ns);
 				datatype = mydtype[i];
-				RBH_writeToRing(&ev->channel[i], 1, sizeof(ev->channel[i]));
+				RBH_addToBuffer(&ev->channel[i], 1, sizeof(ev->channel[i]));
 				// Write Datatype as specttiming
-				RBH_writeToRing(&datatype, 1, sizeof(datatype));
+				RBH_addToBuffer(&datatype, 1, sizeof(datatype));
 				if (datatype & 0x10) {
-					if (WDcfg.OutFileUnit) RBH_writeToRing(&tmpToA, sizeof(float), 1);
-					else RBH_writeToRing(&ev->tstamp[i], sizeof(ev->tstamp[i]), 1);
+					if (WDcfg.OutFileUnit) RBH_addToBuffer(&tmpToA, sizeof(float), 1);
+					else RBH_addToBuffer(&ev->tstamp[i], sizeof(ev->tstamp[i]), 1);
 				}
 				if (datatype & 0x20) {
-					if (WDcfg.OutFileUnit) RBH_writeToRing(&tmpToT, sizeof(float), 1);
-					else RBH_writeToRing(&ev->ToT[i], sizeof(ev->ToT[i]), 1);
+					if (WDcfg.OutFileUnit) RBH_addToBuffer(&tmpToT, sizeof(float), 1);
+					else RBH_addToBuffer(&ev->ToT[i], sizeof(ev->ToT[i]), 1);
 				}
 			}
+			RBH_writeToRing();
 			free(mydtype);	// Deallocating memory
 			mydtype = NULL;
 		}

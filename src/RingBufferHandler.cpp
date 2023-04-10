@@ -19,13 +19,12 @@
 #include "CPhysicsEventItem.h"
 #include "RingBufferHandler.h"
 
-const size_t RING_BUFFER_SIZE(32*1024*1024);
-
 static RingBufferHandler *ringbufferHandler = NULL;
 
 RingBufferHandler::RingBufferHandler()
 : m_SourceId(-1), m_RingName("")
 {
+    clearBuffer();
 }
 
 RingBufferHandler *RingBufferHandler::getInstance() {
@@ -55,11 +54,21 @@ const char* RingBufferHandler::getRingname() {
     return m_RingName.c_str();
 }
 
-void RingBufferHandler::writeToRing(const void *buf, size_t size, size_t num) {
-    CPhysicsEventItem item(0, m_SourceId, 0, size*num + 1024);
+void RingBufferHandler::clearBuffer() {
+    memset(m_Buffer, 0, RING_BUFFER_SIZE);
+    m_SizeToWrite = 0;
+}
+
+void RingBufferHandler::addToBuffer(const void *buf, size_t size, size_t num) {
+    memcpy(m_Buffer + m_SizeToWrite, buf, size*num);
+    m_SizeToWrite += size*num;
+}
+
+void RingBufferHandler::writeToRing() {
+    CPhysicsEventItem item(0, m_SourceId, 0, m_SizeToWrite + 1024);
     void *dest = item.getBodyCursor();
-    memcpy(dest, buf, size*num);
-    dest = static_cast<void *>(static_cast<uint8_t *>(dest) + size*num);
+    memcpy(dest, m_Buffer, m_SizeToWrite);
+    dest = static_cast<void *>(static_cast<uint8_t *>(dest) + m_SizeToWrite);
     item.setBodyCursor(dest);
     item.updateSize();
     
