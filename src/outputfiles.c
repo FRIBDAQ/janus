@@ -46,7 +46,6 @@ char dtq_mode_ch[5][15] = { " ", "Spectroscopy", "Timing", "Spect_Timing", "Coun
 /*
 CRingBuffer *m_RingBuffer;
 const size_t RING_BUFFER_SIZE(32*1024*1024);
-int m_sourceid = 0;
 */
 bool m_writeToRingBuffer = false;
 
@@ -141,9 +140,6 @@ int SaveRawData(uint32_t *buff, int nw)
 			fprintf(of_raw_a, "%3d %08X\n", i, buff[i]);
 		fprintf(of_raw_a, "----------------------------------\n");
 	}
-	if (m_writeToRingBuffer) {
-		RBH_writeToRing(buff, sizeof(uint32_t), nw);
-	}
 	return 0;
 }
 
@@ -208,6 +204,24 @@ int SaveList(int brd, double ts, uint64_t trgid, void *generic_ev, int dtq)
 		}
 		if (of_sync != NULL) 
 			fprintf(of_sync, "Brd    Tstamp_us      TrgID \n");
+
+		// Genie - Copy of statements for of_list_b
+		if (m_writeToRingBuffer) {
+			float tmpLSB = float(TOA_LSB_ns);
+			uint16_t enbin = WDcfg.EHistoNbin;
+			//uint32_t tmask = WDcfg.ChEnableMask1[brd];	// see below
+			RBH_writeToRing(&fnumFVer, sizeof(fnumFVer), 1);
+			RBH_writeToRing(&snumFVer, sizeof(snumFVer), 1);
+			RBH_writeToRing(&fnumSW, sizeof(fnumSW), 1);
+			RBH_writeToRing(&snumSW, sizeof(snumSW), 1);
+			RBH_writeToRing(&tnumSW, sizeof(tnumSW), 1);
+			RBH_writeToRing(&type_file, sizeof(type_file), 1);
+			RBH_writeToRing(&enbin, sizeof(enbin), 1);
+			RBH_writeToRing(&WDcfg.OutFileUnit, sizeof(WDcfg.OutFileUnit), 1);	// Type of unit used for Time. 0 LSB, 1 ns
+			RBH_writeToRing(&tmpLSB, sizeof(tmpLSB), 1);	// Keep it as float for homogenity with A5203, the value of the LSB of which is not fixed
+			//RBH_writeToRing(&tmask, sizeof(tmask), 1);	// uncomment if we want the Channel Mask
+			RBH_writeToRing(&Stats.start_time, sizeof(Stats.start_time), 1);
+		}
 
 		WriteHeader = 0;
 	}
@@ -317,6 +331,62 @@ int SaveList(int brd, double ts, uint64_t trgid, void *generic_ev, int dtq)
 				}
 			}
 		}
+		// Genie - Copy of statements for of_list_b
+		if (m_writeToRingBuffer) {
+			uint16_t size = sizeof(size) + sizeof(b8) + sizeof(ts) + sizeof(trgid) + sizeof(ev->chmask);
+			for (i = 0; i < MAX_NCH; i++) {	// DNIN: Is it somehow usefull keeping the condition temp_enL/H >= 0??
+				datatype = 0;
+				if ((ev->chmask >> i) & 1) size += (sizeof(i) + sizeof(datatype));
+				else continue;
+				if (tmp_enL[i] >= 0 && ((WDcfg.GainSelect & GAIN_SEL_LOW) || WDcfg.GainSelect == GAIN_SEL_AUTO)) {
+					datatype = datatype | 0x01;
+					size += sizeof(ev->energyLG[i]);
+				}
+				if (tmp_enH[i] >= 0 && ((WDcfg.GainSelect & GAIN_SEL_HIGH) || WDcfg.GainSelect == GAIN_SEL_AUTO)) {
+					datatype = datatype | 0x02;
+					size += sizeof(ev->energyHG[i]);
+				}
+				if (isTSpect) {
+					if (ev->tstamp[i] > 0) {
+						datatype = datatype | 0x10;
+						if (WDcfg.OutFileUnit) size += sizeof(float);
+						else size += sizeof(ev->tstamp[i]);
+					}
+					if (WDcfg.EnableToT && (ev->ToT[i] > 0)) {
+						datatype = datatype | 0x20;
+						if (WDcfg.OutFileUnit) size += sizeof(float);
+						else size += sizeof(ev->ToT[i]);
+					}
+				}
+				data_t[i] = datatype;
+			}
+			RBH_writeToRing(&size, sizeof(size), 1);
+			RBH_writeToRing(&b8, sizeof(b8), 1);
+			RBH_writeToRing(&ts, sizeof(ts), 1);
+			RBH_writeToRing(&trgid, sizeof(trgid), 1);
+			RBH_writeToRing(&ev->chmask, sizeof(ev->chmask), 1);
+			for(i=0; i<MAX_NCH; i++) {
+				if ((ev->chmask >> i) & 1) {
+					uint8_t tmp_type = data_t[i];
+					uint16_t tmp_nrgL = tmp_enL[i];
+					uint16_t tmp_nrgH = tmp_enH[i];
+					float tmpToA = float(ev->tstamp[i] * TOA_LSB_ns);
+					float tmpToT = float(ev->ToT[i] * TOA_LSB_ns);
+					RBH_writeToRing(&i, sizeof(i), 1);	// Channel
+					RBH_writeToRing(&tmp_type, sizeof(tmp_type), 1);
+					if (data_t[i] & 0x01) RBH_writeToRing(&tmp_nrgL, sizeof(ev->energyLG[i]), 1);
+					if (data_t[i] & 0x02) RBH_writeToRing(&tmp_nrgH, sizeof(ev->energyHG[i]), 1);
+					if (data_t[i] & 0x10) {
+						if (WDcfg.OutFileUnit) RBH_writeToRing(&tmpToA, sizeof(float), 1);
+						else RBH_writeToRing(&ev->tstamp[i], sizeof(ev->tstamp[i]), 1);
+					}
+					if (data_t[i] & 0x20) {
+						if (WDcfg.OutFileUnit) RBH_writeToRing(&tmpToT, sizeof(float), 1);
+						else RBH_writeToRing(&ev->ToT[i], sizeof(ev->ToT[i]), 1);
+					}
+				}
+			}
+		}
 	}
 
 	// ----------------------------------------------------------------------------------
@@ -379,6 +449,32 @@ int SaveList(int brd, double ts, uint64_t trgid, void *generic_ev, int dtq)
 					}
 
 					evg = 0;
+				}
+			}
+		}
+		// Genie - Copy of statements for of_list_b
+		if (m_writeToRingBuffer) {
+			uint16_t size = sizeof(size) + sizeof(b8) + sizeof(ts) + sizeof(trgid) + sizeof(ev->chmask);
+			for(i=0; i<MAX_NCH; i++)
+				if ((ev->chmask >> i) & 1) {
+					if (WDcfg.SupprZeroCntListFile == 1 && ev->counts[i] == 0)
+						continue;
+					else
+						size += (sizeof(i) + sizeof(ev->counts[i]));
+				}
+			RBH_writeToRing(&size, sizeof(size), 1);
+			RBH_writeToRing(&b8, sizeof(b8), 1);
+			RBH_writeToRing(&ts, sizeof(ts), 1);
+			RBH_writeToRing(&trgid, sizeof(trgid), 1);
+			RBH_writeToRing(&ev->chmask, sizeof(ev->chmask), 1);
+			for(i=0; i<MAX_NCH; i++) {
+				if ((ev->chmask >> i) & 1) {
+					if (WDcfg.SupprZeroCntListFile == 1 && ev->counts[i] == 0)
+						continue;
+					else {
+						RBH_writeToRing(&i, sizeof(i), 1);
+						RBH_writeToRing(&ev->counts[i], sizeof(ev->counts[i]), 1);
+					}
 				}
 			}
 		}
@@ -463,6 +559,53 @@ int SaveList(int brd, double ts, uint64_t trgid, void *generic_ev, int dtq)
 			}
 		}
 
+		// Genie - Copy of statements for of_list_b
+		if (m_writeToRingBuffer) {
+			uint8_t* mydtype = NULL;
+			mydtype = (uint8_t*)malloc(ev->nhits * sizeof(uint8_t));
+			uint16_t size = sizeof(size) + sizeof(b8) + sizeof(ts) + sizeof(ev->nhits); // +sizeof(trgid); //trgid = 0 in timing mode
+			// DNIN: as in Spect, tstamp and ToT may not be in data simultaneously, or simply ToT is disabled.
+			// Size have to be computed hit-wise
+			size += ev->nhits * (sizeof(ev->channel[i]) + sizeof(datatype));
+			for (int chit = 0; chit < ev->nhits; ++chit) {
+				datatype = 0x0;
+				if (ev->tstamp[chit] > 0) {
+					datatype = datatype | 0x10;
+					if (WDcfg.OutFileUnit) size += sizeof(float);
+					else size += sizeof(ev->tstamp[chit]);
+				}
+				if (ev->ToT[chit] > 0 && WDcfg.EnableToT) {
+					datatype = datatype | 0x20;
+					if (WDcfg.OutFileUnit) size += sizeof(float);
+					else size += sizeof(ev->ToT[chit]);
+				}
+				mydtype[chit] = datatype;
+			}
+
+			RBH_writeToRing(&size, sizeof(size), 1);
+			RBH_writeToRing(&b8, sizeof(b8), 1);
+			RBH_writeToRing(&ts, sizeof(ts), 1);
+			//RBH_writeToRing(&trgid, sizeof(trgid), 1);
+			RBH_writeToRing(&ev->nhits, sizeof(ev->nhits), 1);
+			for(i=0; i<ev->nhits; i++) {
+				float tmpToA = float(ev->tstamp[i] * TOA_LSB_ns);
+				float tmpToT = float(ev->ToT[i] * TOA_LSB_ns);
+				datatype = mydtype[i];
+				RBH_writeToRing(&ev->channel[i], 1, sizeof(ev->channel[i]));
+				// Write Datatype as specttiming
+				RBH_writeToRing(&datatype, 1, sizeof(datatype));
+				if (datatype & 0x10) {
+					if (WDcfg.OutFileUnit) RBH_writeToRing(&tmpToA, sizeof(float), 1);
+					else RBH_writeToRing(&ev->tstamp[i], sizeof(ev->tstamp[i]), 1);
+				}
+				if (datatype & 0x20) {
+					if (WDcfg.OutFileUnit) RBH_writeToRing(&tmpToT, sizeof(float), 1);
+					else RBH_writeToRing(&ev->ToT[i], sizeof(ev->ToT[i]), 1);
+				}
+			}
+			free(mydtype);	// Deallocating memory
+			mydtype = NULL;
+		}
 	}
 
 	if (of_sync != NULL) { 
