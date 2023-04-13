@@ -50,6 +50,7 @@ OF_Staircase                       0                   # Staircase
 OF_RingBuffer                      0                   # Data routed to a RingBuffer (FRIB)
 SourceID                           0                   # Source ID in FRIBDAQ stack (FRIB)
 RingBufferName                     janus               # RingBuffer Name (FRIB)
+RunTitle                           ""                  # Run title for RingStateChangeItem (FRIB)
 
 # ------------------------------------------------------------------------------------------
 # AcqMode

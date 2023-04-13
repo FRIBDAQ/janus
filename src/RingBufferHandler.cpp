@@ -14,17 +14,47 @@
        East Lansing, MI 48824-1321
 */
 
+#include <cstddef>
 #include <cstring>
+#include <ctime>
 
+#include "DataFormat.h"
 #include "CPhysicsEventItem.h"
+#include "CRingStateChangeItem.h"
 #include "RingBufferHandler.h"
 
 static RingBufferHandler *ringbufferHandler = NULL;
 
 RingBufferHandler::RingBufferHandler()
-: m_SourceId(-1), m_RingName("")
+: m_SourceId(-1), m_RingName(""), m_Title(""), m_TitleWithFileHeader("")
 {
     clearBuffer();
+}
+
+void RingBufferHandler::setSourceID(int sourceid) {
+    m_SourceId = sourceid;
+}
+
+void RingBufferHandler::setRingname(std::string ringname) {
+    m_RingName = ringname;
+
+    if (m_RingBuffer.get()) {
+        CRingBuffer *removed = m_RingBuffer.get();
+        m_RingBuffer.release();
+
+        delete removed;
+    }
+
+    CRingBuffer *pNewRing = CRingBuffer::createAndProduce(m_RingName, RING_BUFFER_SIZE);
+    m_RingBuffer.reset(pNewRing);
+}
+
+void RingBufferHandler::setRunNumber(int runnumber) {
+    m_RunNumber = runnumber;
+}
+
+void RingBufferHandler::setTitle(std::string title) {
+    m_Title = title;
 }
 
 RingBufferHandler *RingBufferHandler::getInstance() {
@@ -35,23 +65,20 @@ RingBufferHandler *RingBufferHandler::getInstance() {
     return ringbufferHandler;
 }
 
-void RingBufferHandler::setSourceID(int sourceid) {
-    m_SourceId = sourceid;
-}
-
 int RingBufferHandler::getSourceID() {
     return m_SourceId;
 }
 
-void RingBufferHandler::setRingname(std::string ringname) {
-    m_RingName = ringname;
-
-    CRingBuffer *pNewRing = CRingBuffer::createAndProduce(m_RingName, RING_BUFFER_SIZE);
-    m_RingBuffer.reset(pNewRing);
+const char *RingBufferHandler::getRingname() {
+    return m_RingName.c_str();
 }
 
-const char* RingBufferHandler::getRingname() {
-    return m_RingName.c_str();
+int RingBufferHandler::getRunNumber() {
+    return m_RunNumber;
+}
+
+const char *RingBufferHandler::getTitle() {
+    return m_Title.c_str();
 }
 
 void RingBufferHandler::clearBuffer() {
@@ -73,15 +100,27 @@ void RingBufferHandler::writeToRing(bool isHeader) {
 
     uint64_t tstamp_int = tstamp.value*10000;
 
-    CPhysicsEventItem item(isHeader ? 0 : tstamp_int, m_SourceId, 0, m_SizeToWrite + 1024);
+    CPhysicsEventItem item((isHeader ? 0 : tstamp_int), m_SourceId, 0, m_SizeToWrite + 1024);
     void *dest = item.getBodyCursor();
     memcpy(dest, m_Buffer, m_SizeToWrite);
     dest = static_cast<void *>(static_cast<uint8_t *>(dest) + m_SizeToWrite);
     item.setBodyCursor(dest);
     item.updateSize();
-    
+
     CRingBuffer* pR = m_RingBuffer.get();
     item.commitToRing(*pR);
 
     clearBuffer();
+}
+
+void RingBufferHandler::emitStateChangeToRing(bool isBegin, bool useBarrier) {
+    CRingStateChangeItem item(time(NULL), m_SourceId, (useBarrier ? (isBegin ? 1 : 2) : 0), (isBegin ? BEGIN_RUN : END_RUN), m_RunNumber, 0, time(NULL), m_Title);
+    void *dest = item.getBodyCursor();
+    memcpy(dest, m_TitleWithFileHeader.c_str(), RING_TITLE_BUFFER_SIZE);
+    dest = static_cast<void *>(static_cast<uint8_t *>(dest) + RING_TITLE_BUFFER_SIZE);
+    item.setBodyCursor(dest);
+    item.updateSize();
+    
+    CRingBuffer* pR = m_RingBuffer.get();
+    item.commitToRing(*pR);
 }

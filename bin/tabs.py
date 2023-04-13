@@ -194,12 +194,15 @@ class TabsPanel():
 			if "OF_" in param.name:
 				m_xdef = 480
 				lx = 310
-			if "SourceID" in param.name:
+			if param.name == "FRIB-specific_Settings":
+				m_xdef = 460
+				lx = 310
+			if param.name == "SourceID" or param.name == "RingBufferName" or param.name == "RunTitle":
 				m_xdef = 460
 				lx = 330
-			if "RingBufferName" in param.name:
+			if param.name == "UseBarrier":
 				m_xdef = 480
-				lx = 310
+				lx = 330
 
 			if param.type == '-':  # separator or labels
 				if param.name.find('_BLANK') < 0:	
@@ -1342,9 +1345,16 @@ class TabsPanel():
 		if "SourceID" in param.name:
 			m_xdef = 460
 			lx = 330
-		if "RingBufferName" in param.name:
+		if param.name == "FRIB-specific_Settings":
 			m_xdef = 460
 			lx = 330
+		if param.name == "SourceID" or param.name == "RingBufferName" or param.name == "RunTitle":
+			m_xdef = 460
+			lx = 330
+		if param.name == "UseBarrier":
+			m_xdef = 520
+			lx = 330
+
 		# Replace everything except hideparam!
 		if param.name in self.button_names:
 			self.button_names[param.name][0].place(relx=self.button_names[param.name][1], rely=kk/sh.Win_Tabs_H, relwidth=self.button_names[param.name][3], relheight=self.button_names[param.name][4]) # x=self.button_names[param.name][1], y=yd)

@@ -106,10 +106,20 @@ void GetDatapath(FILE* f_ini, Config_t* WDcfg) {
 	}
 }
 
-void GetRingBufferName(FILE* f_ini, Config_t* WDcfg) {
-		char mchar[200];
-		fscanf(f_ini, "%s", mchar);
-		strcpy(WDcfg->RingBufferName, mchar);
+void GetTitle(FILE* f_ini, Config_t *WDcfg) {
+	memset(WDcfg->RunTitle, 0, 81);
+
+	while (true) {
+		char str[1000];
+		fscanf(f_ini, "%s", str);
+
+		if (str[0] == '#') {
+			fgets(str, 1000, f_ini);
+			break;
+		}
+
+		strcat(WDcfg->RunTitle, str);
+	}
 }
 
 // ---------------------------------------------------------------------------------
@@ -984,7 +994,9 @@ int ParseConfigFile(FILE* f_ini, Config_t* WDcfg, bool fcall)
 		if (streq(str, "OF_MCS"))					WDcfg->OutFileEnableMask	= SETBIT(WDcfg->OutFileEnableMask, OUTFILE_MCS_HISTO, GetInt(f_ini));
 		if (streq(str, "OF_RingBuffer"))			WDcfg->OutFileEnableMask    = SETBIT(WDcfg->OutFileEnableMask, OUTFILE_RAW_DATA_RINGBUFFER, GetInt(f_ini));
 		if (streq(str, "SourceID"))			        WDcfg->SourceID             = GetInt(f_ini);
-		if (streq(str, "RingBufferName"))			GetRingBufferName(f_ini, WDcfg);
+		if (streq(str, "RingBufferName"))			fscanf(f_ini, "%s", WDcfg->RingBufferName);
+		if (streq(str, "RunTitle"))					GetTitle(f_ini, WDcfg);
+		if (streq(str, "UseBarrier"))				WDcfg->UseBarrier           = GetInt(f_ini);
 		if (streq(str, "TstampCoincWindow"))		WDcfg->TstampCoincWindow	= (uint32_t)GetTime(f_ini, "ns");
 		if (streq(str, "PresetTime"))				WDcfg->PresetTime			= GetTime(f_ini, "s");
 		if (streq(str, "PresetCounts"))				WDcfg->PresetCounts			= GetInt(f_ini);

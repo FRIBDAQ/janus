@@ -74,9 +74,16 @@ OF_ToAHisto						0					g		b		# ToA spectrum
 OF_ToTHisto						0					g		b		# ToT spectrum
 OF_MCS							0					g		b		# MCS Spectrum
 OF_Staircase					0					g		b		# Staircase
+
+_BLANK							-					-		-
+FRIB-specific_Settings			-					-		-
+#______________________________________________________________
+
 OF_RingBuffer					0					g		b		# Data routed to a RingBuffer (FRIB)
 SourceID                        0                   g       d       # Source ID in FRIBDAQ stack (FRIB)
-RingBufferName				"janus"					g		s		# RingBuffer Name (FRIB)
+RingBufferName					"janus"				g		s		# RingBuffer Name (FRIB)
+RunTitle						""					g		s		# Run title for RingStateChangeItem (FRIB)
+UseBarrier                      0					g       b       # Use barrier for RingStateChangeItem (FRIB)
 
 #---------------------------------------------------------------------------------------
 [AcqMode]

@@ -855,6 +855,23 @@ int RunTimeCmd(int c)
 
 	if (c == '#') PrintMap();
 
+	if (c == 'T') {
+		memset(WDcfg.RunTitle, 0, 81);
+		printf("\nEnter title for this run (Max. 80 characters):\n");
+		scanf("%80s", WDcfg.RunTitle);
+	}
+	if (c == 'R') {
+		printf("\nEnter the run number:\n");
+		int runNumber = -1;
+		if (scanf("%d", &runNumber) || runNumber > -1) {
+			RunVars.RunNumber = runNumber;
+			SaveRunVariables(RunVars);
+		} else {
+			printf("Wrong input received! No change made!\n");
+			while (getchar() != '\n');
+		}
+    }
+
 	if ((c == ' ') && !SockConsole) {
 		printf("[q] Quit\n");
 		printf("[m] Register Manual Controller\n");
@@ -880,6 +897,8 @@ int RunTimeCmd(int c)
 		printf("[j] Reset jobs (when enabled)\n");
 		printf("[!] Reset IP address\n");
 		printf("[#] Print Pixel Map\n");
+		printf("[T] Set title for RingStateChangeItem (FRIB)\n");
+		printf("[R] Set run number\n");
 		c = Con_getch();
 		RunTimeCmd(c);
 	}

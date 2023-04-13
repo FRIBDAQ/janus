@@ -101,6 +101,8 @@ int OpenOutputFiles(int RunNumber)
 	if ((WDcfg.OutFileEnableMask & OUTFILE_RAW_DATA_RINGBUFFER)) {
 		RBH_setSourceID(WDcfg.SourceID);
 		RBH_setRingname(WDcfg.RingBufferName);
+		RBH_setTitle(WDcfg.RunTitle);
+		RBH_setRunNumber(RunNumber);
 		m_writeToRingBuffer = true;
 	}
 	WriteHeader = 1;
@@ -120,6 +122,11 @@ int CloseOutputFiles()
 	of_list_b = NULL;
 	of_list_a = NULL;
 	of_sync = NULL;
+
+	if (m_writeToRingBuffer) {
+		RBH_emitStateChangeToRing(false, WDcfg.UseBarrier);
+		m_writeToRingBuffer = false;
+	}
 	return 0;
 }
 
@@ -207,6 +214,8 @@ int SaveList(int brd, double ts, uint64_t trgid, void *generic_ev, int dtq)
 
 		// Genie - Copy of statements for of_list_b
 		if (m_writeToRingBuffer) {
+			RBH_emitStateChangeToRing(true, WDcfg.UseBarrier);
+
 			float tmpLSB = float(TOA_LSB_ns);
 			uint16_t enbin = WDcfg.EHistoNbin;
 			//uint32_t tmask = WDcfg.ChEnableMask1[brd];	// see below
@@ -221,7 +230,7 @@ int SaveList(int brd, double ts, uint64_t trgid, void *generic_ev, int dtq)
 			RBH_addToBuffer(&tmpLSB, sizeof(tmpLSB), 1);	// Keep it as float for homogenity with A5203, the value of the LSB of which is not fixed
 			//RBH_addToBuffer(&tmask, sizeof(tmask), 1);	// uncomment if we want the Channel Mask
 			RBH_addToBuffer(&Stats.start_time, sizeof(Stats.start_time), 1);
-			RBH_writeToRing(1);
+			RBH_writeToRing(true);
 		}
 
 		WriteHeader = 0;

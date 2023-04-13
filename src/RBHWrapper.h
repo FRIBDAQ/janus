@@ -20,13 +20,18 @@ extern "C" {
 #endif
 
 void RBH_setSourceID(int sourceid);
-int RBH_getSourceID();
-
 void RBH_setRingname(char *ringname);
+void RBH_setRunNumber(int runNo);
+void RBH_setTitle(char *title);
+
+int RBH_getSourceID();
 const char *RBH_getRingname();
+int RBH_getRunNumber();
+const char *RBH_getTitle();
 
 void RBH_addToBuffer(const void *ptr, size_t size, size_t num);
 void RBH_writeToRing(bool isHeader = false);
+void RBH_emitStateChangeToRing(bool isBegin, bool useBarrier);
 
 #ifdef __cplusplus
 }
