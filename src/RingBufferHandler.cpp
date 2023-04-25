@@ -18,6 +18,7 @@
 #include <cstring>
 #include <ctime>
 
+#include "FERSlib_FRIB.h"
 #include "DataFormat.h"
 #include "CPhysicsEventItem.h"
 #include "CRingStateChangeItem.h"
@@ -26,7 +27,7 @@
 static RingBufferHandler *ringbufferHandler = NULL;
 
 RingBufferHandler::RingBufferHandler()
-: m_SourceId(-1), m_RingName(""), m_Title(""), m_TitleWithFileHeader("")
+: m_SourceId(-1), m_RingName(""), m_Title(""), m_TitleWithFileHeader(""), m_AcqMode(0)
 {
     clearBuffer();
 }
@@ -93,17 +94,25 @@ void RingBufferHandler::addToBuffer(const void *buf, size_t size, size_t num) {
 
 void RingBufferHandler::writeToRing(bool isHeader) {
     timestamp tstamp;
+    FileHeader_t *fileheader;
+    uint64_t tstamp_int = 0;
 
-    for (int iByte = 0; iByte < 8; iByte++) {
-        tstamp.element[iByte] = m_Buffer[3 + iByte];
+    if (isHeader) {
+        fileheader = reinterpret_cast<FileHeader_t *>(m_Buffer);
+        m_AcqMode = fileheader -> acqmode;
+    } else {
+        for (int iByte = 0; iByte < 8; iByte++) {
+            tstamp.element[iByte] = m_Buffer[3 + iByte];
+        }
+
+        tstamp_int = tstamp.value*10000;
     }
 
-    uint64_t tstamp_int = tstamp.value*10000;
-
-    CPhysicsEventItem item((isHeader ? 0 : tstamp_int), m_SourceId, 0, m_SizeToWrite + 1024);
+    CPhysicsEventItem item(tstamp_int, m_SourceId, 0, m_SizeToWrite + 1024);
     void *dest = item.getBodyCursor();
-    memcpy(dest, m_Buffer, m_SizeToWrite);
-    dest = static_cast<void *>(static_cast<uint8_t *>(dest) + m_SizeToWrite);
+    memcpy(dest, &m_AcqMode, 1);
+    memcpy(static_cast<void *>(static_cast<uint8_t *>(dest) + 1), m_Buffer, m_SizeToWrite);
+    dest = static_cast<void *>(static_cast<uint8_t *>(dest) + 1 + m_SizeToWrite);
     item.setBodyCursor(dest);
     item.updateSize();
 
