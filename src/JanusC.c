@@ -857,8 +857,12 @@ int RunTimeCmd(int c)
 
 	if (c == 'T') {
 		memset(WDcfg.RunTitle, 0, 81);
-		printf("\nEnter title for this run (Max. 80 characters):\n");
+		printf("\nEnter title for this run (Max. 80 characters, type \"empty\" for blank title):\n");
 		scanf("%80s", WDcfg.RunTitle);
+		if (strcmp(WDcfg.RunTitle, "empty")) {
+			printf("Title will be empty!\n");
+			memset(WDcfg.RunTitle, 0, 81);
+		}
 	}
 	if (c == 'R') {
 		printf("\nEnter the run number:\n");

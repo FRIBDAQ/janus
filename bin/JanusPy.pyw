@@ -130,6 +130,7 @@ class Open_GUI(Frame):
 		wrmsg = ""
 		if len(cfg.gain_check) > 0 or len(cfg.empty_field) > 0:
 			for empt in cfg.empty_field:
+				if empt == "RunTitle": return # Skip RunTitle warning
 				empt = self.Tabs.param_rename[empt]
 				mymsg = empt + " default entry is left blank. Janus will use its default value\n"
 				wrmsg = wrmsg + empt + "\n"
