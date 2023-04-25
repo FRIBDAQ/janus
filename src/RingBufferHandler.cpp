@@ -27,7 +27,7 @@
 static RingBufferHandler *ringbufferHandler = NULL;
 
 RingBufferHandler::RingBufferHandler()
-: m_SourceId(-1), m_RingName(""), m_Title(""), m_TitleWithFileHeader(""), m_AcqMode(0)
+: m_SourceId(-1), m_RingName(""), m_AcqMode(0), m_Title(""), m_TitleWithFileHeader("")
 {
     clearBuffer();
 }
