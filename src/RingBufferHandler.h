@@ -57,7 +57,7 @@ class RingBufferHandler {
         int m_SourceId;
         std::string m_RingName;
         int m_RunNumber;
-        uint8_t m_AcqMode;
+        uint16_t m_AcqMode;
         std::string m_Title;
         std::string m_TitleWithFileHeader;
 
