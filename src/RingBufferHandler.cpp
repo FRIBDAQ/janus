@@ -18,7 +18,7 @@
 #include <cstring>
 #include <ctime>
 
-#include "FERSlib_FRIB.h"
+#include "FERS_fileheader.h"
 #include "DataFormat.h"
 #include "CPhysicsEventItem.h"
 #include "CRingStateChangeItem.h"
