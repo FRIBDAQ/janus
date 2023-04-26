@@ -37,7 +37,7 @@
 // Event Data Structures
 //******************************************************************
 // Handling for file header
-typedef struct {
+typedef struct __attribute__((__packed__)) {
 	uint8_t dataformat_major;
 	uint8_t dataformat_minor;
 	uint8_t software_major;
