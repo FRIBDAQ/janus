@@ -114,8 +114,8 @@ void RingBufferHandler::writeToRing(bool isHeader) {
 
     void *dest = item.getBodyCursor();
     if (!isHeader) {
-      memcpy(dest, &m_AcqMode, 1);
-      memcpy(dest, &m_TimeUnit, 1);
+      uint16_t metadata = (uint16_t) m_AcqMode << 8 | (uint16_t) m_TimeUnit;
+      memcpy(dest, &metadata, 2);
     } else {
       memcpy(dest, &m_SizeToWrite, 2);
     }
