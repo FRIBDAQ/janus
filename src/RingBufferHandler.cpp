@@ -18,16 +18,17 @@
 #include <cstring>
 #include <ctime>
 
-#include "FERS_fileheader.h"
 #include "DataFormat.h"
 #include "CPhysicsEventItem.h"
 #include "CRingStateChangeItem.h"
 #include "RingBufferHandler.h"
 
+#include "FERS_fileheader.h"
+
 static RingBufferHandler *ringbufferHandler = NULL;
 
 RingBufferHandler::RingBufferHandler()
-: m_SourceId(-1), m_RingName(""), m_AcqMode(0), m_Title(""), m_TitleWithFileHeader("")
+: m_SourceId(-1), m_RingName(""), m_AcqMode(0), m_TimeUnit(0), m_Title(""), m_TitleWithFileHeader("")
 {
     clearBuffer();
 }
@@ -100,6 +101,7 @@ void RingBufferHandler::writeToRing(bool isHeader) {
     if (isHeader) {
         fileheader = reinterpret_cast<FileHeader_t *>(m_Buffer);
         m_AcqMode = fileheader -> acqmode;
+        m_TimeUnit = fileheader -> timeunit;
     } else {
         for (int iByte = 0; iByte < 8; iByte++) {
             tstamp.element[iByte] = m_Buffer[3 + iByte];
@@ -112,7 +114,8 @@ void RingBufferHandler::writeToRing(bool isHeader) {
 
     void *dest = item.getBodyCursor();
     if (!isHeader) {
-      memcpy(dest, &m_AcqMode, 2);
+      memcpy(dest, &m_AcqMode, 1);
+      memcpy(dest, &m_TimeUnit, 1);
     } else {
       memcpy(dest, &m_SizeToWrite, 2);
     }
