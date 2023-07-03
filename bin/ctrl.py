@@ -498,6 +498,8 @@ class CtrlPanel():
 		self.ExtCfgLoad.geometry("{}x{}+{}+{}".format(xw, yw, 550, 200))
 		self.ExtCfgLoad.protocol("WM_DELETE_WINDOW", self.CloseExternalCfg)
 		self.mf = Frame(self.ExtCfgLoad, width=xw, height=yw, relief=RIDGE).place(x=0, y=0) # , bd=2	
+		self.ExtCfgLoad.grab_set()
+
 		self.ExtCfgFileName = [] # Cfg File path
 		self.IsExtFileOpen = True
 		self.VarList = StringVar()	# indexes of the cfg path
@@ -528,10 +530,10 @@ class CtrlPanel():
 
 		self.VarList.trace('w', lambda name, index, mode:self.set_cfg_path(0))
 		self.CfgFilesList[0].config(state='normal')
-		Button(self.ExtCfgLoad, text="Add Macro", command=self.AddCfgFile, fg="#00CC00", height=2).place(relx=0.089, rely=0.798, relwidth=0.24, relheight=0.1) # , width=8 x=25, y=334)
-		Button(self.ExtCfgLoad, text="Remove\nMacro", command=self.RmCfgFile, fg="#FF0000", height=2).place(relx=0.375, rely=0.798, relwidth=0.24, relheight=0.1) # width=8, x=105, y=334)
-		Button(self.ExtCfgLoad, text="Remove\nAll Macros", command=self.RmAllFile, fg="#FF0000", height=2).place(relx=0.66, rely=0.795, relwidth=0.24, relheight=0.1) # width=8, x=185, y=334)
-		Button(self.ExtCfgLoad, text="DONE", font=("Arial Bold",9), command=self.AppendCfgFile, bg="#00CC00").place(relx=0.0893, rely=0.914, relwidth=0.81, relheight=0.065) #  width=31, x=25, y=384)
+		Button(self.ExtCfgLoad, text="Add Macro", command=self.AddCfgFile, height=2).place(relx=0.089, rely=0.798, relwidth=0.24, relheight=0.1) # , width=8 x=25, y=334) fg="#00CC00"
+		Button(self.ExtCfgLoad, text="Remove\nMacro", command=self.RmCfgFile, height=2).place(relx=0.375, rely=0.798, relwidth=0.24, relheight=0.1) # width=8, x=105, y=334) fg="#FF0000", 
+		Button(self.ExtCfgLoad, text="Remove\nAll Macros", command=self.RmAllFile, height=2).place(relx=0.66, rely=0.795, relwidth=0.24, relheight=0.1) # width=8, x=185, y=334) fg="#FF0000", 
+		Button(self.ExtCfgLoad, text="DONE", font=("Arial Bold",9), command=self.AppendCfgFile, bg='light blue').place(relx=0.0893, rely=0.914, relwidth=0.81, relheight=0.065) #  width=31, x=25, y=384) bg="#00CC00"
 
 		self.no_update2 = False
 	
@@ -903,8 +905,8 @@ class CtrlPanel():
 		try:
 			self.ExtRunFile[int(self.PlotTraceSelVar.get())].set(os.path.relpath(askopenfilename(initialdir=".", filetypes=(("Text File", "*.txt"), ("All Files", "*.*")), title="Choose a file.")))
 		except:
-			self.ExtRunFile[int(self.PlotTraceSelVar.get())].set("")
-		self.UpdateMask()
+			self.ExtRunFile[int(self.PlotTraceSelVar.get())].set("")  # self.ExtRunFile.get()[int(self.PlotTraceSelVar.get())])   To CHECK
+		self.UpdateMask() 
 		
 	def ClosePlotMaskWin(self):
 		self.UpdateMask()
@@ -1041,7 +1043,7 @@ class CtrlPanel():
 		# Label(self.ConvWin, text='ToA/ToT Unit:', font=("Arial Bold", 10)).place(relx=0.097, rely=0.1+0.06*14)
 		Checkbutton(self.ConvWin, text='Force ToA/ToT to ns', font=("Arial Bold", 10), variable=self.time_unit).place(relx=0.097, rely=0.045+0.06*14)
 		Checkbutton(self.ConvWin, text='List of binary files names', font=("Arial Bold", 10), variable=self.list_of_bfile).place(relx=0.097, rely=0.09+0.06*14)
-		Button(self.ConvWin, text='Convert', command=self.ConvertFile, bg='#00FF00').place(relx=0.097+0.55, rely=0.06+0.06*14, relwidth=0.25, relheight=0.075) # , width=12  x=displ_x+170, y=start_y+displ_y*14+5)
+		Button(self.ConvWin, text='Convert', command=self.ConvertFile, bg='light blue').place(relx=0.097+0.55, rely=0.06+0.06*14, relwidth=0.25, relheight=0.075) # , width=12  x=displ_x+170, y=start_y+displ_y*14+5)
 
 	def ActivePath(self):
 		self.BinFilesList[int(self.pr_idx)].config(state='readonly')

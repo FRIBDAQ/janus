@@ -40,7 +40,7 @@ OkCol = 'green'   # defualt 'is fine' color
 
 # Versions
 Version = "5202"
-Release = "3.0.3 - 29/09/2022"
+Release = "3.1.0 - 06/04/2023"
 
 # Ranges
 MaxCh = 64

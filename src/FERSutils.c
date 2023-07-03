@@ -341,7 +341,7 @@ void ManualController(int handle)
 					printf("[1] Configure PLL1\n");*/
 					printf("[q] Quit I2C\n");
 					c = getch();
-					if (c == 'd') i2c_dev_index = (i2c_dev_index + 1) % 3;
+					if (c == 'd') i2c_dev_index = (i2c_dev_index + 1) % 4;
 					if (c == 'q') {
 						c = 0;
 						break;

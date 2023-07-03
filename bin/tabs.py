@@ -42,7 +42,7 @@ class TabsPanel():
 		self.Mask = [IntVar() for i in range(64)]
 		self.ActiveBrd = IntVar()
 		self.ActiveBrd.set(0)
-		self.ActiveBrd.trace('w', lambda name, index, mode: comm.SendCmd('b ' + str(self.ActiveBrd.get()))) # 
+		self.ActiveBrd.trace('w', lambda name, index, mode: self.SendActiveBrd())    # comm.SendCmd('b ' + str(self.ActiveBrd.get()))) # 
 
 		# Default settings
 		self.par_def_svar = {}			# String Var 
@@ -104,6 +104,11 @@ class TabsPanel():
 		if new_value.isdigit(): return int(new_value) < sh.MaxCh
 		elif not new_value: return True
 		else: return False
+
+	def SendActiveBrd(self):
+		try: comm.SendCmd(f"b{str(self.ActiveBrd.get())}")
+		except: pass
+
 
 	def OpenTabs(self, parent):
 		# ***************************************************************************************
@@ -374,9 +379,11 @@ class TabsPanel():
 		self.browse_button_outdir.place(relx=650/sh.Win_Tabs_W, rely=(ypos['DataFilePath']-3)/sh.Win_Tabs_H, relwidth=109/sh.Win_Tabs_W, relheight=0.049)  #  x=270, y=ypos['DataFilePath']-3)
 
 		# Reset Jobs
+		last_col_idx = list(params.keys()).index("OutputFiles") - 2
+		last_col_name = list(params.keys())[last_col_idx]
 		self.reset_job = Button(self.Mtabs["RunCtrl"], text="Reset Job", command=lambda:comm.SendCmd('j'))
-		self.reset_job.place(relx=10/sh.Win_Tabs_W, rely=(ypos["RunNumber_AutoIncr"]+30)/sh.Win_Tabs_H, relwidth=109/sh.Win_Tabs_W, relheight=0.049)
-		self.button_names["RunNumber_AutoIncr"] = [self.reset_job, 10/sh.Win_Tabs_W, (ypos["RunNumber_AutoIncr"]+30)/sh.Win_Tabs_H, 109/sh.Win_Tabs_W, 0.049]
+		self.reset_job.place(relx=10/sh.Win_Tabs_W, rely=(ypos[last_col_name]+30)/sh.Win_Tabs_H, relwidth=109/sh.Win_Tabs_W, relheight=0.049)
+		self.button_names[last_col_name] = [self.reset_job, 10/sh.Win_Tabs_W, (ypos[last_col_name]+30)/sh.Win_Tabs_H, 109/sh.Win_Tabs_W, 0.049]
 		tt.Tooltip(self.reset_job, text="Reset the Job. Active when jobs are enabled", wraplength=200)
 
 		# ------------------------------------------------------------
@@ -1164,7 +1171,7 @@ class TabsPanel():
 				self.cbm[i].place(relx=float(x0+x*sp)/xw, rely=float(y0+(y+1)*sp)/yw, relwidth=float(sp-2)/xw, relheight=float(sp-2)/yw)  #DNIN: missing relwidth /height   x = x0+x*sp, y=y0+(y+1)*sp)
 		Checkbutton(self.MaskWin, text='Pixel Map', variable=self.en_pixel_map, command=self.PixelMapTab(), indicatoron=0).place(relx=float(x0/xw), rely=float(1+y0+sp*9)/yw, relwidth=0.475, relheight=0.087) # , height=1, width=13 x=x0, y = 1 + y0 + sp*9)
 		self.en_pixel_map.trace('w', lambda name, index, mode: self.PixelMapTab())
-		Button(self.MaskWin, text='Done', command=self.CloseUpdateMaskWin).place(relx=float(x0+sp*4)/xw, rely=float(1+y0+sp*9)/yw, relwidth=0.475, relheight=0.087) # , height = 1, width=13 x = x0+103, y = y0 + sp*9)
+		Button(self.MaskWin, text='Done', command=self.CloseUpdateMaskWin, bg="light blue").place(relx=float(x0+sp*4)/xw, rely=float(1+y0+sp*9)/yw, relwidth=0.475, relheight=0.087) # , height = 1, width=13 x = x0+103, y = y0 + sp*9)
 		#self.no_update = False
 		self.GetBrdMask()
 	

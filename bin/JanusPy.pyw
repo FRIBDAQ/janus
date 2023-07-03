@@ -24,6 +24,10 @@ import cfgfile_rw as cfg
 import socket2daq as comm
 import ctrl as ctrl
 import tabs as tabs
+import ctypes
+
+if sys.platform.find('win') == 0:
+	ctypes.windll.shcore.SetProcessDpiAwareness(2) # PROCESS_PER_MONITOR_DPI_AWARE = 2
 
 params = sh.params
 sections = sh.sections
@@ -65,7 +69,7 @@ class Open_GUI(Frame):
 		self.Tabs.combobox_state(1)
 
 		self.Tabs.CfgChanged.trace('w', lambda name, index, mode:self.Set_b_apply()) # To prevent overwrite of Janus_Config when a run of a job is performed
-		self.Tabs.ActiveBrd.trace('w', lambda name, index, mode: self.Ctrl.active_board.set(str(self.Tabs.ActiveBrd.get())))
+		self.Tabs.ActiveBrd.trace('w', lambda name, index, mode: self.AssignActiveBd())  # self.Ctrl.active_board.set(str(self.Tabs.ActiveBrd.get())))
 		# self.Ctrl.bstart.trace('w', lambda name, index, mode:self.Set_b_apply())
 		self.Ctrl.CfgReloaded.trace('w', lambda name, index, mode:self.Tabs.Params2Tabs(self.Ctrl.CfgReloaded.get()))
 		self.Ctrl.CfgFileName.trace('w', lambda name, index, mode:self.CfgLoadOnLog(self.Ctrl.CfgFileName.get())) 
@@ -90,7 +94,15 @@ class Open_GUI(Frame):
 		self.t.daemon = True # thread dies with the program
 		self.t.start()
 
+	
 	# *******************************************************************************
+	# Assign Active brd using 'trace' function with try/except syntax
+	def AssignActiveBrd(self):
+		try: self.Ctrl.active_board.set(str(self.Tabs.ActiveBrd.get()))
+		except: pass
+
+	# *******************************************************************************
+
 	# Write on Log Tab
 	# *******************************************************************************
 	def Set_b_apply(self):
@@ -316,7 +328,7 @@ class Open_GUI(Frame):
 			
 			cmsg = comm.GetString()  # server.recv_data() from socket
 			if len(cmsg) > 0:				
-				# print("Message from board: ", cmsg)	# debug
+				print("Message from board: ", cmsg)	# debug
 				if cmsg[0] != 'w' and pcmsg == 'w':	# print Warning on LOG and raise a warning pop-up
 					if self.Ctrl.show_warning.get(): messagebox.showwarning(title=None, message="WARNING(s)!!!\n\n" + wmsg, parent=self.master)
 					self.Ctrl.RisedWarning.set(1)
@@ -408,6 +420,7 @@ class Open_GUI(Frame):
 		x_l = 700
 		self.UpgradeWin.geometry("{}x{}+{}+{}".format(x_l, 170, 150, 400))
 		self.UpgradeWin.wm_title("FPGA Firmware Upgrade")
+		self.UpgradeWin.grab_set()
 		# self.UpgradeWin.attributes('-topmost', 'true')
 		self.UpgradeWin.protocol("WM_DELETE_WINDOW", self.CloseUpgradeWin)
 		self.UpgradeWinIsOpen = True
@@ -434,14 +447,14 @@ class Open_GUI(Frame):
 		Spinbox(self.UpgradeWin, textvariable=self.Tbrd, command=self.ChangeBrd, from_=0, to=sh.MaxBrd-1, font=("Arial", 14), width=4).place(relx=(x0+35)/x_l, rely=y0/170.)  #  x = x0 + 35, y = y0)
 		
 		y0 += 40
-		Button(self.UpgradeWin, text='Upgrade', command=self.DoUpgrade).place(relx=x0/x_l, rely=y0/170., relwidth=0.12)  #  x = x0, y = y0)
+		Button(self.UpgradeWin, text='Upgrade', command=self.DoUpgrade).place(relx=0.87, rely=y0/170., relwidth=0.12)  #  x = x0, y = y0)
 		self.upg_progress = Progressbar(self.UpgradeWin, orient = HORIZONTAL, length = 474, mode = 'determinate') 
-		self.upg_progress.place(relx=0.142, rely=(y0+3)/170., relwidth=0.84, relheight=0.125)  #  x = x0 + 75, y = y0+3)
+		self.upg_progress.place(relx=x0/x_l, rely=(y0+3)/170., relwidth=0.85, relheight=0.125)  #  x = x0 + 75, y = y0+3)
 
 		y0 += 35
-		Label(self.UpgradeWin, text = "Messages").place(relx=x0/x_l, rely=y0/170.)  #  x = x0, y = y0)
+		Label(self.UpgradeWin, text = "Messages", relief=GROOVE, justify=CENTER).place(relx=0.87, rely=y0/170., relwidth=0.12)  #  x = x0, y = y0)
 		self.UpgStat = Label(self.UpgradeWin, text = "", anchor = "w", relief = 'groove')
-		self.UpgStat.place(relx=0.142, rely=y0/170., relheight=0.125, relwidth=0.84) # x = x0 + 75, y = y0)
+		self.UpgStat.place(relx=x0/x_l, rely=y0/170., relheight=0.125, relwidth=0.85) # x = x0 + 75, y = y0)
 
 
 	def ChangeBrd(self):
@@ -543,6 +556,7 @@ mGui = Tk()
 Gui_W = sh.Win_W
 if sys.platform.find('win') < 0: Gui_W += 150 
 mGui.geometry("{}x{}+{}+{}".format(Gui_W, sh.Win_H, 10, 10)) # sh.Win_W
+# mGui.geometry("{}x{}+{}+{}".format(Gui_W, 1000, 10, 10)) # sh.Win_W
 # mGui.tk.call('tk', 'scaling', 1.0) # test
 
 

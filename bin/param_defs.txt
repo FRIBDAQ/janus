@@ -118,6 +118,8 @@ CountingMode					SINGLES				g		c		# SINGLES: each channel counts its own self tr
 	
 PairedCnt_CoincWin				"8 ns"				g		du		# Coincidence window for Paired_And counting mode. Min = 8 ns, Max = 2032 ns, Step = 8 ns
 
+EnableCntZeroSuppr				1					g		b		# Enable the suppression of the channels with 0 counts in COUNTING mode.
+
 TrgIdMode						TRIGGER_CNT			g		c		# Trigger ID mode: TRIGGER_CNT counts all triggers arrived to the board (accepted or not); VALIDATION_CNT counts validation signals (with or without associated trigger)
 	- TRIGGER_CNT
 	- VALIDATION_CNT

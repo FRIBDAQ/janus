@@ -147,8 +147,15 @@ int ConfigureFERS(int handle, int mode)
 	FERS_WriteRegister(handle, a_tref_mask, WDcfg.Tref_Mask);
 	// Set Tref window
 	FERS_WriteRegister(handle, a_tref_window, (uint32_t)(WDcfg.TrefWindow/((float)CLK_PERIOD/16)));
+	//uint32_t trf_w = (uint32_t)(WDcfg.TrefWindow / ((float)CLK_PERIOD / 16));
 	// Set Tref delay
-	FERS_WriteRegister(handle, a_tref_delay, (uint32_t)(WDcfg.TrefDelay/(float)CLK_PERIOD));
+	if (WDcfg.AcquisitionMode == ACQMODE_TIMING_CSTART)
+		FERS_WriteRegister(handle, a_tref_delay, (uint32_t)(WDcfg.TrefDelay/(float)CLK_PERIOD));
+	else if (WDcfg.AcquisitionMode == ACQMODE_TIMING_CSTOP) {
+		uint32_t td = ((uint32_t)(-WDcfg.TrefWindow / ((float)CLK_PERIOD)) + (uint32_t)(WDcfg.TrefDelay / ((float)CLK_PERIOD)));
+		FERS_WriteRegister(handle, a_tref_delay, td);
+	}
+
 
 	// Set Trigger Logic
 	FERS_WriteRegister(handle, a_tlogic_def, (WDcfg.MajorityLevel << 8) | (WDcfg.TriggerLogic & 0xFF));

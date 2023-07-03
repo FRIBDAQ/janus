@@ -37,7 +37,7 @@
 #elif FERS_5203
 #define FERSLIB_MAX_NCH				128		// Max number of channels per board
 #endif
-#define FERSLIB_MAX_NTDL			1		// Max number of TDlinks (chains) in a concentrator
+#define FERSLIB_MAX_NTDL			8		// Max number of TDlinks (chains) in a concentrator
 #define FERSLIB_MAX_NNODES			16		// Max number of nodes in a TDL chain
 
 #define FERS_CONNECT_TIMEOUT		3		// timeout connection in seconds
@@ -66,6 +66,7 @@
 #define DBLOG_LL_MSGDUMP			0x0008		// Enable low level lib to log messages (from usb, eth and tdl) into a text file
 #define DBLOG_QUEUES				0x0010		// Enable messages from queues (push and pop) used in event sorting
 #define DBLOG_RAW_DECODE			0x0020		// Enable messages from raw data decoding
+#define DBLOG_LL_READDUMP			0x0040		// Enable low level read data to dump raw data (from usb, eth and tdl) into a text file
 
 #define ENABLE_FERSLIB_LOGMSG		(DebugLogs & DBLOG_FERSLIB_MSG)
 
@@ -115,10 +116,14 @@
 #define ACQMODE_STREAMING			0x22  // 
 #define ACQMODE_TRG_MATCHING		0x32  // 
 
-#define MEASMODE_RISE_ONLY			0x01
-#define MEASMODE_RISE_FALL			0x03
-#define MEASMODE_RISE_TOT8			0x05
-#define MEASMODE_RISE_TOT11			0x09
+#define MEASMODE_LEAD_ONLY			0x01
+#define MEASMODE_LEAD_TRAIL			0x03
+#define MEASMODE_LEAD_TOT8			0x05
+#define MEASMODE_LEAD_TOT11			0x09
+#define MEASMODE_OWLT(m)			(((m) == MEASMODE_LEAD_TOT8) || ((m) == MEASMODE_LEAD_TOT11))
+
+#define EDGE_LEAD					1
+#define EDGE_TRAIL					0
 #endif
 
 // Start/Stop Acquisition Modes
@@ -306,11 +311,11 @@ typedef struct {
 	float tempFPGA;				// temperature of FPGA core
 	float tempBoard;			// temperature of the board (near uC PIC)
 	float tempTDC[2];			// temperature of TDC0 and TDC1
-	uint8_t lockPLLTDL;			// PLL of TDLink
-	uint8_t lockPLLTDC[2];	// PLL of TDC0
-	uint8_t lockTDCRo;	// lock of FPGA PLL driven by the readout clock of TDC
+	uint16_t Status;			// Status Register
 	uint64_t ChAlmFullFlags[2];	// Channel Almost Full flag (from picoTDC)
-	uint16_t otherFlags[2]; //FBER: TODO
+	uint32_t ReadoutFlags;		// Readout Flags from picoTDC and FPGA
+	uint32_t TotTrg_cnt;		// Total triggers counter
+	uint32_t RejTrg_cnt;		// Rejected triggers counter
 } ServEvent_t;
 
 #endif
@@ -344,6 +349,8 @@ extern int DebugLogs;										// Debug Logs
 #define FERS_FPGA_FW_MajorRev(handle)	((FERS_INDEX(handle) >= 0) ? ((FERS_BoardInfo[FERS_INDEX(handle)]->FPGA_FWrev) >> 8) & 0xFF : 0)
 #define FERS_FPGA_FW_MinorRev(handle)	((FERS_INDEX(handle) >= 0) ? (FERS_BoardInfo[FERS_INDEX(handle)]->FPGA_FWrev) & 0xFF : 0)
 #define FERS_uC_FWrev(handle)			((FERS_INDEX(handle) >= 0) ? FERS_BoardInfo[FERS_INDEX(handle)]->uC_FWrev : 0)
+#define FERS_NumChannels(handle)		((FERS_INDEX(handle) >= 0) ? FERS_BoardInfo[FERS_INDEX(handle)]->NumCh : 0)
+#define FERS_PCB_Rev(handle)			((FERS_INDEX(handle) >= 0) ? FERS_BoardInfo[FERS_INDEX(handle)]->PCBrevision : 0)
 
 
 // *****************************************************************
@@ -385,6 +392,11 @@ int FERS_SetCommonPedestal(int handle, uint16_t Pedestal);
 int FERS_EnablePedestalCalibration(int handle, int enable);
 int FERS_GetChannelPedestalBeforeCalib(int handle, int ch, uint16_t *PedLG, uint16_t *PedHG);
 int FERS_Get_FPGA_Temp(int handle, float *temp);
+int FERS_Get_PIC_Temp(int handle, float* temp);
+#ifdef FERS_5203
+int FERS_Get_TDC0_Temp(int handle, float* temp);
+int FERS_Get_TDC1_Temp(int handle, float* temp);
+#endif
 
 // *****************************************************************
 // Flash Read/Write
@@ -392,6 +404,7 @@ int FERS_Get_FPGA_Temp(int handle, float *temp);
 int FERS_ReadFlashPage(int handle, int pagenum, int size, uint8_t *data);
 int FERS_WriteFlashPage(int handle, int pagenum, int size, uint8_t *data);
 
+#ifdef FERS_5202
 // *****************************************************************
 // High Voltage Control
 // *****************************************************************
@@ -420,6 +433,7 @@ int TDC_WriteReg(int handle, int tdc_id, uint32_t addr, uint32_t data);
 int TDC_ReadReg(int handle, int tdc_id, uint32_t addr, uint32_t *data);
 int TDC_Config(int handle, int tdc_id, int StartSrc, int StopSrc);
 int TDC_DoStartStopMeasurement(int handle, int tdc_id, double *tof_ns);
+#endif
 
 
 // *****************************************************************

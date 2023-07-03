@@ -64,8 +64,8 @@
 #define min(a,b) ((a) < (b) ? (a) : (b))
 #endif
 
-#define SW_RELEASE_NUM			"3.0.3"
-#define SW_RELEASE_DATE			"29/09/2022"
+#define SW_RELEASE_NUM			"3.1.0"
+#define SW_RELEASE_DATE			"06/04/2023"
 #define FILE_LIST_VER			"3.1"
 
 #ifdef _WIN32

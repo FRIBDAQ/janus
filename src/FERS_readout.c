@@ -24,9 +24,13 @@
 #include "FERS_LL.h"
 #include "FERSlib.h"
 
+#define NEWPROTOCOL
+
 #define LLBUFF_SIZE			(16*1024)
 #define LLBUFF_CNC_SIZE		(64*1024)
 #define EVBUFF_SIZE			(16*1024)
+#define MAX_EVENT_SIZE		(16*1024)
+#define MAX_NROW_EDTAB		(64*1024)			// Max number of rows in the event descriptor table
 
 #define FERSLIB_QUEUE_SIZE			(64*1024)	// queue size in words
 #define FERSLIB_QUEUE_MAX_EVSIZE	512			// Maximum event size (in words) that can be pushed into the queue
@@ -49,6 +53,7 @@ static int RO_NumBoards = 0;								// Total num of boards connected for the rea
 static int Cnc_NumBoards[FERSLIB_MAX_NCNC] = { 0 };			// Num of boards connected to one concentrator
 static int tdl_handle[FERSLIB_MAX_NCNC][8][16] = { -1 };	// TDL handle map (gives the handle of the board connected to a specific cnc/chain/node)
 static int Cnc_Flushed[FERSLIB_MAX_NCNC] = { 0 };			// Flag indicating that the concentrator has been flushed
+static uint32_t* DescrTable[FERSLIB_MAX_NCNC] = { NULL };	// Event Descriptor Table
  
 #ifdef FERS_5202
 static SpectEvent_t SpectEvent[FERSLIB_MAX_NBRD];			// Decoded event (spectroscopy mode)
@@ -151,6 +156,7 @@ static int eth_usb_ReadRawEvent(int handle, int *nb)
 	static int footer_cnt[FERSLIB_MAX_NBRD] = { 0 }, NeedMoreData[FERSLIB_MAX_NBRD] = { 0 };
 	static uint32_t size[FERSLIB_MAX_NBRD] = { 0 }, bcnt[FERSLIB_MAX_NBRD] = { 0 };
 	static int numev[FERSLIB_MAX_NBRD] = { 0 };
+	static int NewPMPprot = 0; // New PMP protocol
 	int i, rvb, ret, nbb, reqsize;
 	uint32_t d32, dtq;
 	uint64_t footer;
@@ -195,7 +201,7 @@ static int eth_usb_ReadRawEvent(int handle, int *nb)
 				MOVE_PNT(wp[h], nbb);
 				NeedMoreData[h] = 0;
 				if (rdlog != NULL) {
-					fprintf(rdlog, "recv: %d bytes. rp=%d, wp=%d\n", nbb, rp[h], wp[h]);
+					fprintf(rdlog, "ReadData: req=%d, rx=%d (bytes). rp=%d, wp=%d\n", reqsize, nbb, rp[h], wp[h]);
 					fflush(rdlog);
 					//for (int bb=0; bb<nbb; bb++) fprintf(rdlog, "%02X\n", (uint8_t)LLBuff[h][bb]);
 				}
@@ -207,79 +213,155 @@ static int eth_usb_ReadRawEvent(int handle, int *nb)
 		// get size of the payload and transfer header to EvBuff
 		if (size[h] == 0) {
 			int skip=0;
-			while (BUFF_NB(rp[h], wp[h]) >= 4) {
-				d32 = *((uint32_t *)(LLBuff[h]+rp[h]));
+			while (1) {
+				if (BUFF_NB(rp[h], wp[h]) < 4) {
+					NeedMoreData[h] = 1;
+					if (rdlog != NULL) fprintf(rdlog, "Incomplete word. Waiting for more data... rp=%d, wp=%d\n", rp[h], wp[h]);
+					break;  // wait for other data to complete at least one word (4 bytes)
+				}
+				if (rp[h] == (LLBUFF_SIZE - 1))
+					d32 = (*((uint32_t*)(LLBuff[h] + rp[h])) & 0xFF) | ((*((uint32_t*)(LLBuff[h])) & 0xFFFFFF) << 8);
+				else if (rp[h] == (LLBUFF_SIZE - 2))
+					d32 = (*((uint32_t*)(LLBuff[h] + rp[h])) & 0xFFFF) | ((*((uint32_t*)(LLBuff[h])) & 0xFFFF) << 16);
+				else if (rp[h] == (LLBUFF_SIZE - 3))
+					d32 = (*((uint32_t*)(LLBuff[h] + rp[h])) & 0xFFFFFF) | ((*((uint32_t*)(LLBuff[h])) & 0xFF) << 24);
+				else
+					d32 = *((uint32_t*)(LLBuff[h] + rp[h]));
 				if (d32 == 0x00000081) break;  // advance read pointer until 0x81000000 is found (converted to big endian)
+				if (d32 == 0x82000000) {
+					MOVE_PNT(rp[h], 4);
+					NewPMPprot = 1;
+					break;
+				}
+				if (rdlog != NULL) fprintf(rdlog, "Skip byte %d: %02X\n", skip, (uint8_t)(*(LLBuff[h] + rp[h])));
 				INCR_PNT(rp[h]);
 				skip++;
 			} 
-			if ((skip > 0) && (ENABLE_FERSLIB_LOGMSG)) FERS_LibMsg("[ERROR][BRD %02d]: unexpected RX data format\n", h);
-			if (BUFF_NB(rp[h], wp[h]) < 32) {
+			if (skip > 0) {
+				if (rdlog != NULL) fprintf(rdlog, "Skip %d bytes. rp=%d, wp=%d\n", skip, rp[h], wp[h]);
+				//if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[ERROR][BRD %02d]: unexpected RX data format\n", h);
+			}
+			if (NeedMoreData[h]) continue;
+			uint32_t nb_head = NewPMPprot ? 20 : 32;
+			if (BUFF_NB(rp[h], wp[h]) < nb_head) {
 				NeedMoreData[h] = 1;
+				if (rdlog != NULL) fprintf(rdlog, "Incomplete header. Waiting for more data... rp=%d, wp=%d\n", rp[h], wp[h]);
 				continue;  // wait for header to complete (read more data if NB<32)
 			}
-			MOVE_PNT(rp[h], 12);
-			dtq = (uint32_t)LLBuff[h][rp[h]];
-			MOVE_PNT(rp[h], 2);
-			size[h] = 256 * (uint32_t)((uint8_t *)LLBuff[h])[rp[h]];
-			INCR_PNT(rp[h]);
-			size[h] += (uint32_t)((uint8_t *)LLBuff[h])[rp[h]];
-			INCR_PNT(rp[h]);
-			size[h] *= 4;  // payload size (in bytes)
-			bcnt[h] = 0;
-			rpp[h] = 0;
-			wpnt[h] = 0;
-			// event size in 32 bit words = payload + 5 (1 word for event size, 2 words for tstamp, 2 words for trg ID)
-			EvBuff8[wpnt[h]++] = (size[h]/4 + 5) & 0xFF;
-			EvBuff8[wpnt[h]++] = ((size[h]/4 + 5) >> 8) & 0xFF;
-			EvBuff8[wpnt[h]++] = 0;
-			EvBuff8[wpnt[h]++] = dtq;
-			for (i=0; i<16; i++) {
-				EvBuff8[wpnt[h]+(i/8)*8+(7-i%8)] = LLBuff[h][rp[h]];  // get two 32 bit words (tstamp and trigger ID). Convert big/little endian
-				INCR_PNT(rp[h]);
+			if (NewPMPprot) {
+				bcnt[h] = 0;
+				wpnt[h] = 0;
+				d32 = *(uint32_t*)(LLBuff[h] + rp[h]);
+				size[h] = (d32 & 0x00FFFFFF) * 4; // payload size (in bytes)
+				dtq = (d32 >> 24) & 0xFF;
+				EvBuff[h][wpnt[h]++] = (dtq << 24) | size[h];  // 1st word of event: dtq and size
+				MOVE_PNT(rp[h], 4);
+				for (i = 0; i < 4; i++) {  // trgid + tstamp (4 words)
+					d32 = *(uint32_t*)(LLBuff[h] + rp[h]);
+					EvBuff[h][wpnt[h]++] = d32;
+					if (i == 2) Tstamp[h] = d32;
+					if (i == 3) Tstamp[h] |= (uint64_t)d32 << 32;
+					MOVE_PNT(rp[h], 4);
+				}
 			}
-			Tstamp[h] = *(uint64_t *)(EvBuff8 + wpnt[h] + 8);
-			wpnt[h] += 16;
+			else {
+				MOVE_PNT(rp[h], 12);
+				dtq = (uint32_t)LLBuff[h][rp[h]];
+				MOVE_PNT(rp[h], 2);
+				size[h] = 256 * (uint32_t)((uint8_t*)LLBuff[h])[rp[h]];
+				INCR_PNT(rp[h]);
+				size[h] += (uint32_t)((uint8_t*)LLBuff[h])[rp[h]];
+				INCR_PNT(rp[h]);
+				size[h] *= 4;  // payload size (in bytes)
+				bcnt[h] = 0;
+				rpp[h] = 0;
+				wpnt[h] = 0;
+				// event size in 32 bit words = payload + 5 (1 word for event size, 2 words for tstamp, 2 words for trg ID)
+				EvBuff8[wpnt[h]++] = (size[h] / 4 + 5) & 0xFF;
+				EvBuff8[wpnt[h]++] = ((size[h] / 4 + 5) >> 8) & 0xFF;
+				EvBuff8[wpnt[h]++] = 0;
+				EvBuff8[wpnt[h]++] = dtq;
+				for (i = 0; i < 16; i++) {
+					EvBuff8[wpnt[h] + (i / 8) * 8 + (7 - i % 8)] = LLBuff[h][rp[h]];  // get two 32 bit words (tstamp and trigger ID). Convert big/little endian
+					INCR_PNT(rp[h]);
+				}
+				Tstamp[h] = *(uint64_t*)(EvBuff8 + wpnt[h] + 8);
+				wpnt[h] += 16;
+			}
 			if (rdlog != NULL) fprintf(rdlog, "Header complete: size = %d bytes. rp=%d, wp=%d\n", size[h], rp[h], wp[h]);
 		}
 
 		// transfer payload to EvBuff
-		for (; BUFF_NB(rp[h], wp[h]) > 0; INCR_PNT(rp[h])) {
-			if (bcnt[h] < size[h]) {
-				if ((rpp[h]++ & 0x7) == 0) continue;  // skip 1st byte of each quartet (data are 56 bit aligned)
-				rvb = 3 - (bcnt[h] & 0x3) * 2;
-				if ((wpnt[h]+rvb) > EVBUFF_SIZE) {
+		if (NewPMPprot) {
+			while (BUFF_NB(rp[h], wp[h]) > 4) {
+				d32 = *(uint32_t*)(LLBuff[h] + rp[h]);
+				MOVE_PNT(rp[h], 4);
+				if (wpnt[h] >= EVBUFF_SIZE) {
 					if (rdlog != NULL) fprintf(rdlog, "EvBuffer overflow!\n");
 					return FERSLIB_ERR_READOUT_ERROR;
 				}
-				EvBuff8[wpnt[h]+rvb] = LLBuff[h][rp[h]];  // convert big/little endian
-				bcnt[h]++;
-				wpnt[h]++;
-			} else if ((bcnt[h] == size[h]) && (footer_cnt[h] == 0)) {
-				footer_cnt[h] = (size[h] % 7 == 0) ? 8 : 7 - (size[h] % 7) + 8;
-				if (footer_cnt[h] == 8) footer = (uint64_t)LLBuff[h][rp[h]];
-				else footer = 0;
-				if (rdlog != NULL) {
-					fprintf(rdlog, "Payload complete: PLsize = %d bytes. rp=%d, wp=%d\n", bcnt[h], rp[h], wp[h]);
-					for(i=0; i<(wpnt[h]/4); i++) 
-						fprintf(rdlog, "%3d : %08X\n", i, EvBuff[h][i]);
-					fflush(rdlog);
+				if (bcnt[h] < size[h]) {  // Payload
+					EvBuff[h][wpnt[h]++] = d32;
+					bcnt[h] += 4;
 				}
-			//} else if (footer_cnt > 0) {  // g++ > 7.5 ... footer_cnt != NULL
-			} else if (footer_cnt != NULL) {  // g++ > 7.5 ... footer_cnt != NULL
-				footer_cnt[h]--;
-				if ((footer_cnt[h] <= 9) && (footer_cnt[h] > 0)) footer = (footer << 8) | (uint64_t)LLBuff[h][rp[h]];
-				if (footer_cnt[h] == 0) {
+				else {  // footer
 					if (rdlog != NULL) {
-						fprintf(rdlog, "Footer complete: rp=%d, wp=%d\n", rp[h], wp[h]);
+						fprintf(rdlog, "Payload complete: PLsize = %d bytes. rp=%d, wp=%d\n", bcnt[h], rp[h], wp[h]);
+						for (i = 0; i < wpnt[h]; i++)
+							fprintf(rdlog, "%3d : %08X\n", i, EvBuff[h][i]);
+						if (d32 != 0xF1000000)
+							fprintf(rdlog, "Invalid footer: %08X. rp=%d, wp=%d\n", d32, rp[h], wp[h]);
 						fflush(rdlog);
 					}
-					if (((footer & 0xFF00000000000000) != 0xC000000000000000) && (ENABLE_FERSLIB_LOGMSG)) 
-						FERS_LibMsg("[ERROR][BRD %02d]: unexpected footer = %016X\n", h, footer);
 					size[h] = 0;
-					EvBuff_nb[h] = wpnt[h];
-					*nb = wpnt[h];
+					EvBuff_nb[h] = wpnt[h] * 4;
+					*nb = wpnt[h] * 4;
 					return 0;
+				}
+			}
+			NeedMoreData[h] = 1;
+		}
+		else {
+			for (; BUFF_NB(rp[h], wp[h]) > 0; INCR_PNT(rp[h])) {
+				if (bcnt[h] < size[h]) {
+					if ((rpp[h]++ & 0x7) == 0) continue;  // skip 1st byte of each quartet (data are 56 bit aligned)
+					rvb = 3 - (bcnt[h] & 0x3) * 2;
+					if ((wpnt[h] + rvb) > EVBUFF_SIZE) {
+						if (rdlog != NULL) fprintf(rdlog, "EvBuffer overflow!\n");
+						return FERSLIB_ERR_READOUT_ERROR;
+					}
+					EvBuff8[wpnt[h] + rvb] = LLBuff[h][rp[h]];  // convert big/little endian
+					bcnt[h]++;
+					wpnt[h]++;
+				}
+				else if ((bcnt[h] == size[h]) && (footer_cnt[h] == 0)) {
+					footer_cnt[h] = (size[h] % 7 == 0) ? 8 : 7 - (size[h] % 7) + 8;
+					if (footer_cnt[h] == 8) footer = (uint64_t)LLBuff[h][rp[h]];
+					else footer = 0;
+					if (rdlog != NULL) {
+						fprintf(rdlog, "Payload complete: PLsize = %d bytes. rp=%d, wp=%d\n", bcnt[h], rp[h], wp[h]);
+						for (i = 0; i < (wpnt[h] / 4); i++)
+							fprintf(rdlog, "%3d : %08X\n", i, EvBuff[h][i]);
+						fflush(rdlog);
+					}
+				}
+				else if (footer_cnt != NULL) {  // g++ > 7.5 ... footer_cnt != NULL
+					footer_cnt[h]--;
+					if ((footer_cnt[h] <= 9) && (footer_cnt[h] > 0)) footer = (footer << 8) | (uint64_t)LLBuff[h][rp[h]];
+					if (footer_cnt[h] == 0) {
+						if (rdlog != NULL) {
+							fprintf(rdlog, "Footer complete: rp=%d, wp=%d\n", rp[h], wp[h]);
+							fflush(rdlog);
+						}
+						/*if (((footer & 0xFF00000000000000) != 0xC000000000000000) && (ENABLE_FERSLIB_LOGMSG)) {
+							FERS_LibMsg("[ERROR][BRD %02d]: unexpected footer = %016X\n", h, footer);
+							if (rdlog != NULL) fprintf(rdlog, "footer error. rp=%d, wp=%d\n", rp[h], wp[h]);
+						}*/
+						size[h] = 0;
+						EvBuff_nb[h] = wpnt[h];
+						*nb = wpnt[h];
+						return 0;
+					}
 				}
 			}
 		}
@@ -292,6 +374,175 @@ static int eth_usb_ReadRawEvent(int handle, int *nb)
 // *********************************************************************************************************
 // Read Raw Event (from Concentrator)
 // *********************************************************************************************************
+#ifdef NEWPROTOCOL
+/*
+Data Format from TDlink:
+	0  1  2  3
+0   FF FF FF FF    Fixed Header Tag
+1   FF FF FF FF    Fixed Header Tag
+2   rr rr rr ll    l: link num, r: tab size in rows
+r0	pp ss ss ss    ss(24): size
+	tt pp pp pp    pp(32): pointer
+	tt tt tt tt    tt(56): time code
+	id id tt tt    id(56): trigger id
+	id id id id
+	pk pk pk id    pk(56): packet ID
+	pk pk pk pk
+	vv vv qq bb    bb(8): board ID, qq(8) qualifier, vv(16): valid
+r1  ...
+r2  ...
+	++ ++ ++ ++    raw data (events are pointed by pointers in the table r0, r1...)
+	++ ++ ++ ++
+	++ ++ ++ ++
+*/
+
+/*
+#ifdef _MSC_VER
+#define PACK( _Declaration_ ) _pragma( pack(push, 1) ) _Declaration_ _pragma( pack(pop))
+#else
+#define PACK( _Declaration_ ) _Declaration_ _attribute__((__packed_))
+#endif
+
+#pragma PACK (push, 1)
+typedef struct t_table_row {
+	uint32_t size : 24;
+	uint32_t pointer : 32;
+	uint64_t timecode : 56;
+	uint64_t triggerid : 56;
+	uint64_t packetid : 56;
+	uint16_t board : 8;
+	uint16_t qly : 8;
+	uint32_t invalid_space : 15;
+	bool valid : 1;
+};
+*/
+
+static int tdl_ReadRawEvent(int cindex, int* bindex, int* nb)
+{
+	int nbr, ret, tpnt;
+	uint32_t evsize, node, dqf, pnt;
+	uint32_t* buff32 = (uint32_t*)LLBuff[cindex];
+	uint64_t trgid;
+	uint32_t header[3];
+	static int bpnt, ngap, last_pnt, chain;
+	static int table_nrow = 0, table_pnt = 0;
+	static FILE* rdlog = NULL;  // readout log file
+	//t_table_row *evdescr;
+
+	if ((DebugLogs & DBLOG_RAW_DECODE) && (rdlog == NULL)) {
+		char fname[100];
+		sprintf(fname, "ReadDecodeLog_%d.txt", cindex);
+		rdlog = fopen(fname, "w");
+	}
+
+	if (FERS_ReadoutStatus == ROSTATUS_FLUSHING) {
+		table_nrow = 0;
+		table_pnt = 0;
+		bpnt = 1;
+		int ccc = 0;
+		while (bpnt > 0) {
+			ccc++;
+			LLtdl_ReadData(cindex, LLBuff[cindex], LLBUFF_CNC_SIZE, &bpnt);
+		}
+		if (ENABLE_FERSLIB_LOGMSG)
+			FERS_LibMsg("[INFO][CNC %02d] Flushing Data - iterations:%d\n", cindex, ccc);
+		return 0;
+	}
+
+	*nb = 0;
+	*bindex = 0;
+	if (table_pnt == table_nrow) {  // all event descriptors consumed
+		bpnt = 0;
+		while (bpnt < 12) {  // Read header (3 words)
+			ret = LLtdl_ReadData(cindex, (char*)header + bpnt, 12 - bpnt, &nbr);
+			if (rdlog != NULL) {
+				fprintf(rdlog, "HEADER byte read: %d\n", nbr);
+			}
+			if (ret == 2) return 2;
+			if ((nbr == 0) && (bpnt == 0))
+				return 0;  // No data
+			bpnt += nbr;
+			if (rdlog != NULL) {
+				fprintf(rdlog, "Header[0]: %" PRIx32 "\nHeader[1]: %" PRIx32 "\nHeader[2]: %" PRIx32 "\n", header[0], header[1], header[2]);
+			}
+		}
+		if (rdlog != NULL) fflush(rdlog);
+		if ((header[0] != 0xFFFFFFFF) || (header[1] != 0xFFFFFFFF)) {
+			if (ENABLE_FERSLIB_LOGMSG)
+				FERS_LibMsg("[ERROR][CNC %02d] Missing 0xFFFFFFFF tags in header\n", cindex);
+			return FERSLIB_ERR_READOUT_ERROR;
+		}
+		chain = header[2] & 0xFF;  // chain ID
+		table_nrow = (header[2] >> 8) & 0xFFFFFF;   // tab size in rows (1 row = 8 words = 256 bits)
+		if (rdlog != NULL) fprintf(rdlog, "Data from chain %d: Tab size=%02d \n", chain, table_nrow);
+		if ((table_nrow > MAX_NROW_EDTAB) || (table_nrow == 0)) {
+			if (ENABLE_FERSLIB_LOGMSG)
+				FERS_LibMsg("[ERROR][CNC %02d] Wrong tab size (%d)\n", cindex, table_nrow);
+			return FERSLIB_ERR_READOUT_ERROR;
+		}
+
+		// Read descriptor table
+		bpnt = 0;
+		while (bpnt < (table_nrow * 32)) {
+			ret = LLtdl_ReadData(cindex, (char*)DescrTable[cindex] + bpnt, table_nrow * 32 - bpnt, &nbr);
+			if (ret == 2) return 2;
+			bpnt += nbr;
+		}
+		table_pnt = 0;
+		last_pnt = 0;
+	}
+
+	tpnt = table_pnt * 8;
+	pnt = (DescrTable[cindex][tpnt] >> 24) & 0xFF | (DescrTable[cindex][tpnt + 1] & 0xFFFFFF) << 8;  // pointer to event in data packet
+	evsize = DescrTable[cindex][tpnt] & 0xFFFFFF;		// event size
+	node = DescrTable[cindex][tpnt + 7] & 0xFF;			// board id in chain
+	dqf = (DescrTable[cindex][tpnt + 7] >> 8) & 0xFF;	// data qualifier
+	trgid = ((uint64_t)DescrTable[cindex][tpnt + 3] >> 16) & 0xFFFF | (uint64_t)DescrTable[cindex][tpnt + 4] << 16 | (uint64_t)(DescrTable[cindex][tpnt + 5] & 0xFF) << 48;
+	*bindex = FERS_INDEX(tdl_handle[cindex][chain][node]); 
+	Tstamp[*bindex] = ((uint64_t)DescrTable[cindex][tpnt + 1] >> 24) & 0xFF | (uint64_t)DescrTable[cindex][tpnt + 2] << 8 | (uint64_t)(DescrTable[cindex][tpnt + 3] & 0xFFFF) << 40;
+	table_pnt++;
+	if (evsize > MAX_EVENT_SIZE) {
+		if (ENABLE_FERSLIB_LOGMSG)
+			FERS_LibMsg("[ERROR][CNC %02d] Event size too big (%d)\n", cindex, evsize);
+		return FERSLIB_ERR_READOUT_ERROR;
+	}
+
+	// skip fillers (gap between end of previous event and begin of next one)
+	if (pnt != last_pnt) {
+		ngap = (pnt - last_pnt) * 4;
+		bpnt = 0;
+		while (bpnt < ngap) {
+			ret = LLtdl_ReadData(cindex, (char*)EvBuff[*bindex], ngap, &nbr);
+			if (ret == 2) return 2;
+			bpnt += nbr;
+		}
+	}
+	last_pnt += ngap / 4;
+
+	// Read Data
+	EvBuff[*bindex][0] = (dqf << 24) | (evsize + 5);
+	EvBuff[*bindex][1] = (uint32_t)(trgid & 0xFFFFFFFF);
+	EvBuff[*bindex][2] = (uint32_t)((trgid >> 32) & 0xFFFFFFFF);
+	EvBuff[*bindex][3] = (uint32_t)(Tstamp[*bindex] & 0xFFFFFFFF);
+	EvBuff[*bindex][4] = (uint32_t)((Tstamp[*bindex] >> 32) & 0xFFFFFFFF);
+	bpnt = 0;
+	while (bpnt < (int)(evsize * 4)) {
+		ret = LLtdl_ReadData(cindex, (char*)(EvBuff[*bindex] + 5) + bpnt, (evsize * 4) - bpnt, &nbr);
+		if (ret == 2) return 2;
+		bpnt += nbr;
+	}
+	last_pnt += evsize;
+	evsize += 5;
+	if (rdlog != NULL) fprintf(rdlog, "Read Event: TS=%" PRIx32 ", TrgID = % d, chain = % d, node = % d, size = % d\n", (int)Tstamp[*bindex], (int)trgid, chain, node, evsize);
+	for (int i = 0; i < evsize; ++i) {
+		if (rdlog != NULL) fprintf(rdlog, "Event[%d]=%" PRIx32 "\n", i, *(EvBuff[0] + i));
+	}
+	EvBuff_nb[*bindex] = evsize;
+	*nb = evsize * 4;
+	return 0;
+}
+
+#else
 /* 
 Data Format from TDlink:
     0  1  2  3 
@@ -304,7 +555,7 @@ Data Format from TDlink:
 6   cc cc cc cc    c: num events in the cluster
 7   dd dd dd dd    d: event size
 -------------------------------------------------------
-8   ee ee ff ff    e: chain, f: node
+8   ee ee ff ff    e: node, f: chain
 9   qq ss ss ss    q: data qualifier, s: size in byte of the payload of the event
 10  hh hh hh hh    h: trigger id (0..31) (counted by the board)
 11  hh hh hh hh    h: trigger id (32..63) 
@@ -324,6 +575,7 @@ static int tdl_ReadRawEvent(int cindex, int *bindex, int *nb)
 	uint32_t *buff32 = (uint32_t *)LLBuff[cindex];
 	static int ncyc = 0;
 	static FILE *rdlog = NULL;  // readout log file
+	int rd_cyc = 0;
 
 	if ((DebugLogs & DBLOG_RAW_DECODE) && (rdlog == NULL))  {
 		char fname[100];
@@ -347,6 +599,11 @@ static int tdl_ReadRawEvent(int cindex, int *bindex, int *nb)
 		while (wp[cindex] < 32) {  // Read cluster header
 			ret = LLtdl_ReadData(cindex, LLBuff[cindex] + wp[cindex], 32 - wp[cindex], &nbr);
 			if (ret == 2) return 2;
+			//if (nbr > 0) {
+			//	if (rd_cyc > 20) return 0; // No data
+			//	++rd_cyc;
+			//	Sleep(100);
+			//}
 			if ((wp[cindex] == 0) && (nbr == 0)) {
 				return 0;  // No data
 			}
@@ -366,10 +623,15 @@ static int tdl_ReadRawEvent(int cindex, int *bindex, int *nb)
 		while (wp[cindex] < (size+32)) {  // Read cluster data
 			ret = LLtdl_ReadData(cindex, LLBuff[cindex] + wp[cindex], size + 32 - wp[cindex], &nbr);
 			if (ret == 2) return 2;
+			//if (nbr > 0) {
+			//	if (rd_cyc > 20) return 0; // No data
+			//	++rd_cyc;
+			//	Sleep(100);
+			//}
 			wp[cindex] += nbr;
 		}
 	}
-	chain = (buff32[rp32] >> 24) & 0xFF;
+	chain = (buff32[rp32]) & 0xFF;
 	node = (buff32[rp32] >> 16) & 0xFF;
 	*bindex = FERS_INDEX(tdl_handle[cindex][chain][node]);
 	rp32++;  // rp32 is now pointing the 1st word of the event
@@ -393,7 +655,7 @@ static int tdl_ReadRawEvent(int cindex, int *bindex, int *nb)
 	}
 	return 0;
 }
-
+#endif
 
 // *********************************************************************************************************
 // Read and Decode Event Data
@@ -611,8 +873,9 @@ int FERS_DecodeEvent(int handle, uint32_t *EvBuff, int nb, int *DataQualifier, d
 		ServEvent[h].lockPLLTDC[0] = (EvBuff[6] >> 13) & 0X1;
 		ServEvent[h].lockPLLTDC[1] = (EvBuff[6] >> 14) & 0X1; 
 		ServEvent[h].lockTDCRo = (EvBuff[6] >> 15) & 0X1;
-		ServEvent[h].tempTDC[0] = (float)(EvBuff[7] & 0xFFFF) / 100;
-		ServEvent[h].tempBoard = (float)((EvBuff[7] >> 16) & 0xFFFF) / 100;
+		ServEvent[h].tempBoard = float(EvBuff[7] & 0x3FF) / 4;
+		ServEvent[h].tempTDC[1] = (float)((EvBuff[7] >> 20) & 0x3FF) / 4;
+		ServEvent[h].tempTDC[0] = (float)((EvBuff[7] >> 10) & 0x3FF) / 4;
 		ServEvent[h].ChAlmFullFlags[0] = ((uint64_t)EvBuff[9] << 32) | EvBuff[8];
 		ServEvent[h].otherFlags[0] = EvBuff[10] & 0x7F;
 		*Event = (void*)&ServEvent[h];
@@ -620,21 +883,22 @@ int FERS_DecodeEvent(int handle, uint32_t *EvBuff, int nb, int *DataQualifier, d
 		uint32_t port = 0, nwpl, nh;
 		uint8_t cn = 0;				//chip number
 		uint32_t ht_nw = 8;				// Num of header and trailer words
-		for(i = 0; i<8; i++) {
-			ListEvent[h].header1[i] = 0;
-			ListEvent[h].header2[i] = 0;
-			ListEvent[h].trailer[i] = 0;
-		}
+		int port separator;
+		//for(i = 0; i<8; i++) {
+		//	ListEvent[h].header1[i] = 0;
+		//	ListEvent[h].header2[i] = 0;
+		//	ListEvent[h].trailer[i] = 0;
+		//}
 		*tstamp_us = (double)(((uint64_t)EvBuff[4] << 32) | (uint64_t)EvBuff[3]) * CLK_PERIOD / 1000.0;
 		ListEvent[h].tstamp_us = *tstamp_us;
 		ListEvent[h].trigger_id = ((uint64_t)EvBuff[2] << 32) | (uint64_t)EvBuff[1];
 		if (size < 5) 
 			return FERSLIB_ERR_READOUT_ERROR;
 		nwpl = size - 5;  // num words payload = size - 5 word for packet header 
+		port_separator = (*DataQualifier >> 6) & 1;
 		nh = 0;
 		for (i=0; i<nwpl; i++) { 
 			uint32_t d32 = EvBuff[i+5];
-			int port_separator = (*DataQualifier >> 6) & 1;
 			int dtype = (d32 >> 28) & 0xF;
 			if ((dtype & 0x8) == 0) {  // Measurement
 				if (nh < MAX_LIST_SIZE) {
@@ -644,14 +908,16 @@ int FERS_DecodeEvent(int handle, uint32_t *EvBuff, int nb, int *DataQualifier, d
 						ListEvent[h].ToA[nh]  = port_separator ? d32 & 0x03FFFFFF : d32 & 0x00FFFFFF;
 						ListEvent[h].ToT[nh]  = 0;
 					} else if ((*DataQualifier >> 4 & 0x3) == 1) {	//16 bits leading edge, 11 bits TOT
-						ListEvent[h].edge[nh] = 0;
+						ListEvent[h].edge[nh] = EDGE_LEAD;
 						ListEvent[h].ToA[nh]  = port_separator ? (d32 >> 11) & 0xFFFF : (d32 >> 11) & 0x3FFF;
 						ListEvent[h].ToT[nh]  = d32 & 0x000007FF;
 					} else if ((*DataQualifier >> 4 & 0x3) == 2) {  //19 bits leading edge, 8 bits TOT
-						ListEvent[h].edge[nh] = 0;
+						ListEvent[h].edge[nh] = EDGE_LEAD;
 						ListEvent[h].ToA[nh]  = port_separator ? (d32 >> 8) & 0x7FFFF : (d32 >> 8) & 0x1FFFF;
 						ListEvent[h].ToT[nh]  = d32 & 0x000000FF;
 					}
+					// NOTE: when the ToT exceeds the FSR, the picoTDC clips it to 0xFF or 0x7FF. Conversely, the ToA is not clipped
+					// and there is no way to know when the time measurement overflows
 					nh++;
 				}
 			} else if (dtype == 0x8) {				// 1st header
@@ -660,7 +926,7 @@ int FERS_DecodeEvent(int handle, uint32_t *EvBuff, int nb, int *DataQualifier, d
 				ListEvent[h].header2[port] = d32;
 			} else if ((dtype >> 2) == 0x3) {		// one word chip trailer
 				ListEvent[h].ow_trailer = d32;
-				cn++;								//Increment chip number counter
+				cn++;								// Increment chip number counter
 			} else if (dtype == 0xA) {				// Trailer
 				ListEvent[h].trailer[port] = d32;
 				port++;
@@ -670,6 +936,9 @@ int FERS_DecodeEvent(int handle, uint32_t *EvBuff, int nb, int *DataQualifier, d
 		}
 		ListEvent[h].nhits = nh;
 		*Event = (void *)&ListEvent[h];
+	} else {
+		FERS_LibMsg("Error in Data Qualifier: %d", *DataQualifier);
+		return FERSLIB_ERR_READOUT_ERROR;
 	}
 
 	// Dump raw data to file (debug mode)
@@ -718,6 +987,10 @@ int FERS_InitReadout(int handle, int ROmode, int *AllocatedSize) {
 		tdl_handle[FERS_CNCINDEX(handle)][FERS_CHAIN(handle)][FERS_NODE(handle)] = handle;
 		Cnc_NumBoards[FERS_CNCINDEX(handle)]++;
 		tdl_handle[FERS_CNCINDEX(handle)][FERS_CHAIN(handle)][FERS_NODE(handle)] = handle;
+#ifdef NEWPROTOCOL
+		DescrTable[FERS_CNCINDEX(handle)] = (uint32_t*)malloc(MAX_NROW_EDTAB * 32);
+		*AllocatedSize += MAX_NROW_EDTAB * 8;
+#endif
 	} else {
 		LLBuff[FERS_INDEX(handle)] = (char *)malloc(LLBUFF_SIZE);
 		if (LLBuff[FERS_INDEX(handle)] == NULL) return FERSLIB_ERR_MALLOC_BUFFERS;
@@ -770,6 +1043,10 @@ int FERS_CloseReadout(int handle) {
 			free(LLBuff[FERS_INDEX(handle)]);
 			LLBuff[FERS_INDEX(handle)] = NULL;
 		}
+		if (DescrTable[FERS_CNCINDEX(handle)] != NULL) {
+			free(DescrTable[FERS_CNCINDEX(handle)]);
+			DescrTable[FERS_CNCINDEX(handle)] = NULL;
+		}
 	} else {
 		if (LLBuff[FERS_INDEX(handle)] != NULL)  {  
 			free(LLBuff[FERS_INDEX(handle)]);	// DNIN: it trows an acception after usb fw upgrader
@@ -808,6 +1085,8 @@ int FERS_CloseReadout(int handle) {
 // --------------------------------------------------------------------------------------------------------- 
 int FERS_StartAcquisition(int *handle, int NumBrd, int StartMode) {
 	int ret=0, b, tdl = 1, rc;
+	if (FERS_ReadoutStatus == ROSTATUS_RUNNING)
+		FERS_StopAcquisition(handle, NumBrd, StartMode);
 	for(b = 0; b < NumBrd; b++) {
 		if (handle[b] == -1) continue;
 		ret |= FERS_FlushData(handle[b]);
@@ -874,6 +1153,8 @@ int FERS_StopAcquisition(int *handle, int NumBrd, int StartMode) {
 	int ret=0, b;
 	if (StartMode == STARTRUN_TDL) {
 		ret |= FERS_SendCommandBroadcast(handle, CMD_ACQ_STOP, 0);
+		int cindex = FERS_CNCINDEX(*handle);
+		Cnc_Flushed[cindex] = 0;
 	} else if ((StartMode == STARTARUN_CHAIN_T0) || (StartMode == STARTRUN_CHAIN_T1)) {
 		ret |= FERS_SendCommand(handle[0], CMD_ACQ_STOP);
 	} else {
@@ -897,6 +1178,9 @@ int FERS_FlushData(int handle) {
 	FERS_ReadoutStatus = ROSTATUS_FLUSHING;
 	if (FERS_CONNECTIONTYPE(handle) == FERS_CONNECTIONTYPE_TDL) {
 		int cindex = FERS_CNCINDEX(handle);
+		int bindex = FERS_INDEX(handle);
+		int nbf = 0;
+		tdl_ReadRawEvent(cindex, &bindex, &nbf);		
 		if (!Cnc_Flushed[cindex]) {
 			LLtdl_Flush(cindex);  // Flush concentrator (that will flush all FERS board by hardware commmands)
 			Sleep(100);

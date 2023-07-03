@@ -999,7 +999,7 @@ int ParseConfigFile(FILE* f_ini, Config_t* WDcfg, bool fcall)
 		if (streq(str, "RunNumber_AutoIncr"))		WDcfg->RunNumber_AutoIncr	= GetInt(f_ini);
 		if (streq(str, "EnableTempFeedback"))		WDcfg->EnableTempFeedback	= GetInt(f_ini);
 		if (streq(str, "TempFeedbackCoeff"))		WDcfg->TempFeedbackCoeff	= GetFloat(f_ini);
-		if (streq(str, "EnableServiceEvents"))		WDcfg->EnableServiceEvents	= GetInt(f_ini);
+		if (streq(str, "EnableServiceEvents"))      WDcfg->EnableServiceEvents	= GetInt(f_ini);
 		if (streq(str, "EnableCntZeroSuppr"))		WDcfg->EnableCntZeroSuppr	= GetInt(f_ini);
 		if (streq(str, "AskHVShutDownOnExit"))		WDcfg->AskHVShutDownOnExit  = GetInt(f_ini);
 

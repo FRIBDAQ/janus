@@ -64,21 +64,20 @@ echo "JanusC can be run from ./bin/JanusC"
 echo "*************************************************"
 echo "*************************************************"
 echo "*************************************************"
-if [ ! -f bin/BinToCsv ]; then
-	echo "Compiling macro macros/BintoCsv.cpp ..."
-	g++ -o ./bin/BinToCsv macros/BinToCsv.cpp
-	res=$?
-	if [ $res -ne 0 ]; then
-        	echo "ERROR: Compilation failed"
-        	echo "Exiting ..."
-        	exit 1
-	fi
-echo "Compilation succeded!!"
-echo "*************************************************"
-echo "*************************************************"
-echo "*************************************************"
-fi
-
+#if [ ! -f bin/BinToCsv ]; then
+#	echo "Compiling macro macros/BintoCsv.cpp ..."
+#	g++ -o ./bin/BinToCsv macros/BinToCsv.cpp
+#	res=$?
+#	if [ $res -ne 0 ]; then
+#       	echo "ERROR: Compilation failed"
+#        	echo "Exiting ..."
+#        	exit 1
+#	fi
+#echo "Compilation succeded!!"
+#echo "*************************************************"
+#echo "*************************************************"
+#echo "*************************************************"
+#fi
 #Searching for additional packages 'gnuplot' for JanusC and 'python3-tk' for the GUI
 #Without them, JanusC or the GUI crash 
 echo "Searching for gnuplot ..."
