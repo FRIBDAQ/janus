@@ -145,10 +145,8 @@ int FERS_OpenDevice(char *path, int *handle)
 		if (cnc_handle == -1) {
 			if (i == FERSLIB_MAX_NCNC) return FERSLIB_ERR_MAX_NBOARD_REACHED;
 			CncIndex = i;
-			if (strstr(path, "eth") != NULL) {  // Ethernet
+			if ((strstr(path, "eth") != NULL) || (strstr(path, "usb") != NULL)) {  // Ethernet or Usb
 				ret = LLtdl_OpenDevice(ss[1], CncIndex);
-			} else if (strstr(path, "usb") != NULL) {  // Usb
-				// CTIN: to do...
 			}
 			if (ret < 0) return FERSLIB_ERR_COMMUNICATION;
 			CncConnected[CncIndex] = 1;
@@ -726,6 +724,59 @@ int FERS_Get_FPGA_Temp(int handle, float *temp) {
 	}
 	return ret;
 }
+
+#ifdef FERS_5203
+// --------------------------------------------------------------------------------------------------------- 
+// Description: Get PIC board Temperature
+// Inputs:		handle = board handle 
+// Outputs:     temp = PIC board temperature (Celsius)
+// Return:		0=OK, negative number = error code
+// --------------------------------------------------------------------------------------------------------- 
+int FERS_Get_PIC_Temp(int handle, float* temp) {
+	uint32_t data;
+	int ret;
+	for (int i = 0; i < 5; i++) {
+		ret = FERS_ReadRegister(handle, a_pic_temp, &data);
+		*temp = (float)(data / 4.);
+		if ((*temp > 0) && (*temp < 125)) break;
+	}
+	return ret;
+}
+
+// --------------------------------------------------------------------------------------------------------- 
+// Description: Get TDC0 Temperature
+// Inputs:		handle = board handle 
+// Outputs:     temp = TDC temperature (Celsius)
+// Return:		0=OK, negative number = error code
+// --------------------------------------------------------------------------------------------------------- 
+int FERS_Get_TDC0_Temp(int handle, float* temp) {
+	uint32_t data;
+	int ret;
+	for (int i = 0; i < 5; i++) {
+		ret = FERS_ReadRegister(handle, a_tdc0_temp, &data);
+		*temp = (float)(data / 4.);
+		if ((*temp > 0) && (*temp < 125)) break;
+	}
+	return ret;
+}
+
+// --------------------------------------------------------------------------------------------------------- 
+// Description: Get TDC1 Temperature
+// Inputs:		handle = board handle 
+// Outputs:     temp = TDC temperature (Celsius)
+// Return:		0=OK, negative number = error code
+// --------------------------------------------------------------------------------------------------------- 
+int FERS_Get_TDC1_Temp(int handle, float* temp) {
+	uint32_t data;
+	int ret;
+	for (int i = 0; i < 5; i++) {
+		ret = FERS_ReadRegister(handle, a_tdc1_temp, &data);
+		*temp = (float)(data / 4.);
+		if ((*temp > 0) && (*temp < 125)) break;
+	}
+	return ret;
+}
+#endif
 
 #ifdef FERS_5202
 // --------------------------------------------------------------------------------------------------------- 
@@ -1322,6 +1373,9 @@ int FERS_CheckBootloaderVersion(int handle, int *isInBootloader, uint32_t *versi
 	*isInBootloader = 0;
 	*version = 0;
 	*release = 0;
+	if (FERS_CONNECTIONTYPE(handle) == FERS_CONNECTIONTYPE_TDL)
+		return 0;
+
 	for (int i = 0; i < 3; i++) {
 		res = FERS_WriteRegister(handle, 8191, 0xFF);
 		if (res) return res;
@@ -1330,7 +1384,7 @@ int FERS_CheckBootloaderVersion(int handle, int *isInBootloader, uint32_t *versi
 	
 	if (FERS_CONNECTIONTYPE(handle) == FERS_CONNECTIONTYPE_ETH) 
 		res = LLeth_ReadMem(FERS_INDEX(handle), 0, buffer, 16);
-	else
+	else if (FERS_CONNECTIONTYPE(handle) == FERS_CONNECTIONTYPE_USB)
 		res = LLusb_ReadMem(FERS_INDEX(handle), 0, buffer, 16);
 	if (res) return res;
 	p_intdata = (uint32_t *)buffer;

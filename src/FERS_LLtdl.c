@@ -57,6 +57,7 @@ static int QuitThread[FERSLIB_MAX_NCNC] = { 0 };		// Quit Thread
 static f_thread_t ThreadID[FERSLIB_MAX_NCNC];			// RX Thread ID
 static mutex_t RxMutex[FERSLIB_MAX_NCNC];				// Mutex for the access to the Rx data buffer and pointers
 static FILE *Dump[FERSLIB_MAX_NCNC] = { NULL };			// low level data dump files (for debug)
+static FILE* DumpRead[FERSLIB_MAX_NCNC] = { NULL };		// low level data read dump file (for debug)
 static uint8_t ReadData_Init[FERSLIB_MAX_NBRD] = { 0 }; // Re-init read pointers after run stop
 
 
@@ -205,6 +206,89 @@ int LLtdl_EnumChain(int cindex, uint16_t chain, uint32_t *node_count)
 	return 0;
 }
 
+
+// *********************************************************************************************************
+// TDlink Chain operations
+// *********************************************************************************************************
+// --------------------------------------------------------------------------------------------------------- 
+// Description: Execute Multichain syncronization (optical link)
+// Inputs:		cindex = concentrator index
+// Outputs:		node_count = num of nodes in the chain
+// Return:		0=OK, negative number = error code
+// --------------------------------------------------------------------------------------------------------- 
+int LLtdl_SyncChains(int cindex)
+{
+	uint32_t res;
+	f_socket_t sck = FERS_CtrlSocket[cindex];
+	char sendbuf[32];
+	int iResult;
+	int p = 0;
+	sendbuf[p] = 'S'; p++;
+	sendbuf[p] = 'N'; p++;
+	sendbuf[p] = 'T'; p++;
+	sendbuf[p] = '0'; p++;
+	
+	
+	iResult = send(sck, sendbuf, p, 0);
+	if (iResult == f_socket_error) {
+		if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("Sync chains, send failed with error: %d\n", f_socket_errno);
+		f_socket_cleanup();
+		return -1;
+	}
+	iResult = recv(sck, sendbuf, 4, 0);
+	if (iResult == f_socket_error) {
+		if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("Sync chains, recv failed with error: %d\n", f_socket_errno);
+		f_socket_cleanup();
+		return -1;
+	}
+	res = *((uint32_t *)&sendbuf[0]);
+
+	if (res != 0) return FERSLIB_ERR_TDL_ERROR;
+	return 0;
+}
+
+
+
+
+// *********************************************************************************************************
+// TDlink Chain operations
+// *********************************************************************************************************
+// --------------------------------------------------------------------------------------------------------- 
+// Description: Execute Reset chain to restart enumeration if a link is down(optical link)
+// Inputs:		cindex = concentrator index
+// Outputs:		node_count = num of nodes in the chain
+// Return:		0=OK, negative number = error code
+// --------------------------------------------------------------------------------------------------------- 
+int LLtdl_ResetChains(int cindex)
+{
+	uint32_t res;
+	f_socket_t sck = FERS_CtrlSocket[cindex];
+	char sendbuf[32];
+	int iResult;
+	int p = 0;
+	sendbuf[p] = 'R'; p++;
+	sendbuf[p] = 'L'; p++;
+	sendbuf[p] = 'N'; p++;
+	sendbuf[p] = 'K'; p++;
+
+
+	iResult = send(sck, sendbuf, p, 0);
+	if (iResult == f_socket_error) {
+		if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("Reset chains, send failed with error: %d\n", f_socket_errno);
+		f_socket_cleanup();
+		return -1;
+	}
+	iResult = recv(sck, sendbuf, 4, 0);
+	if (iResult == f_socket_error) {
+		if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("Reset chains, recv failed with error: %d\n", f_socket_errno);
+		f_socket_cleanup();
+		return -1;
+	}
+	res = *((uint32_t*)&sendbuf[0]);
+
+	if (res != 0) return FERSLIB_ERR_TDL_ERROR;
+	return 0;
+}
 
 // --------------------------------------------------------------------------------------------------------- 
 // Description: Get Chain info
@@ -433,7 +517,7 @@ int LLtdl_SendCommand(int cindex, int chain, int node, uint32_t cmd, uint32_t de
 // Return:		0=OK, negative number = error code
 // --------------------------------------------------------------------------------------------------------- 
 int LLtdl_SendCommandBroadcast(int cindex, uint32_t cmd, uint32_t delay) {
-	return LLtdl_SendCommand(cindex, 0, 0xFF, cmd, delay);
+	return LLtdl_SendCommand(cindex, 0xFF, 0xFF, cmd, delay);
 }
 
 
@@ -597,6 +681,7 @@ static void* tdl_data_receiver(void *params) {
 		if (RxStatus[bindex] == RXSTATUS_IDLE) {
 			if ((FERS_ReadoutStatus == ROSTATUS_RUNNING) && empty) {  // start of run
 				// ReadData Stuff
+
 				ReadData_Init[bindex] = 1;
 	 			//RdReady[bindex] = 0;
 				//Nbr[bindex] = 0;
@@ -638,7 +723,10 @@ static void* tdl_data_receiver(void *params) {
 					}
 					if (res == 0) empty = 1;
 					else nbrx = recv(FERS_DataSocket[bindex], RxBuff[bindex][0], RX_BUFF_SIZE, 0);
-					if (!empty && (DebugLogs & DBLOG_LL_MSGDUMP)) fprintf(Dump[bindex], "Reading old data...\n");
+					if (!empty && (DebugLogs & DBLOG_LL_MSGDUMP)) {
+						fprintf(Dump[bindex], "Reading old data...byte read=%d - Rx:%d, RO:%d\n", nbrx, RxStatus[bindex], FERS_ReadoutStatus);
+						fflush(Dump[bindex]);
+					}
 				}
 				unlock(RxMutex[bindex]);
 				Sleep(10);
@@ -649,7 +737,7 @@ static void* tdl_data_receiver(void *params) {
 		if ((RxStatus[bindex] == RXSTATUS_RUNNING) && (FERS_ReadoutStatus != ROSTATUS_RUNNING)) {  // stop of run 
 			tstop = ct;
 			RxStatus[bindex] = RXSTATUS_EMPTYING;
-			if (DebugLogs & DBLOG_LL_MSGDUMP) fprintf(Dump[bindex], "Board Stopped. Emptying data (T=%.3f)\n", 0.001 * (tstop - tstart));
+			if (DebugLogs & DBLOG_LL_MSGDUMP) fprintf(Dump[bindex], "Board Stopped. Emptying data (T=%.3f) - Rx:%d, RO:%d\n", 0.001 * (tstop - tstart), RxStatus[bindex], FERS_ReadoutStatus);
 		}
 
 		if (RxStatus[bindex] == RXSTATUS_EMPTYING) {
@@ -662,7 +750,7 @@ static void* tdl_data_receiver(void *params) {
 				lock(FERS_RoMutex);
 				if (FERS_RunningCnt > 0) FERS_RunningCnt--;
 				unlock(FERS_RoMutex);
-				if (DebugLogs & DBLOG_LL_MSGDUMP) fprintf(Dump[bindex], "Run stopped (T=%.3f)\n", 0.001 * (ct - tstart));
+				if (DebugLogs & DBLOG_LL_MSGDUMP) fprintf(Dump[bindex], "Run stopped (T=%.3f) - Rx:%d, RO:%d\n", 0.001 * (ct - tstart), RxStatus[bindex], FERS_ReadoutStatus);
 				empty = 0;
 				unlock(RxMutex[bindex]);
 				continue;
@@ -726,7 +814,7 @@ static void* tdl_data_receiver(void *params) {
 				uint32_t *d32 = (uint32_t *)(wpnt + i);
 				fprintf(Dump[bindex], "%08X\n", *d32);
 			}
-			fflush(Dump[bindex]);
+			//fflush(Dump[bindex]);
 		}
 		unlock(RxMutex[bindex]);
 	}
@@ -781,6 +869,15 @@ int LLtdl_ReadData(int bindex, char *buff, int maxsize, int *nb) {
 	if (*nb > 0) {
 		memcpy(buff, rpnt, *nb);
 		RxBuff_rp[bindex] += *nb;
+
+		//if (DebugLogs & DBLOG_LL_READDUMP) {
+		//	for (int i = 0; i < *nb; i += 4) {
+		//		uint32_t* d32 = (uint32_t*)(rpnt + i);
+		//		fprintf(DumpRead[bindex], "%08X\n", *d32);
+		//	}
+		//	fprintf(DumpRead[bindex], "\n");
+		//	//fflush(DumpRead[bindex]);
+		//}
 	}
 
 	if (RxBuff_rp[bindex] == Nbr[bindex]) {  // end of current buff reached => switch to other buffer 
@@ -862,6 +959,11 @@ int LLtdl_OpenDevice(char *board_ip_addr, int cindex) {
 		sprintf(filename, "ll_log_%d.txt", cindex);
 		Dump[cindex] = fopen(filename, "w");
 	}
+	if (DebugLogs & DBLOG_LL_READDUMP) {
+		char filename[200];
+		sprintf(filename, "ll_readData_log_%d.txt", cindex);
+		DumpRead[cindex] = fopen(filename, "w");
+	}
 	thread_create(tdl_data_receiver, &cindex, &ThreadID[cindex]);
 	started = 0;
 	while(!started) {
@@ -890,34 +992,64 @@ int LLtdl_OpenDevice(char *board_ip_addr, int cindex) {
 int LLtdl_InitTDLchains(int cindex) {
 	int ret = 0, chain;
 	uint32_t delay = 1000;  // CTIN: set delay as a function of the number of boards in the chain
-
-	for(chain=0; chain < FERSLIB_MAX_NTDL; chain++) {
+	bool not_enumerated_before = false;
+	for (chain = 0; chain < FERSLIB_MAX_NTDL; chain++) {
 		FERS_TDL_ChainInfo_t tdl_info;
 		ret |= LLtdl_GetChainInfo(cindex, chain, &tdl_info);
-		if (tdl_info.Status <= 2) // Not enumerated before
-			ret |= LLtdl_EnumChain(cindex, 0, &TDL_NumNodes[cindex][chain]);
-		else
-			TDL_NumNodes[cindex][chain] = tdl_info.BoardCount;
-
-		// Set the propagation delay between the nodes on the optical chain.
-		for(uint32_t i=0; i<TDL_NumNodes[cindex][chain]; i++) {
-			// Delay ~= 22 + 0.781 * length (in m)
-			const int DELAY_COMP = 22;  // this is the correct delay compensation for a fiber of 30 cm
-			//const int DELAY_COMP = 53;  // this is the correct delay compensation for a fiber of 40 m
-			uint32_t delay = DELAY_COMP * (TDL_NumNodes[cindex][chain] - i - 1);
-			uint32_t data = (chain << 24) | (i << 16) | delay;
-			ret = LLtdl_CncWriteRegister(cindex, VR_SYNC_DELAY, data);
-			if (ret < 0) return FERSLIB_ERR_COMMUNICATION;
+		if (tdl_info.Status > 0) {
+			if (tdl_info.Status <= 2) {
+				not_enumerated_before = true;
+			}
+			else {
+				TDL_NumNodes[cindex][chain] = tdl_info.BoardCount;
+			}
+		}
+		else {
+			TDL_NumNodes[cindex][chain] = 0;
 		}
 
-		ret |= LLtdl_ControlChain(cindex, chain, 1, 0x100);
-		ret |= LLtdl_SendCommandBroadcast(cindex, CMD_TDL_SYNC, delay); 
-		ret |= LLtdl_SendCommandBroadcast(cindex, CMD_TDL_SYNC, delay); // CTIN: may need 2 sync commands (not clear why...)
-		Sleep(300);  // HACK: do you need this ???
-		ret |= LLtdl_SendCommandBroadcast(cindex, CMD_TIME_RESET, delay); 
-		ret |= LLtdl_SendCommandBroadcast(cindex, CMD_TIME_RESET, delay); 
-		ret |= LLtdl_SendCommandBroadcast(cindex, CMD_RES_PTRG, delay); 
-		ret |= LLtdl_SendCommandBroadcast(cindex, CMD_RES_PTRG, delay); 
+	}
+	//reset all chains if not enumerated before
+	if (not_enumerated_before == true)
+		LLtdl_ResetChains(cindex);
+		
+	for(chain=0; chain < FERSLIB_MAX_NTDL; chain++) {
+		ret = 0;
+		if (not_enumerated_before == true) // Not enumerated before
+		{
+			ret |= LLtdl_EnumChain(cindex, chain, &TDL_NumNodes[cindex][chain]);
+		}
+		if (ret == -15) {
+			TDL_NumNodes[cindex][chain] = 0;
+		}
+		else { 
+			// Set the propagation delay between the nodes on the optical chain.
+			for (uint32_t i = 0; i < TDL_NumNodes[cindex][chain]; i++) {
+				// Delay ~= 22 + 0.781 * length (in m)
+				const int DELAY_COMP = 22;  // this is the correct delay compensation for a fiber of 30 cm
+				//const int DELAY_COMP = 53;  // this is the correct delay compensation for a fiber of 40 m
+				uint32_t delay = DELAY_COMP * (TDL_NumNodes[cindex][chain] - i - 1);
+				uint32_t data = (chain << 24) | (i << 16) | delay;
+				ret = LLtdl_CncWriteRegister(cindex, VR_SYNC_DELAY, data);
+				if (ret < 0) return FERSLIB_ERR_COMMUNICATION;
+			}
+
+			ret |= LLtdl_ControlChain(cindex, chain, 1, 0x100);
+			if (ret) return FERSLIB_ERR_COMMUNICATION;
+		}
+	}
+	uint32_t cmd_delay = 1000;  // CTIN: set delay as a function of the number of boards in the chain (?)
+	ret = 0;
+	ret |= LLtdl_SendCommandBroadcast(cindex, CMD_TDL_SYNC, cmd_delay);
+	ret |= LLtdl_SendCommandBroadcast(cindex, CMD_TDL_SYNC, cmd_delay); // CTIN: may need 2 sync commands (not clear why...)
+	Sleep(300);  // CTIN: do you need this ???
+	ret |= LLtdl_SendCommandBroadcast(cindex, CMD_TIME_RESET, cmd_delay);
+	ret |= LLtdl_SendCommandBroadcast(cindex, CMD_TIME_RESET, cmd_delay);
+	ret |= LLtdl_SendCommandBroadcast(cindex, CMD_RES_PTRG, cmd_delay);
+	ret |= LLtdl_SendCommandBroadcast(cindex, CMD_RES_PTRG, cmd_delay);
+	if (ret) return FERSLIB_ERR_COMMUNICATION;
+	if (not_enumerated_before) {
+		ret = LLtdl_SyncChains(cindex);
 		if (ret) return FERSLIB_ERR_COMMUNICATION;
 	}
 	return 0;
@@ -934,7 +1066,9 @@ bool LLtdl_TDLchainsInitialized(int cindex) {
 	for(chain=0; chain < FERSLIB_MAX_NTDL; chain++) {
 		FERS_TDL_ChainInfo_t tdl_info;
 		ret = LLtdl_GetChainInfo(cindex, chain, &tdl_info);
-		if (ret || (tdl_info.Status <= 2)) return false;
+		if (tdl_info.Status > 0) {
+			if (ret || (tdl_info.Status <= 2)) return false;
+		}
 	}
 	return true;
 }
@@ -969,6 +1103,10 @@ int LLtdl_CloseDevice(int cindex)
 	if (Dump[cindex] != NULL) {
 		fclose(Dump[cindex]);
 		Dump[cindex] = NULL;
+	}
+	if (DumpRead[cindex] != NULL) {
+		fclose(DumpRead[cindex]);
+		DumpRead[cindex] = NULL;
 	}
 	for(int i=0; i<2; i++)
 		if (RxBuff[cindex][i] != NULL) free(RxBuff[cindex][i]);

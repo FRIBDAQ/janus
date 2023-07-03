@@ -67,7 +67,7 @@ int LoadRunVariables(RunVars_t* RunVars)
 	FILE* ps = fopen(RUNVARS_FILENAME, "r");
 	//char plot_name[50];	// name of histofile.
 	int mline = 0;
-
+	
 	// set defaults
 	RunVars->PlotType = PLOT_E_SPEC_HG;
 	RunVars->SMonType = SMON_CHTRG_RATE;
@@ -342,7 +342,14 @@ void CheckHVBeforeClosing() {
 		if (SockConsole) Con_printf("LCSm", "Quitting ...\n");
 		return;
 	}
+	FERS_BoardInfo_t BrdInfo;
+
 	for (int mb = 0; mb < WDcfg.NumBrd; ++mb) {	// Check if any boards is still ON
+		ret = FERS_ReadBoardInfo(handle[mb], &BrdInfo);	// Return if there were connection issues
+		if (ret != 0) {
+			if (SockConsole) Con_printf("LCSm", "Quitting ...\n");
+			return;
+		}
 		int ttmp;
 		HV_Get_Status(handle[mb], &ttmp, &rmp, &ovc, &ovv);
 		bnf |= ttmp;
@@ -429,7 +436,6 @@ int StopRun() {
 	int ret = 0;
 
 	ret = FERS_StopAcquisition(handle, WDcfg.NumBrd, WDcfg.StartRunMode);
-
 	if (Stats.stop_time == 0) Stats.stop_time = get_time();
 	SaveHistos();
 	if (WDcfg.OutFileEnableMask & OUTFILE_RUN_INFO) SaveRunInfo();
@@ -439,7 +445,7 @@ int StopRun() {
 		if ((WDcfg.RunNumber_AutoIncr) && (!WDcfg.EnableJobs)) {  //
 			++RunVars.RunNumber; 
 			SaveRunVariables(RunVars);
-		}
+		}		
 		AcqStatus = ACQSTATUS_READY;
 	}
 
@@ -1081,11 +1087,11 @@ ReadCfg:
 			Con_printf("LCSm", "Connected to %s\n", WDcfg.ConnPath[b]);
 			int bootL;
 			uint32_t ver, rel;
-			FERS_CheckBootloaderVersion(handle[b], &bootL, &ver, &rel);
-			if (bootL) {
-				report_firmware_notfound(b);
-				goto ManageError;
-			}
+			//FERS_CheckBootloaderVersion(handle[b], &bootL, &ver, &rel);
+			//if (bootL) {
+			//	report_firmware_notfound(b);
+			//	goto ManageError;
+			//}
 		} else {
 			sprintf(ErrorMsg, "Can't open board %d at %s\n", b, WDcfg.ConnPath[b]);
 			goto ManageError;
@@ -1110,7 +1116,7 @@ ReadCfg:
 			}
 		} else {
 			sprintf(ErrorMsg, "Can't read board info\n");
-			report_firmware_notfound(b);
+			//report_firmware_notfound(b);
 			goto ManageError;
 		}
 	}
@@ -1152,16 +1158,16 @@ Restart:  // when config file changes or a new run of the job is scheduled, the 
 	// Configure Boards
 	// -----------------------------------------------------
 	if (!SkipConfig) {
+		Con_printf("LCSm", "Configuring Boards ... ");
 		for (b = 0; b < WDcfg.NumBrd; b++) {
-			Con_printf("LCSm", "Configuring Board %d... ", b);
 			ret = ConfigureFERS(handle[b], CFG_HARD);
 			if (ret < 0) {
 				Con_printf("LCSm", "Failed!!!\n");
 				Con_printf("LCSm", "%s", ErrorMsg);
 				goto ManageError;
 			}
-			else Con_printf("LCSm", "Done.\n");
 		}
+		Con_printf("LCSm", "Done.\n");
 	}
 	SkipConfig = 0;
 
@@ -1206,14 +1212,14 @@ Restart:  // when config file changes or a new run of the job is scheduled, the 
 		Stats.current_time = curr_time;
 
 		nb = 0;
-		if (((curr_time - temp_time) > 1000) || (fpga_temp[0] == 0)) {
+		if (((curr_time - temp_time) > 1000) || (fpga_temp[0] == 0)) { // FBER: fpga_temp[0] ? not for all boards?
 			for (b = 0; b < WDcfg.NumBrd; b++) {
 				char wmsg[200];
 				sprintf(wmsg, "WARNING: In board %d: FPGA is OVERHEATING (Temp > 85 degC). Please provide suitable ventilation to prevent from permanent damages", b);
 				if (sEvt[b].update_time > (curr_time - 2000)) {
 					fpga_temp[b] = sEvt[b].tempFPGA;
 					temp_time = curr_time;
-				} else if (((curr_time - temp_time) > 10000) || (fpga_temp[0] == 0)) { // read every 10 seconds from register if not available from service events
+				} else if (((curr_time - temp_time) > 10000) || (fpga_temp[b] == 0)) { // read every 10 seconds from register if not available from service events
 					FERS_Get_FPGA_Temp(handle[b], &fpga_temp[b]);
 					temp_time = curr_time;
 				}
@@ -1234,16 +1240,23 @@ Restart:  // when config file changes or a new run of the job is scheduled, the 
 				if (!SockConsole) clrscr = 1;
 				rdymsg = 1;
 				if (WDcfg.EnLiveParamChange == 0 && AcqStatus == ACQSTATUS_RUNNING) {	
+					StopRun();
 					for (b = 0; b < WDcfg.NumBrd; b++) {
-						StopRun();
 						ConfigureFERS(handle[b], CFG_SOFT);	
 						FERS_FlushData(handle[b]);
-						StartRun();
 					}
+					StartRun();
 				} else {
+					Con_printf("LCSm", "Configuring Boards ... ");
 					for (b = 0; b < WDcfg.NumBrd; b++) {
-						ConfigureFERS(handle[b], CFG_SOFT);
+						ret = ConfigureFERS(handle[b], CFG_SOFT);
+						if (ret < 0) {
+							Con_printf("LCSm", "Failed!!!\n");
+							Con_printf("LCSm", "%s", ErrorMsg);
+							goto ManageError;
+						}
 					}
+					Con_printf("LCSm", "Done.\n");
 				}
 			} else if (upd == 2) {
 				int size;
@@ -1333,11 +1346,14 @@ Restart:  // when config file changes or a new run of the job is scheduled, the 
 				uint32_t Hmin = uint32_t(WDcfg.ToAHistoMin/0.5);
 				ListEvent_t* Ev = (ListEvent_t*)Event;
 				for (i = 0; i < Ev->nhits; i++) {
+					uint32_t ToAbin = Ev->tstamp[i];
+					uint16_t ToTbin = Ev->ToT[i];
 					if (WDcfg.ToAHistoNbin == 0) break;
 					ch = Ev->channel[i];
-					uint32_t ToAbin = Ev->tstamp[i];
 					ToAbin = (uint32_t)((ToAbin - Hmin) / WDcfg.ToARebin); // Shift and Rebin ToA histogram
-					uint16_t ToTbin = Ev->ToT[i];
+					if (WDcfg.AcquisitionMode == ACQMODE_TIMING_CSTOP) {
+						ToAbin = WDcfg.TrefWindow - ToAbin;
+					} 
 					Stats.HitCnt[b][ch].cnt++;
 					if (ToAbin > 0) Histo1D_AddCount(&Stats.H1_ToA[b][ch], ToAbin);
 					if (ToTbin > 0) Histo1D_AddCount(&Stats.H1_ToT[b][ch], ToTbin);
@@ -1399,7 +1415,7 @@ Restart:  // when config file changes or a new run of the job is scheduled, the 
 		// ---------------------------------------------------
 		// print stats to console
 		// ---------------------------------------------------
-		if ((((curr_time - print_time) > 1000) && (!Freeze || OneShot)) || PresetReached) {
+		if ((((curr_time - print_time) > 1000) && (!Freeze || OneShot)) || PresetReached){
 			char rinfo[100] = "", ror[20], totror[20], trr[20], ss2gui[1024] = "", ss[MAX_NCH][10], torr[100];
 			//double lostp[MAX_NBRD], BldPerc[MAX_NBRD];			
 			float rtime, tp;

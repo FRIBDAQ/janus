@@ -557,8 +557,13 @@ int SaveList(int brd, double ts, uint64_t trgid, void *generic_ev, int dtq)
 				evg = 0;
 				fprintf(of_list_a, "   %02d  %02d ", brd, ev->channel[i]);
 				if (ev->tstamp[i] > 0) {
-					if (WDcfg.OutFileUnit) fprintf(of_list_a, "%8.1f ", 0.5 * ev->tstamp[i]);
-					else fprintf(of_list_a, "%8d ", ev->tstamp[i]);
+					if (WDcfg.AcquisitionMode == ACQMODE_TIMING_CSTART) {
+						if (WDcfg.OutFileUnit) fprintf(of_list_a, "%8.1f ", 0.5 * ev->tstamp[i]);
+						else fprintf(of_list_a, "%8d ", ev->tstamp[i]);
+					} else if (WDcfg.AcquisitionMode == ACQMODE_TIMING_CSTOP) {
+						if (WDcfg.OutFileUnit) fprintf(of_list_a, "%8.1f ", (WDcfg.TrefWindow - 0.5 * ev->tstamp[i]));
+						else fprintf(of_list_a, "%8d ", (uint32_t)(WDcfg.TrefWindow / (float)CLK_PERIOD) - ev->tstamp[i]);
+					}
 				}
 				else fprintf(of_list_a, "       - ");
 				if (WDcfg.EnableToT && (ev->ToT[i] > 0)) {

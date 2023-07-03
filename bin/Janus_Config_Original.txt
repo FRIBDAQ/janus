@@ -51,6 +51,7 @@ OF_RingBuffer                      0                   # Data routed to a RingBu
 SourceID                           0                   # Source ID in FRIBDAQ stack (FRIB)
 RingBufferName                     janus               # RingBuffer Name (FRIB)
 RunTitle                           ""                  # Run title for RingStateChangeItem (FRIB)
+UseBarrier                         1                   # Use barrier for RingStateChangeItem (FRIB)
 
 # ------------------------------------------------------------------------------------------
 # AcqMode
@@ -66,6 +67,7 @@ PairedCnt_CoincWin                 8 ns                # Coincidence window for 
 TrgIdMode                          TRIGGER_CNT         # Trigger ID mode: TRIGGER_CNT counts all triggers arrived to the board (accepted or not); VALIDATION_CNT counts validation signals (with or without associated trigger). Options: TRIGGER_CNT, VALIDATION_CNT
 CountingMode                       SINGLES             # SINGLES: each channel counts its own self trigger. PAIRED_AND: couples of channels count in coincidence
 PairedCnt_CoincWin                 8 ns                # Coincidence window for Paired_And counting mode. Min = 8 ns, Max = 2032 ns, Step = 8 ns
+EnableCntZeroSuppr                 1                    # Enable the suppression of channels with 0 counts in COUNTING mode.
 TriggerLogic                       OR64                # Trigger Logic (Combinatorial network with 64 self trigger inputs). Options: OR64, AND2_OR32, OR32_AND2, MAJ64, MAJ32_AND2
 MajorityLevel                      3                   # Majority Level (1 to 64)
 PtrgPeriod                         1 ms                # Period of the internal periodic trigger

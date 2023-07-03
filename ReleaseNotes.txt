@@ -5,36 +5,76 @@
 *************************************************************************************************************************
 
 -------------------------------------------------------------------------------------------------------------------------
-Release 1.1.0  
+Release 3.1.0 - 06/04/2023
 -------------------------------------------------------------------------------------------------------------------------
-First Release
+- Bug fix in FERS_readout in chain and node reading
+- Implemented Common Start/Stop function for Timinig Mode
+- Bug fix: over current/voltage flags are assinged correctly
+- Updated the optical link communication protocol with DT5215 (FERS concentrator)
+- Bug fix on HV switching off when Janus quit after a connection error
+- Improved Load Macro pop-up view
 
 -------------------------------------------------------------------------------------------------------------------------
-Release 1.1.4 - 20/04/21
+Release 3.0.3 - 03/10/2022
 -------------------------------------------------------------------------------------------------------------------------
-- Added temperature sensor readout and Vbias feedback
-- Added size and channel mask in binary output files
-- Added some controls in parameters editing (preventing wrong insertion)
+- Bug fix in FWupgrader for Linux using ethernet connection
 
 -------------------------------------------------------------------------------------------------------------------------
-Release 1.1.5 - 26/04/21
+Release 3.0.2 - 05/08/22
 -------------------------------------------------------------------------------------------------------------------------
-- Bug fix in zero suppression settings
+- First Release for Linux (tested on Ubuntu)
+- Bug fix: readout error (data corruption) after stop and restart
+- Restored live params change (config update while running)
+- Finalization of the readout through DT5215 (FERS concentrator)
+- Bug Fix on ActiveBrd updating in RunVars
+- JanusC process self ends when the GUI communication cannot be recovered, turning HV off
+- Bug Fix: on the GUI check if a Macro or Cfg file exists before reading it
+- Added the possibility to suppress zero counting channels in list output file for counting mode
+- Bug Fix on closing GUI when JanusC is still connected
+NOTE: The following changes require FW Major Rev. >= 4
+- Access to HV monitor through registers instead of I2C cycles 
+- Shut-down of uC when running with TDL for power/heat saving 
+- Implementation of Service Events, that is HV monitor and trigger counters passed with data 
+- Bug Fix on the send HV info to GUI when HV tab was not selected
 
 -------------------------------------------------------------------------------------------------------------------------
-Release 1.2.0 - 06/05/21
+Release 2.2.10 - 15/04/22
 -------------------------------------------------------------------------------------------------------------------------
-- Added management of trigger validation and veto
-- Added plot of histograms read from file (typically for comparing runs)
-- Changed binary output files
-- Improved controls on GUI settings to prevent mistakes
+- Bug fix on the checkbox of the tab connect when JanusPy is launched
+- Bug fix in Run_Info: if jobs are enabled the config file for the run is reported, when present
+- Improved the managing of the jobs, preventing conditions that generate an automatic starts of the run
+- Added button 'Reset Job', to reset the jobrun
+- Added Readme file
 
 -------------------------------------------------------------------------------------------------------------------------
-Release 2.0.0 - 28/06/21
+Release 2.2.9 - 8/03/22
 -------------------------------------------------------------------------------------------------------------------------
-- Support for Linux (ethernet only, USB driver still missing)
-- First implementation of the TDlink (partially tested)
-- Readout of FPGA temperature
+- Added option to enable/disable ToT in timing measurements (when disabled, the ToA has a dynamic range of 25 bits instead of 16)
+- Added options to rebin the ToA histogram and select the minimum value (in ns) of ToA histogram 
+- Bug fix: RunInfo file is closed when the run stops
+- Added option for saving in the list_files the ToA and ToT as float ('ns') or int ('LSB') in "RunCtrl" tabs, through the param "OF_OutFileUnit"
+- Data format version 3.1: fixed the event size in timing mode. Added the EnHistoNbin, time unit, time LSB value in the Header file list. ToA and ToT can be float or int
+- Macro BinToCsv updated to the data format 3.1
+- Bug fix: list Ascii saving restored
+
+-------------------------------------------------------------------------------------------------------------------------
+Release 2.2.8 - 11/02/22
+-------------------------------------------------------------------------------------------------------------------------
+- Bug fix in staircase
+- Added menu option (under "FWupgrade") for restoring IP address to default (192.168.50.3)
+- Bug fix: data readout stops when a parameter changes while running. Forced automatic restart of acquisition in background
+- Added display of readout rate in the status bar while running
+- Disabled by default the readout of channel trg counters. Need to be enabled with the param "EnableCntRead", but may cause instability in the readout
+- Bug fix in Scan Hold-Delay
+- Bug fix in output file list (wrong channel number)
+
+-------------------------------------------------------------------------------------------------------------------------
+Release 2.2.5 - 22/12/21
+-------------------------------------------------------------------------------------------------------------------------
+- Bug fix: set the statistics visualization selected when GUI connects to JanusC
+- Bug fix: solved JanusC crash on eth (tdl) connection when no data are read
+- Bug fix: solved issues on Staricase and ScanHold 
+- Statistics display modified
 
 -------------------------------------------------------------------------------------------------------------------------
 Release 2.2.3 - 15/11/21
@@ -62,63 +102,33 @@ Release 2.2.3 - 15/11/21
 - Bug fix: usb connection in linux works, a rule for usb privilege should be create. It is done automatically by running Janus_Install.sh as root
 
 -------------------------------------------------------------------------------------------------------------------------
-Release 2.2.5 - 22/12/21
+Release 2.0.0 - 28/06/21
 -------------------------------------------------------------------------------------------------------------------------
-- Bug fix: set the statistics visualization selected when GUI connects to JanusC
-- Bug fix: solved JanusC crash on eth (tdl) connection when no data are read
-- Bug fix: solved issues on Staricase and ScanHold 
-- Statistics display modified
+- Support for Linux (ethernet only, USB driver still missing)
+- First implementation of the TDlink (partially tested)
+- Readout of FPGA temperature
 
 -------------------------------------------------------------------------------------------------------------------------
-Release 2.2.8 - 11/02/22
+Release 1.2.0 - 06/05/21
 -------------------------------------------------------------------------------------------------------------------------
-- Bug fix in staircase
-- Added menu option (under "FWupgrade") for restoring IP address to default (192.168.50.3)
-- Bug fix: data readout stops when a parameter changes while running. Forced automatic restart of acquisition in background
-- Added display of readout rate in the status bar while running
-- Disabled by default the readout of channel trg counters. Need to be enabled with the param "EnableCntRead", but may cause instability in the readout
-- Bug fix in Scan Hold-Delay
-- Bug fix in output file list (wrong channel number)
+- Added management of trigger validation and veto
+- Added plot of histograms read from file (typically for comparing runs)
+- Changed binary output files
+- Improved controls on GUI settings to prevent mistakes
 
 -------------------------------------------------------------------------------------------------------------------------
-Release 2.2.9 - 8/03/22
+Release 1.1.5 - 26/04/21
 -------------------------------------------------------------------------------------------------------------------------
-- Added option to enable/disable ToT in timing measurements (when disabled, the ToA has a dynamic range of 25 bits instead of 16)
-- Added options to rebin the ToA histogram and select the minimum value (in ns) of ToA histogram 
-- Bug fix: RunInfo file is closed when the run stops
-- Added option for saving in the list_files the ToA and ToT as float ('ns') or int ('LSB') in "RunCtrl" tabs, through the param "OF_OutFileUnit"
-- Data format version 3.1: fixed the event size in timing mode. Added the EnHistoNbin, time unit, time LSB value in the Header file list. ToA and ToT can be float or int
-- Macro BinToCsv updated to the data format 3.1
-- Bug fix: list Ascii saving restored
+- Bug fix in zero suppression settings
 
 -------------------------------------------------------------------------------------------------------------------------
-Release 2.2.10 - 15/04/22
+Release 1.1.4 - 20/04/21
 -------------------------------------------------------------------------------------------------------------------------
-- Bug fix on the checkbox of the tab connect when JanusPy is launched
-- Bug fix in Run_Info: if jobs are enabled the config file for the run is reported, when present
-- Improved the managing of the jobs, preventing conditions that generate an automatic starts of the run
-- Added button 'Reset Job', to reset the jobrun
-- Added Readme file
+- Added temperature sensor readout and Vbias feedback
+- Added size and channel mask in binary output files
+- Added some controls in parameters editing (preventing wrong insertion)
 
 -------------------------------------------------------------------------------------------------------------------------
-Release 3.0.2 - 05/08/22
+Release 1.1.0  
 -------------------------------------------------------------------------------------------------------------------------
-- First Release for Linux (tested on Ubuntu)
-- Bug fix: readout error (data corruption) after stop and restart
-- Restored live params change (config update while running)
-- Finalization of the readout through DT5215 (FERS concentrator)
-- Bug Fix on ActiveBrd updating in RunVars
-- JanusC process self ends when the GUI communication cannot be recovered, turning HV off
-- Bug Fix: on the GUI check if a Macro or Cfg file exists before reading it
-- Added the possibility to suppress zero counting channels in list output file for counting mode
-- Bug Fix on closing GUI when JanusC is still connected
-NOTE: The following changes require FW Major Rev. >= 4
-- Access to HV monitor through registers instead of I2C cycles 
-- Shut-down of uC when running with TDL for power/heat saving 
-- Implementation of Service Events, that is HV monitor and trigger counters passed with data 
-- Bug Fix on the send HV info to GUI when HV tab was not selected
-
--------------------------------------------------------------------------------------------------------------------------
-Release 3.0.3 - 03/10/2022
--------------------------------------------------------------------------------------------------------------------------
-- Bug fix in FWupgrader for Linux using ethernet connection
+- First Release

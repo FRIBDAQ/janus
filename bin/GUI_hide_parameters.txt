@@ -17,6 +17,7 @@ Validation Source		b2345
 Validation Mode			b2345
 Counting Mode			b1235
 Paired-Cnt Coinc Win	b01235
+Enable counts ZS		b01235
 
 Enable ToT				b045
 TrefDelay				045
