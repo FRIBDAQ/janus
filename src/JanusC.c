@@ -53,6 +53,7 @@ FILE* MsgLog = NULL;			// message log output file
 
 int jobrun = 0;
 uint8_t stop_sw = 0; // Used to disable automatic start during jobs
+uint8_t EnableTempMon = 0; // Test: enable temperature monitoring when ACQ is in STOP
 
 int ServerDead = 0;
 
@@ -67,7 +68,7 @@ int LoadRunVariables(RunVars_t* RunVars)
 	FILE* ps = fopen(RUNVARS_FILENAME, "r");
 	//char plot_name[50];	// name of histofile.
 	int mline = 0;
-	
+
 	// set defaults
 	RunVars->PlotType = PLOT_E_SPEC_HG;
 	RunVars->SMonType = SMON_CHTRG_RATE;
@@ -426,6 +427,8 @@ int StartRun() {
 	if (AcqStatus != ACQSTATUS_RESTARTING) Con_printf("LCSm", "Run #%d started\n", RunVars.RunNumber);
 	AcqStatus = ACQSTATUS_RUNNING;
 
+	WriteListfileHeader(); // Write the file header for ASCII or Binary
+
 	stop_sw = 0; // Set at 0, used to prevent automatic start during jobs after a sw stop
 
 	return ret;
@@ -438,14 +441,14 @@ int StopRun() {
 	ret = FERS_StopAcquisition(handle, WDcfg.NumBrd, WDcfg.StartRunMode);
 	if (Stats.stop_time == 0) Stats.stop_time = get_time();
 	SaveHistos();
-	if (WDcfg.OutFileEnableMask & OUTFILE_RUN_INFO) SaveRunInfo();
+	if ((WDcfg.OutFileEnableMask & OUTFILE_RUN_INFO) && AcqStatus != ACQSTATUS_READY) SaveRunInfo();
 	CloseOutputFiles();
 	if (AcqStatus == ACQSTATUS_RUNNING) {
 		Con_printf("LCSm", "Run #%d stopped. Elapsed Time = %.2f\n", RunVars.RunNumber, (float)(Stats.stop_time - Stats.start_time) / 1000);
 		if ((WDcfg.RunNumber_AutoIncr) && (!WDcfg.EnableJobs)) {  //
 			++RunVars.RunNumber; 
 			SaveRunVariables(RunVars);
-		}		
+		}
 		AcqStatus = ACQSTATUS_READY;
 	}
 
@@ -474,8 +477,11 @@ int CheckFileUpdate() {
 			(WDcfg_1.JobFirstRun != WDcfg.JobFirstRun) ||
 			(WDcfg_1.JobLastRun != WDcfg.JobLastRun))		ret = 3;
 		else if ((WDcfg_1.AcquisitionMode != WDcfg.AcquisitionMode) ||
-			(WDcfg_1.OutFileEnableMask != WDcfg.OutFileEnableMask) ||
-			(WDcfg_1.ToAHistoNbin != WDcfg.ToAHistoNbin) ||
+			(WDcfg_1.OutFileEnableMask != WDcfg.OutFileEnableMask)	||
+			(WDcfg_1.ToAHistoMin != WDcfg.ToAHistoMin)				||
+			(WDcfg_1.ToARebin != WDcfg.ToARebin)					||
+			(WDcfg_1.ToAHistoNbin != WDcfg.ToAHistoNbin)			||
+			(WDcfg_1.MCSHistoNbin != WDcfg.MCSHistoNbin)			||
 			(WDcfg_1.EHistoNbin != WDcfg.EHistoNbin))		ret = 2;
 		else												ret = 1;
 	}
@@ -528,6 +534,7 @@ int RunTimeCmd(int c)
 			FERS_SendCommand(handle[b], CMD_TRG);	// SW trg
 	}
 	if ((c == 's') && (AcqStatus == ACQSTATUS_READY)) {
+		EnableTempMon = 0;
 		ResetStatistics();
 		StartRun();
 	}
@@ -600,6 +607,7 @@ int RunTimeCmd(int c)
 	if ((c == 'M') && !SockConsole)
 		CitirocControlPanel(handle[RunVars.ActiveBrd]);
 	if (c == 'r') {
+		SaveRunVariables(RunVars);
 		AcqStatus = ACQSTATUS_RESTARTING;
 		SkipConfig = 1;
 		RestartAcq = 1;
@@ -610,7 +618,7 @@ int RunTimeCmd(int c)
 			jobrun = WDcfg.JobFirstRun;
 			RunVars.RunNumber = jobrun;
 			SaveRunVariables(RunVars);
-			return 100; // To letthe main loop know that 'j' was pressed.
+			return 100; // To let the main loop know that 'j' was pressed.
 		}
 	}
 	if ((c == 'R') && (SockConsole)) {
@@ -761,9 +769,10 @@ int RunTimeCmd(int c)
 	if (c == 'p') {
 		char str[6][10] = { "OFF", "Fast", "Slow LG", "Slow HG", "Preamp LG", "Preamp HG" };
 		if (!SockConsole) printf("0=OFF, 1=Fast, 2=SlowLG, 3=SlowHG, 4=PreampLG, 5=PreampHG\n");
-		WDcfg.AnalogProbe = Con_getch() - '0';
-		if ((WDcfg.AnalogProbe < 0) || (WDcfg.AnalogProbe > 5)) WDcfg.AnalogProbe = 0;
-		Con_printf("CSm", "Citiroc Probe = %s\n", str[WDcfg.AnalogProbe]);
+		WDcfg.AnalogProbe[0] = Con_getch() - '0';
+		if ((WDcfg.AnalogProbe[0] < 0) || (WDcfg.AnalogProbe[0] > 5)) WDcfg.AnalogProbe[0] = 0;
+		Con_printf("CSm", "Citiroc Probe = %s\n", str[WDcfg.AnalogProbe[0]]);
+		WDcfg.AnalogProbe[1] = WDcfg.AnalogProbe[0];
 		for (int b = 0; b < WDcfg.NumBrd; b++)
 			ConfigureProbe(handle[b]);
 	}
@@ -810,6 +819,14 @@ int RunTimeCmd(int c)
 		//if (!SockConsole) printf("Insert the firmware filename: ");
 		Con_GetString(fname, 500);
 		fname[strcspn(fname, "\n")] = 0; // In console mode GetString append \n at the end
+
+		//if ((handle[brd] & 0xF0000) == 0x20000 || (handle[brd] & 0xF0000) == 0x80000) {	// Cannot use the macro
+		//	AcqStatus = as;
+		//	Sleep(1);
+		//	Con_printf("LCSu", "WARNING: FERS Firwmare cannot be upgraded via TDLink\n");
+		//	return 0;
+		//}
+
 		fp = fopen(fname, "rb");
 		if (!fp) {
 			SendAcqStatusMsg("Failed to open file %s\n", fname);
@@ -841,8 +858,9 @@ int RunTimeCmd(int c)
 			else {
 				Con_printf("CSw", "Failed to reset IP address\n");
 			}
+		} else {
+			Con_printf("LCSm", "The IP address can be restored via USB connection only\n");
 		}
-
 	}
 	if (c == '\t') {
 		if (!SockConsole)
@@ -861,7 +879,10 @@ int RunTimeCmd(int c)
 
 	if (c == '#') PrintMap();
 
-	if (c == 'T') {
+	if (c == 'T') EnableTempMon ^= 1;
+
+
+	if (c == 'L') {
 		memset(WDcfg.RunTitle, 0, 81);
 		printf("\nEnter title for this run (Max. 80 characters, type \"empty\" for blank title):\n");
 		scanf("%80[^\n]s", WDcfg.RunTitle);
@@ -884,30 +905,31 @@ int RunTimeCmd(int c)
 
 	if ((c == ' ') && !SockConsole) {
 		printf("[q] Quit\n");
-		printf("[m] Register Manual Controller\n");
-		printf("[M] Citiroc Controller\n");
-		printf("[h] HV Controller\n");
 		printf("[s] Start\n");
 		printf("[S] Stop\n");
 		printf("[t] SW trigger\n");
-		printf("[c] Change channel\n");
-		printf("[b] Change board\n");
-		printf("[x] Enable/Disable X calibration\n");
-		printf("[p] Set Citiroc probe\n");
 		printf("[C] Set Stats Monitor Type\n");
 		printf("[P] Set Plot Mode\n");
+		printf("[x] Enable/Disable X calibration\n");
+		printf("[c] Change channel\n");
+		printf("[b] Change board\n");
 		printf("[f] Freeze plot\n");
 		printf("[o] One shot plot\n");
-		//printf("[w] Set waveform probe\n");
-		printf("[y] Scan Thresholds\n");
-		printf("[Y] Hold Delay scan\n");
-		printf("[D] Run Pedestal Calibration\n");
-		printf("[U] Upgrade firmware\n");
 		printf("[r] Reset histograms\n");
 		printf("[j] Reset jobs (when enabled)\n");
+		printf("[y] Scan Thresholds\n");
+		printf("[D] Run Pedestal Calibration\n");
+		printf("[Y] Hold Delay scan\n");
+		printf("[h] HV Controller\n");
+		printf("[M] Citiroc Controller\n");
+		printf("[p] Set Citiroc probe\n");
+		printf("[m] Register Manual Controller\n");
+		//printf("[w] Set waveform probe\n");
+		printf("[U] Upgrade firmware\n");
 		printf("[!] Reset IP address\n");
 		printf("[#] Print Pixel Map\n");
-		printf("[T] Set title for RingStateChangeItem (FRIB)\n");
+        printf("[T] Print FPGA temp\n");
+		printf("[L] Set title for RingStateChangeItem (FRIB)\n");
 		printf("[R] Set run number\n");
 		c = Con_getch();
 		RunTimeCmd(c);
@@ -927,9 +949,39 @@ int RunTimeCmd(int c)
 	return 0;
 }
 
-void report_firmware_notfound(int b) {
-	sprintf(ErrorMsg, "The firmware of the FPGA in board %d cannot be loaded.\nPlease, try to re-load the firmware, running on shell the command\n'./%s -u %s firmware_filename.ffu'\n", b, EXE_NAME, WDcfg.ConnPath[b]);
+int report_firmware_notfound(int b, int as) {
+	int c;
+	// sprintf(ErrorMsg, "The firmware of the FPGA in board %d cannot be loaded.\nPlease, try to re-load the firmware running on shell the command\n'./%s -u %s firmware_filename.ffu'\n", b, EXE_NAME, WDcfg.ConnPath[b]);
+	Con_printf("LCSF", "Cannot read board info for board %d. Do you want to reload the FPGA ffu firmware? [y][n]\n", b);
+	c = Con_getch();
+	if (c == 'y') {
+		AcqStatus = ACQSTATUS_UPGRADING_FW;
+		// Get file and call FERSFWUpgrade
+		if (!SockConsole) {
+			Con_printf("LCSm", "Please, insert the path of the ffu firmware you want to load (i.e: Firmware\\a5203.ffu:\n");
+			AcqStatus = ACQSTATUS_UPGRADING_FW;
+		}
+		char fname[500] = "";
+		if (SockConsole) c = Con_getch();
+		Con_GetString(fname, 500);
+		fname[strcspn(fname, "\n")] = 0; // In console mode GetString append \n at the end
+
+		FILE* fp = fopen(fname, "rb");
+		if (!fp) {
+			Con_printf("CSm", "Failed to open file %s\n", fname);
+			return -1;
+		}
+		int ret = FERS_FirmwareUpgrade(handle[b], fp, reportProgress);
+		if (ret == 0)
+			if (!SockConsole) Con_printf("LCSm", "Firmware upgraed completed, press any keys to quit\n");
+		c = Con_getch();
+		AcqStatus = as;
+		return ret;
+	} else
+		return -2;
+
 }
+
 
 
 
@@ -1058,7 +1110,7 @@ ReadCfg:
 				if (!FERS_TDLchainsInitialized(cnc_handle[cnc])) {
 					Con_printf("LCSm", "Initializing TDL chains. This will take a few seconds...\n", cpath);
 					if (SockConsole) SendAcqStatusMsg("Initializing TDL chains. This may take a few seconds...");
-					ret = FERS_InitTDLchains(cnc_handle[cnc]);
+					ret = FERS_InitTDLchains(cnc_handle[cnc], WDcfg.FiberDelayAdjust[cnc]);
 					if (ret != 0) {
 						sprintf(ErrorMsg, "Failure in TDL chain init\n");
 						goto ManageError;
@@ -1069,6 +1121,10 @@ ReadCfg:
 					Con_printf("LCSm", "FPGA FW revision = %s\n", CncInfo.FPGA_FWrev);
 					Con_printf("LCSm", "SW revision = %s\n", CncInfo.SW_rev);
 					Con_printf("LCSm", "PID = %d\n", CncInfo.pid);
+					if (CncInfo.ChainInfo[0].BoardCount == 0) { 	// Rising error if no board is connected to link 0
+						sprintf(ErrorMsg, "No board connected to link 0\n");
+						goto ManageError;
+					}
 					for (i = 0; i < 8; i++) {
 						if (CncInfo.ChainInfo[i].BoardCount > 0)
 							Con_printf("LCSm", "Found %d board(s) connected to TDlink n. %d\n", CncInfo.ChainInfo[i].BoardCount, i);
@@ -1085,8 +1141,8 @@ ReadCfg:
 		ret = FERS_OpenDevice(WDcfg.ConnPath[b], &handle[b]);
 		if (ret == 0) {
 			Con_printf("LCSm", "Connected to %s\n", WDcfg.ConnPath[b]);
-			int bootL;
-			uint32_t ver, rel;
+			//int bootL;
+			//uint32_t ver, rel;
 			//FERS_CheckBootloaderVersion(handle[b], &bootL, &ver, &rel);
 			//if (bootL) {
 			//	report_firmware_notfound(b);
@@ -1116,8 +1172,12 @@ ReadCfg:
 			}
 		} else {
 			sprintf(ErrorMsg, "Can't read board info\n");
-			//report_firmware_notfound(b);
-			goto ManageError;
+			int ret_rep = report_firmware_notfound(b, AcqStatus);
+			if (ret_rep == 0) {
+				Quit = 1;
+				goto ExitPoint;
+			} else
+				goto ManageError;
 		}
 	}
 	if ((WDcfg.NumBrd > 1) || (cnc > 0))  Con_printf("LCSm", "\n");
@@ -1213,6 +1273,7 @@ Restart:  // when config file changes or a new run of the job is scheduled, the 
 
 		nb = 0;
 		if (((curr_time - temp_time) > 1000) || (fpga_temp[0] == 0)) { // FBER: fpga_temp[0] ? not for all boards?
+			char temp_mon[1024];
 			for (b = 0; b < WDcfg.NumBrd; b++) {
 				char wmsg[200];
 				sprintf(wmsg, "WARNING: In board %d: FPGA is OVERHEATING (Temp > 85 degC). Please provide suitable ventilation to prevent from permanent damages", b);
@@ -1229,6 +1290,14 @@ Restart:  // when config file changes or a new run of the job is scheduled, the 
 					snd_fpga_warn ^= 1;
 				}
 			}
+			if (EnableTempMon) {
+				sprintf(temp_mon, "%d: %2.2f  ", 0, fpga_temp[0]);
+				for (b = 1; b < WDcfg.NumBrd; ++b) {
+					sprintf(temp_mon, "%s%d: %2.2f  ", temp_mon, b, fpga_temp[b]);
+				}
+				Con_printf("C", "\r%s", temp_mon);
+			}
+
 		}
 
 		// ---------------------------------------------------
@@ -1299,6 +1368,15 @@ Restart:  // when config file changes or a new run of the job is scheduled, the 
 				PresetReached = 1; // Preset counts reached; quit readout loop
 			}
 		}
+		if (AcqStatus == ACQSTATUS_EMPTYING) {
+			ret = FERS_GetEvent(handle, &b, &dtq, &tstamp_us, &Event, &nb);
+			if (nb > 0) curr_tstamp_us = tstamp_us;
+			else if (nb == 0) StopRun();
+			if (ret < 0) {
+				sprintf(ErrorMsg, "Readout failure (ret = %d)!\n", ret);
+				goto ManageError;
+			}
+		}
 		if ((nb > 0) && !PresetReached && !DisableDataAnalysys) {
 			NoData[b] = 0;
 			Stats.current_tstamp_us[b] = curr_tstamp_us;
@@ -1353,7 +1431,7 @@ Restart:  // when config file changes or a new run of the job is scheduled, the 
 					ToAbin = (uint32_t)((ToAbin - Hmin) / WDcfg.ToARebin); // Shift and Rebin ToA histogram
 					if (WDcfg.AcquisitionMode == ACQMODE_TIMING_CSTOP) {
 						ToAbin = WDcfg.TrefWindow - ToAbin;
-					} 
+					}
 					Stats.HitCnt[b][ch].cnt++;
 					if (ToAbin > 0) Histo1D_AddCount(&Stats.H1_ToA[b][ch], ToAbin);
 					if (ToTbin > 0) Histo1D_AddCount(&Stats.H1_ToT[b][ch], ToTbin);
@@ -1602,16 +1680,16 @@ Restart:  // when config file changes or a new run of the job is scheduled, the 
 ExitPoint:
 	if (RestartAll || Quit) {
 		StopRun();
-		if (RestartAll) {
-			for (b = 0; b < WDcfg.NumBrd; b++) {	// DNIN: configure the board after each run stop, to avoid block of the readout in the next run
-				int ret = ConfigureFERS(handle[b], CFG_HARD);
-				if (ret < 0) {
-					Con_printf("LCSm", "Configuration Boards Failed!!!\n");
-					Con_printf("LCSm", "%s", ErrorMsg);
-					return -1;
-				}
-			}
-		}
+		//if (RestartAll) {
+		//	for (b = 0; b < WDcfg.NumBrd; b++) {	// DNIN: configure the board after each run stop, to avoid block of the readout in the next run
+		//		int ret = ConfigureFERS(handle[b], CFG_HARD);
+		//		if (ret < 0) {
+		//			Con_printf("LCSm", "Configuration Boards Failed!!!\n");
+		//			Con_printf("LCSm", "%s", ErrorMsg);
+		//			return -1;
+		//		}
+		//	}
+		//}
 		if (Quit) CheckHVBeforeClosing(); // DNIN: This have to be done before closing the comm with Boards
 		for (b = 0; b < WDcfg.NumBrd; b++) {
 			if (handle[b] < 0) break;

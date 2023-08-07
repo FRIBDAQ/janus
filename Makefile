@@ -2,7 +2,7 @@ NSCLDAQ=$(DAQROOT)
 
 TARGET = JanusC
 CC = g++
-CFLAGS = -Wall -Wno-write-strings -std=c++11 -Dlinux -I/usr/opt/nscldaq/12.0-pre6/include
+CFLAGS = -Wall -Wno-write-strings -std=c++11 -Dlinux -I$(NSCLDAQ)/include
 LDFLAGS = -pthread -lrt -L$(NSCLDAQ)/lib -Wl,-rpath=$(NSCLDAQ)/lib -ldataformat -lDataFlow -lException
 INCLUDE = -I/usr/include/libusb-1.0
 LDADD = -lusb-1.0
@@ -30,7 +30,7 @@ $(SRCDIR)/%.o: $(SRCDIR)/%.cpp
 $(SRCDIR)/RingBufferHandler.o: $(SRCDIR)/RingBufferHandler.cpp
 	$(CC) $(CFLAGS) -std=c++11 -c $< -o $@ $(INCLUDE) $(LDFLAGS)
 
-	
+
 #OBJECT = $(OBJECT) FERS_LLusb.o
 	
 .PRECIOUS: $(TARGET) $(OBJECTS)
@@ -38,10 +38,19 @@ $(SRCDIR)/RingBufferHandler.o: $(SRCDIR)/RingBufferHandler.cpp
 $(TARGET): $(OBJECTS)
 	$(CC) $(OBJECTS) $(LDFLAGS) -o $(BINDIR)/$@ $(LDADD)
 	
-
 # BintoCsv make
-$(TARGETMACRO):
-	$(CC) -o $(BINDIR)/$@ $(CFLAGS) $(MACRODIR)/$(TARGETMACRO).cpp
+OBJMACRO = $(MACRODIR)/BinToCsv.o $(MACRODIR)/BinaryDataFERS.o $(MACRODIR)/BinaryData_5202.o $(MACRODIR)/BinaryData_5203.o
+
+$(MACRODIR)/%.o: $(MACRODIR)/%.cpp
+	$(CC) $(CFLAGS) -c $< -o $@
+
+.PRECIOUS: $(TARGETMACRO) $(OBJMACRO)
+
+$(TARGETMACRO):  $(OBJMACRO)
+	$(CC) $(OBJMACRO) -o $(BINDIR)/$@
+
+# $(TARGETMACRO):
+# 	$(CC) -o $(BINDIR)/$@ $(CFLAGS) $(MACRODIR)/$(TARGETMACRO).cpp
 
 cleanjanus:
 	-rm -f $(SRCDIR)/*.o

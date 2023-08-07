@@ -56,17 +56,9 @@
 	#endif
 #endif
 
-
-#ifndef max
-#define max(a,b) ((a) > (b) ? (a) : (b))
-#endif
-#ifndef min 
-#define min(a,b) ((a) < (b) ? (a) : (b))
-#endif
-
-#define SW_RELEASE_NUM			"3.1.0"
-#define SW_RELEASE_DATE			"06/04/2023"
-#define FILE_LIST_VER			"3.1"
+#define SW_RELEASE_NUM			"3.2.3"
+#define SW_RELEASE_DATE			"04/08/2023"
+#define FILE_LIST_VER			"3.2"
 
 #ifdef _WIN32
 #define CONFIG_FILENAME			"Janus_Config.txt"
@@ -102,7 +94,7 @@
 #define OUTFILE_MCS_HISTO				0x0200
 #define OUTFILE_SYNC					0x0400
 #define OUTFILE_RAW_DATA_RINGBUFFER		0x8000 // Genie: In case Caen adds something after the last one
- 
+
 #define PLOT_E_SPEC_LG					0
 #define PLOT_E_SPEC_HG					1
 #define PLOT_TOA_SPEC					2
@@ -156,6 +148,7 @@
 #define ACQSTATUS_READY					3	// ready to start (HW connected, memory allocated and initialized)
 #define ACQSTATUS_RUNNING				4	// acquisition running (data taking)
 #define ACQSTATUS_RESTARTING			5	// Restarting acquisition
+#define ACQSTATUS_EMPTYING				6	// Acquiring data still in the boards buffers after the software stop
 #define ACQSTATUS_STAIRCASE				10	// Running Staircase
 #define ACQSTATUS_RAMPING_HV			11	// Switching HV ON or OFF
 #define ACQSTATUS_UPGRADING_FW			12	// Upgrading the FW
@@ -219,8 +212,8 @@ typedef struct Config_t {
 	uint32_t SupprZeroCntListFile;		    			// 
 	uint32_t TriggerMask;							// Bunch Trigger mask
 	uint32_t TriggerLogic;							// Trigger Logic Definition
-	uint32_t T0_outMask;							// T0-OUT mask
-	uint32_t T1_outMask;							// T1-OUT mask
+	uint32_t T0_outMask[MAX_NBRD];					// T0-OUT mask
+	uint32_t T1_outMask[MAX_NBRD];					// T1-OUT mask
 	uint32_t Tref_Mask;								// Tref mask
 	uint32_t Veto_Mask;								// Veto mask
 	uint32_t Validation_Mask;						// Validation mask
@@ -237,9 +230,9 @@ typedef struct Config_t {
 	uint32_t TestPulseAmplitude;					// DAC setting for the internal test pulser (12 bit). Meaningless for TestPulseSource=EXT 
 	uint32_t WaveformLength;						// Num of samples in the waveform
 	uint32_t WaveformSource;						// LG0, HG0, LG1, HG1 (High/Low Gain, chip 0/1)
-	uint32_t AnalogProbe;							// Analog probe in Citiroc (Preamp LG/HG, Slow Shaper HG/LG, Fast Shaper)
-	uint32_t DigitalProbe;							// Citiroc digital probe (peak Sens HG/LG) or other FPGA signal (start_conv, data_commit...)
-	uint32_t ProbeChannel;							// Probing channel
+	uint32_t AnalogProbe[2];						// Analog probe in Citiroc (Preamp LG/HG, Slow Shaper HG/LG, Fast Shaper)
+	uint32_t DigitalProbe[2];						// Citiroc digital probe (peak Sens HG/LG) or other FPGA signal (start_conv, data_commit...)
+	uint32_t ProbeChannel[2];						// Probing channel
 	uint32_t Range_14bit;							// Use full 14 bit range for the A/D conversion
 	uint32_t TrgIdMode;								// Trigger ID: 0 = trigger counter, 1 = validation counter
 
@@ -266,6 +259,8 @@ typedef struct Config_t {
 	uint32_t FastShaperInput;						// Fast Shaper (Tdiscr) connection: 0 = High Gain PA, 1 = Low Gain PA
 	uint32_t Trg_HoldOff;							// Trigger hold off (applied to channel triggers)
 
+	float FiberDelayAdjust[MAX_NCNC][8][16];		// Fiber length (in meters) for individual tuning of the propagation delay along the TDL daisy chains
+
 	float HV_Vbias[MAX_NBRD];						// Voltage setting for HV
 	float HV_Imax[MAX_NBRD];						// Imax for HV
 	float TempSensCoeff[3];							// Temperature Sensor Coefficients (2=quad, 1=lin, 0=offset)
@@ -287,7 +282,7 @@ typedef struct Config_t {
     uint32_t GWaddr[MAX_GW];					// Register Address
     uint32_t GWdata[MAX_GW];					// Data to write
     uint32_t GWmask[MAX_GW];					// Bit Mask
-	
+
 } Config_t;
 
 

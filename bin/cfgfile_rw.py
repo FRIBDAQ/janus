@@ -54,6 +54,7 @@ def ReadParamDescription(filename, sections, params):
 	pardef = open(filename, "r")
 	blankn = 1
 	lastp = ""
+	version = "5202"
 	for line in pardef:
 		if '\"' in line:  # find strings enclosed in "" (don't split them)
 			p = []
@@ -70,6 +71,8 @@ def ReadParamDescription(filename, sections, params):
 		if p[0].upper() == 'VERS':
 			vers = int(p[1])
 			continue
+		if p[0] == "Board_version":
+			version = p[1]
 		if p[0][0] == '[':
 			sections.append(p[0][1:-1])
 		elif p[0][0] == '-':
@@ -82,6 +85,7 @@ def ReadParamDescription(filename, sections, params):
 			params[p[0]].add_description(line[line.find('#'):][1:].strip())
 			lastp = p[0]
 	pardef.close()
+	return version
 	
 
 
@@ -293,6 +297,8 @@ def WriteConfigFile(sections, params, filename, show_popup): # DNIN: need to pas
 					for opt in params[p].options: 
 						ff.write(opt)
 						if (opt != params[p].options[-1]): ff.write(', ')
+				if params[p].type == 'x':
+					ff.write('. Min={}, Max={}'.format(params[p].options[0], params[p].options[1]))
 				ff.write("\n")
 		ff.write("\n")
 	ff.write("\n\n")

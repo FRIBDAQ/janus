@@ -49,6 +49,7 @@ class TabsPanel():
 		self.par_def_entry = {}			# Entry
 		self.par_def_checkbox = {}		# check box
 		self.par_def_combo = {}			# combo
+		self.par_def_spinbox = {}		# spinbox
 		self.par_def_label = {}			# label - to change GUImode
 		# Board settings
 		self.par_brd_svar = {}			# String Var 
@@ -379,6 +380,7 @@ class TabsPanel():
 		self.Output.tag_configure('warning', foreground='#FF8800')
 		self.Output.tag_configure('normal', foreground='#000000')
 		self.Output.tag_configure('empty', foreground='#CCBB00')
+		self.Output.tag_configure('verbose', foreground='Violet')
 		self.Output.place(relx=x0/sh.Win_Tabs_W, rely=5/sh.Win_Tabs_H, relwidth=0.984, relheight=0.975) #  x=x0, y=5)
 
 		# ------------------------------------------------------------

@@ -29,8 +29,8 @@ QD Coarse Threshold		b
 QD Fine Threshold		b
 QD Mask Chip 0			b
 QD Mask Chip 1			b
-ZS Threshold LG			b
-ZS Threshold HG			b
+ZS Threshold LG			b12345
+ZS Threshold HG			b12345
 MUX Clock Period		b2345
 Trigger ID Mode			b2345
 Hold Delay				b2345

@@ -13,7 +13,10 @@ class Led:   #  DNIN: We can inherit Widget from Tkinter to use its function and
 
 	def rel_place(self, x, y):	# for relative placement
 		self.canvas.place(relx=x, rely=y)
-        
+
+	def place_forget(self):
+		self.canvas.place_forget()
+
 	def set_color(self, color):
 		if color == 'green':
 			c1='green3'

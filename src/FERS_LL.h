@@ -29,12 +29,16 @@ extern int EnablePedCal;										// 0 = disable calibration, 1 = enable calibra
 
 extern uint32_t TDL_NumNodes[FERSLIB_MAX_NCNC][FERSLIB_MAX_NTDL];	// num of nodes in the chain
 
+// TDL fiber delay setting
+#define FIBER_DELAY(length_m) ((float)(22 + 0.781 * length_m))  // Delay ~= 22 + 0.781 * length (in m)
+#define DEFAULT_FIBER_LENGTH  ((float)0.3)  // default fiber length = 0.3 m
+
 // -----------------------------------------------------------------------------------
 // Connect 
 // -----------------------------------------------------------------------------------
 int LLtdl_OpenDevice(char *board_ip_addr, int cindex);
 int LLtdl_CloseDevice(int cindex);
-int LLtdl_InitTDLchains(int cindex);
+int LLtdl_InitTDLchains(int cindex, float DelayAdjust[FERSLIB_MAX_NTDL][FERSLIB_MAX_NNODES]);
 bool LLtdl_TDLchainsInitialized(int cindex);
 int LLtdl_EnumChain(int cindex, uint16_t chain, uint32_t *node_count);
 int LLtdl_GetChainInfo(int cindex, uint16_t chain, FERS_TDL_ChainInfo_t *tdl_info);

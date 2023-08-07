@@ -480,6 +480,19 @@ static void* eth_data_receiver(void *params) {
 		}
 		tdata = ct;
 
+#if (THROUGHPUT_METER == 1)
+		// Rate Meter: print raw data throughput (RxBuff_wp is not updated, thus the data consumer doesn't see any data to process)
+		static uint64_t totnb = 0, lt = ct, l0 = ct;
+		totnb += nbrx;
+		if ((ct - lt) > 1000) {
+			printf("%6.1f s: %10.6f MB/s\n", float(ct - l0) / 1000, float(totnb) / (ct - lt) / 1000);
+			totnb = 0;
+			lt = ct;
+		}
+		unlock(RxMutex[bindex]);
+		continue;
+#endif
+
 		lock(RxMutex[bindex]);
 		RxBuff_wp[bindex] += nbrx;
 		if ((ct - pt) > 10) {  // every 10 ms, check if the data consumer is waiting for data or if the thread has to quit
@@ -627,18 +640,11 @@ int LLeth_CloseDevice(int bindex)
 	unlock(RxMutex[bindex]);
 
 	shutdown(FERS_CtrlSocket[bindex], SHUT_SEND);	
-#ifndef _WIN32
-	unsigned char data;
-	while (recv(FERS_CtrlSocket[bindex], &data, sizeof(data), 0) != 0);
-#endif
 	if (FERS_CtrlSocket[bindex] != f_socket_invalid) {
 		f_socket_close(FERS_CtrlSocket[bindex]);
 	}
 
 	shutdown(FERS_DataSocket[bindex], SHUT_SEND);
-#ifndef _WIN32
-	while (recv(FERS_DataSocket[bindex], &data, sizeof(data), 0) != 0);
-#endif
 	if (FERS_DataSocket[bindex] != f_socket_invalid) {
 		f_socket_close(FERS_DataSocket[bindex]);
 	}

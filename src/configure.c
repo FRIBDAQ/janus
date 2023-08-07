@@ -104,8 +104,8 @@ int ConfigureFERS(int handle, int mode)
 	ret |= FERS_EnablePedestalCalibration(handle, 1);
 
 	// Set LEMO I/O mode
-	ret |= FERS_WriteRegister(handle, a_t0_out_mask, WDcfg.T0_outMask);  
-	ret |= FERS_WriteRegister(handle, a_t1_out_mask, WDcfg.T1_outMask);  
+	ret |= FERS_WriteRegister(handle, a_t0_out_mask, WDcfg.T0_outMask[FERS_INDEX(handle)]);
+	ret |= FERS_WriteRegister(handle, a_t1_out_mask, WDcfg.T1_outMask[FERS_INDEX(handle)]);
 
 	// Waveform length
 	if (WDcfg.WaveformLength > 0) {
@@ -149,7 +149,7 @@ int ConfigureFERS(int handle, int mode)
 	FERS_WriteRegister(handle, a_tref_window, (uint32_t)(WDcfg.TrefWindow/((float)CLK_PERIOD/16)));
 	//uint32_t trf_w = (uint32_t)(WDcfg.TrefWindow / ((float)CLK_PERIOD / 16));
 	// Set Tref delay
-	if (WDcfg.AcquisitionMode == ACQMODE_TIMING_CSTART)
+	if ((WDcfg.AcquisitionMode == ACQMODE_TIMING_CSTART) || (WDcfg.AcquisitionMode == ACQMODE_TSPECT))
 		FERS_WriteRegister(handle, a_tref_delay, (uint32_t)(WDcfg.TrefDelay/(float)CLK_PERIOD));
 	else if (WDcfg.AcquisitionMode == ACQMODE_TIMING_CSTOP) {
 		uint32_t td = ((uint32_t)(-WDcfg.TrefWindow / ((float)CLK_PERIOD)) + (uint32_t)(WDcfg.TrefDelay / ((float)CLK_PERIOD)));
@@ -248,10 +248,12 @@ int ConfigureFERS(int handle, int mode)
 			ediv = WDcfg.Range_14bit ? ((1 << 14) / WDcfg.EHistoNbin) : ((1 << 13) / WDcfg.EHistoNbin);
 		else
 			ediv = 1;
-		zs_thr_lg = (WDcfg.ZS_Threshold_LG[brd][i] > 0) ? WDcfg.ZS_Threshold_LG[brd][i] * ediv - WDcfg.Pedestal + PedLG : 0;
-		ret |= FERS_WriteRegister(handle, INDIV_ADDR(a_zs_lgthr, i), zs_thr_lg);
-		zs_thr_hg = ((WDcfg.ZS_Threshold_HG[brd][i] > 0)) ? WDcfg.ZS_Threshold_HG[brd][i] * ediv - WDcfg.Pedestal + PedHG : 0;
-		ret |= FERS_WriteRegister(handle, INDIV_ADDR(a_zs_hgthr, i), zs_thr_hg);
+		if (WDcfg.AcquisitionMode == ACQMODE_SPECT) {  // CTIN: ZS doesn't work in TSPEC mode (indeed ZS applies to energy only, not timing data. It would be a partial suppression)
+			zs_thr_lg = (WDcfg.ZS_Threshold_LG[brd][i] > 0) ? WDcfg.ZS_Threshold_LG[brd][i] * ediv - WDcfg.Pedestal + PedLG : 0;
+			ret |= FERS_WriteRegister(handle, INDIV_ADDR(a_zs_lgthr, i), zs_thr_lg);
+			zs_thr_hg = ((WDcfg.ZS_Threshold_HG[brd][i] > 0)) ? WDcfg.ZS_Threshold_HG[brd][i] * ediv - WDcfg.Pedestal + PedHG : 0;
+			ret |= FERS_WriteRegister(handle, INDIV_ADDR(a_zs_hgthr, i), zs_thr_hg);
+		}
 
 		if (WDcfg.HV_Adjust_Range >= 0)	ret |= FERS_WriteRegister(handle, INDIV_ADDR(a_hv_adj, i), 0x100 | WDcfg.HV_IndivAdj[brd][i]);
 		else ret |= FERS_WriteRegister(handle, INDIV_ADDR(a_hv_adj, i), 0);
@@ -338,28 +340,47 @@ int ConfigureFERS(int handle, int mode)
 // ---------------------------------------------------------------------------------
 int ConfigureProbe(int handle)
 {
-	int ret = 0;
-	// Set Analog Probe
-	if ((WDcfg.AnalogProbe >= 0) && (WDcfg.AnalogProbe <= 5)) {
-		uint32_t ctp = (WDcfg.AnalogProbe == 0) ? 0x00 : 0x80 | (WDcfg.ProbeChannel & 0x3F) | ((WDcfg.AnalogProbe-1) << 9);
-		ret |= FERS_WriteRegister(handle, a_scbs_ctrl, 0x0);  
-		ret |= FERS_WriteRegister(handle, a_citiroc_probe, ctp);
-		Sleep(10);
-		ret |= FERS_WriteRegister(handle, a_scbs_ctrl, 0x200);  
-		ret |= FERS_WriteRegister(handle, a_citiroc_probe, ctp);
-		Sleep(10);
+	int i, ret = 0;
+	for (i = 0; i < 2; i++) {
+		// Set Analog Probe
+		if ((WDcfg.AnalogProbe[i] >= 0) && (WDcfg.AnalogProbe[i] <= 5)) {
+			uint32_t ctp = (WDcfg.AnalogProbe[i] == 0) ? 0x00 : 0x80 | (WDcfg.ProbeChannel[i] & 0x3F) | ((WDcfg.AnalogProbe[i] - 1) << 9);
+			ret |= FERS_WriteRegister(handle, a_scbs_ctrl, i << 9);
+			ret |= FERS_WriteRegister(handle, a_citiroc_probe, ctp);
+			Sleep(10);
+		}
+		// Set Digital Probe
+		if (FERS_FPGA_FW_MajorRev(handle) >= 5) {
+			ret |= FERS_WriteRegisterSlice(handle, a_citiroc_probe, 12, 18, 0);
+			if (WDcfg.DigitalProbe[i] == DPROBE_OFF)				ret |= FERS_WriteRegisterSlice(handle, a_dprobe, i*8, i*8+7, 0xFF);
+			else if (WDcfg.DigitalProbe[i] == DPROBE_PEAK_LG)		ret |= FERS_WriteRegisterSlice(handle, a_dprobe, i*8, i*8+7, 0x10);
+			else if (WDcfg.DigitalProbe[i] == DPROBE_PEAK_HG)		ret |= FERS_WriteRegisterSlice(handle, a_dprobe, i*8, i*8+7, 0x11);
+			else if (WDcfg.DigitalProbe[i] == DPROBE_HOLD)			ret |= FERS_WriteRegisterSlice(handle, a_dprobe, i*8, i*8+7, 0x16);
+			else if (WDcfg.DigitalProbe[i] == DPROBE_START_CONV)	ret |= FERS_WriteRegisterSlice(handle, a_dprobe, i*8, i*8+7, 0x12);
+			else if (WDcfg.DigitalProbe[i] == DPROBE_DATA_COMMIT)	ret |= FERS_WriteRegisterSlice(handle, a_dprobe, i*8, i*8+7, 0x21);
+			else if (WDcfg.DigitalProbe[i] == DPROBE_DATA_VALID)	ret |= FERS_WriteRegisterSlice(handle, a_dprobe, i*8, i*8+7, 0x20);
+			else if (WDcfg.DigitalProbe[i] == DPROBE_CLK_1024)		ret |= FERS_WriteRegisterSlice(handle, a_dprobe, i*8, i*8+7, 0x00);
+			else if (WDcfg.DigitalProbe[i] == DPROBE_VAL_WINDOW)	ret |= FERS_WriteRegisterSlice(handle, a_dprobe, i*8, i*8+7, 0x1A);
+			else if (WDcfg.DigitalProbe[i] == DPROBE_T_OR)			ret |= FERS_WriteRegisterSlice(handle, a_dprobe, i*8, i*8+7, 0x04);
+			else if (WDcfg.DigitalProbe[i] == DPROBE_Q_OR)			ret |= FERS_WriteRegisterSlice(handle, a_dprobe, i*8, i*8+7, 0x05);
+			else if (WDcfg.DigitalProbe[i] & 0x80000000) {  // generic setting
+				uint32_t blk = (WDcfg.DigitalProbe[i] >> 16) & 0xF;
+				uint32_t sig = WDcfg.DigitalProbe[i] & 0xF;
+				ret |= FERS_WriteRegisterSlice(handle, a_dprobe, i*8, i*8+7, (blk << 4) | sig);
+			}
+		} else {
+			if (WDcfg.DigitalProbe[i] == DPROBE_OFF)				ret |= FERS_WriteRegisterSlice(handle, a_citiroc_probe, 12, 18, 0xFF);
+			else if (WDcfg.DigitalProbe[i] == DPROBE_PEAK_LG)		ret |= FERS_WriteRegisterSlice(handle, a_citiroc_probe, 12, 18, 0x10);
+			else if (WDcfg.DigitalProbe[i] == DPROBE_PEAK_HG)		ret |= FERS_WriteRegisterSlice(handle, a_citiroc_probe, 12, 18, 0x11);
+			else if (WDcfg.DigitalProbe[i] == DPROBE_HOLD)			ret |= FERS_WriteRegisterSlice(handle, a_citiroc_probe, 12, 18, 0x16);
+			else if (WDcfg.DigitalProbe[i] == DPROBE_START_CONV)	ret |= FERS_WriteRegisterSlice(handle, a_citiroc_probe, 12, 18, 0x12);
+			else if (WDcfg.DigitalProbe[i] == DPROBE_DATA_COMMIT)	ret |= FERS_WriteRegisterSlice(handle, a_citiroc_probe, 12, 18, 0x21);
+			else if (WDcfg.DigitalProbe[i] == DPROBE_DATA_VALID)	ret |= FERS_WriteRegisterSlice(handle, a_citiroc_probe, 12, 18, 0x20);
+			else if (WDcfg.DigitalProbe[i] == DPROBE_CLK_1024)		ret |= FERS_WriteRegisterSlice(handle, a_citiroc_probe, 12, 18, 0x00);
+			else if (WDcfg.DigitalProbe[i] == DPROBE_VAL_WINDOW)	ret |= FERS_WriteRegisterSlice(handle, a_citiroc_probe, 12, 18, 0x1A);
+			else if (WDcfg.DigitalProbe[i] & 0x80000000)			ret |= FERS_WriteRegister(handle, a_citiroc_probe, WDcfg.DigitalProbe[i] & 0x7FFFFFFF);  // generic setting
+		}
 	}
-	// Set Digital Probe
-	if      (WDcfg.DigitalProbe == DPROBE_OFF)			ret |= FERS_WriteRegisterSlice(handle, a_citiroc_probe, 12, 18, 0xFF);  
-	else if (WDcfg.DigitalProbe == DPROBE_PEAK_LG)		ret |= FERS_WriteRegisterSlice(handle, a_citiroc_probe, 12, 18, 0x10);  
-	else if (WDcfg.DigitalProbe == DPROBE_PEAK_HG)		ret |= FERS_WriteRegisterSlice(handle, a_citiroc_probe, 12, 18, 0x11);  
-	else if (WDcfg.DigitalProbe == DPROBE_HOLD)			ret |= FERS_WriteRegisterSlice(handle, a_citiroc_probe, 12, 18, 0x16);  
-	else if (WDcfg.DigitalProbe == DPROBE_START_CONV)	ret |= FERS_WriteRegisterSlice(handle, a_citiroc_probe, 12, 18, 0x12);  
-	else if (WDcfg.DigitalProbe == DPROBE_DATA_COMMIT)	ret |= FERS_WriteRegisterSlice(handle, a_citiroc_probe, 12, 18, 0x21);  
-	else if (WDcfg.DigitalProbe == DPROBE_DATA_VALID)	ret |= FERS_WriteRegisterSlice(handle, a_citiroc_probe, 12, 18, 0x20);  
-	else if (WDcfg.DigitalProbe == DPROBE_CLK_1024)		ret |= FERS_WriteRegisterSlice(handle, a_citiroc_probe, 12, 18, 0x00);  
-	else if (WDcfg.DigitalProbe == DPROBE_VAL_WINDOW)	ret |= FERS_WriteRegisterSlice(handle, a_citiroc_probe, 12, 18, 0x1A);  
-	else if (WDcfg.DigitalProbe & 0x80000000)			ret |= FERS_WriteRegister(handle, a_citiroc_probe, WDcfg.DigitalProbe & 0x7FFFFFFF);  // generic setting
 	Sleep(10);
 	return ret;
 }

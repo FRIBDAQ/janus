@@ -112,7 +112,7 @@ VetoSource						DISABLED			g		c		# The veto signal inhibits the bunch trigger (a
 	- T0-IN
 	- T1-IN
 
-ValidationSource				T0-IN				g		c		# Source of the trigger validation signal. It must arrive within the window is opened by the bunch trigger and closed after Tv ~= 130 ns + HoldDelay.
+ValidationSource				T0-IN				g		c		# Source of the trigger validation signal. It must arrive within the window is opened by the bunch trigger and closed after Tv ~= 120 ns + HoldDelay.
 	- SW_CMD
 	- T0-IN
 	- T1-IN
@@ -204,7 +204,7 @@ FastShaperInput					HG-PA				g		c		# The fast shaper can be connected to High ga
 
 TD_CoarseThreshold				185					b		d		# Timing Discriminator coarse threshold (common to all channels)
 TD_FineThreshold				0					c		d		# Timing Discriminator fine threshold (individual)
-Trg_HoldOff						0					g		u		# Trigger hold-off time (imposed dead time)
+Hit_HoldOff						0					g		u		# Trigger hold-off time (imposed dead time)
 
 Tlogic_Mask0					FFFFFFFF			b		h		# Trigger Logic channel enable mask (ch 0..31) 
 Tlogic_Mask1					FFFFFFFF			b		h		# Trigger Logic channel enable mask (ch 32..63) 
@@ -300,7 +300,7 @@ MCSHistoNbin					4K					g		c		# Number of channels (bins) in the MCS histogram (
 #---------------------------------------------------------------------------------------
 [Test-Probe]
 #---------------------------------------------------------------------------------------
-AnalogProbe						OFF					g		c		# Select the signal connected to the analog probe 
+AnalogProbe0					OFF					g		c		# Select the signal connected to the analog probe0 
 	- OFF
 	- FAST
 	- SLOW_LG
@@ -308,7 +308,7 @@ AnalogProbe						OFF					g		c		# Select the signal connected to the analog probe
 	- PREAMP_LG
 	- PREAMP_HG
 
-DigitalProbe					OFF					g		c		# Select the signal connected to the digital probe
+DigitalProbe0					OFF					g		c		# Select the signal connected to the digital probe0
 	- OFF
 	- PEAK_LG
 	- PEAK_HG
@@ -318,8 +318,34 @@ DigitalProbe					OFF					g		c		# Select the signal connected to the digital prob
 	- DATA_VALID
 	- CLK_1024
 	- VAL_WINDOW
+	- T_OR
+	- Q_OR
+	
+ProbeChannel0				0					g		d		# Select the channel connected to the analog and digital probes0
+	
 
-ProbeChannel					0					g		d		# Select the channel connected to the analog and digital probes
+AnalogProbe1					OFF					g		c		# Select the signal connected to the analog probe1 
+	- OFF
+	- FAST
+	- SLOW_LG
+	- SLOW_HG
+	- PREAMP_LG
+	- PREAMP_HG
+
+DigitalProbe1					OFF					g		c		# Select the signal connected to the digital probe1
+	- OFF
+	- PEAK_LG
+	- PEAK_HG
+	- HOLD
+	- START_CONV
+	- DATA_COMMIT
+	- DATA_VALID
+	- CLK_1024
+	- VAL_WINDOW
+	- T_OR
+	- Q_OR
+
+ProbeChannel1					0					g		d		# Select the channel connected to the analog and digital probes1
 
 _BLANK 							-					-		-
 
