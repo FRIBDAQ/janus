@@ -558,9 +558,13 @@ int PlotStaircase()
 		if (strlen(RunVars.PlotTraces[t]) == 0) {
 			en[t] = 0;
 		} else {
+			sscanf(RunVars.PlotTraces[t], "%d %d %s", &brd[t], &ch[t], tmp_rn[t]);
+			if (tmp_rn[t][0] == 'B' && brd[t] >= WDcfg.NumBrd) {
+				en[t] = 0;
+				continue;
+			}
 			en[t] = 1;
 			nt++;
-			sscanf(RunVars.PlotTraces[t], "%d %d %s", &brd[t], &ch[t], tmp_rn[t]);
 			if (tmp_rn[t][0] == 'S') sscanf(tmp_rn[t] + 1, "%s", mytitle);
 			else sscanf(tmp_rn[t] + 1, "%d", &rn[t]);
 			nstep_off = max(nstep_off, Stats.Staircase_offline[t].nsteps);
@@ -578,7 +582,7 @@ int PlotStaircase()
 	for (i = 0; i < nstepmax; i++) {
 		// fprintf(plotpipe, "%d ", RunVars.StaircaseCfg[SCPARAM_MIN] + i * RunVars.StaircaseCfg[SCPARAM_STEP]);
 		// fprintf(deb, "%d", RunVars.StaircaseCfg[SCPARAM_MIN] + i * RunVars.StaircaseCfg[SCPARAM_STEP]);
-		for(t=0; t<8; t++) {
+		for (t = 0; t < 8; t++) {
 			if (!en[t]) continue;
 			if (tmp_rn[t][0] == 'B') {	// From saved file
 				if (i >= nstep) {
@@ -594,17 +598,15 @@ int PlotStaircase()
 				if (Stats.Staircase[brd[t]][ch[t]][i] != 0) val_tmp = Stats.Staircase[brd[t]][ch[t]][i];
 				fprintf(plotpipe, "%d %8e ", RunVars.StaircaseCfg[SCPARAM_MIN] + i * RunVars.StaircaseCfg[SCPARAM_STEP], val_tmp);
 				if (debug) fprintf(deb, "%d %8e ", RunVars.StaircaseCfg[SCPARAM_MIN] + i * RunVars.StaircaseCfg[SCPARAM_STEP], val_tmp);
-			ymax = max(ymax, Stats.Staircase[brd[t]][ch[t]][i]);
-		}
-			else {
+				ymax = max(ymax, Stats.Staircase[brd[t]][ch[t]][i]);
+			} else {
 				if (i >= Stats.Staircase_offline[t].nsteps) {
 					int last = Stats.Staircase_offline[t].nsteps;
 					if (last > 0) {
 						fprintf(plotpipe, "%d %8e ", Stats.Staircase_offline[t].threshold[last - 1], (double)Stats.Staircase_offline[t].counts[last - 1]);
 						if (debug) fprintf(deb, "%d %8e ", Stats.Staircase_offline[t].threshold[last - 1], (double)Stats.Staircase_offline[t].counts[last - 1]);
-					}
-					else {
-						fprintf(plotpipe, "%d %8d ",150, 1);
+					} else {
+						fprintf(plotpipe, "%d %8d ", 150, 1);
 						if (debug) fprintf(deb, "%d %8d ", 150, 1);
 					}
 					if (debug) fflush(deb);

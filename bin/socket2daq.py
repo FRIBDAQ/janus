@@ -137,7 +137,7 @@ def GetData():
 
 def Close():
 	global sock, SckConnected, SckError
-	#if not SckConnected: return
+	#if not SckConnected: return	# DNIN: should it been commented
 	sock.dismiss()
 	SckConnected = False
 

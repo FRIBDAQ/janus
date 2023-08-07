@@ -489,6 +489,7 @@ int SendDataToGUI(char* data, int size)
 // --------------------------------------------------------------------------------------------------------- 
 int Con_printf(char *dest, char *fmt, ...) 
 {
+	const int msize = 2048;
 	char msg[1000];
 	uint16_t size;
 	int8_t ret = 0;
@@ -504,7 +505,7 @@ int Con_printf(char *dest, char *fmt, ...)
 	}
 
 	if (ConSocket && (strstr(dest, "S"))) {
-		char buff[1024], sdest[10];
+		char buff[msize + 12], sdest[10];
 		sprintf(sdest, "%s", strstr(dest, "S") + 1);
 		size = 2 + (uint16_t)strlen(sdest) + (uint16_t)strlen(msg);
 		buff[0] = size & 0xFF;

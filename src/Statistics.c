@@ -14,15 +14,13 @@
 * software, documentation and results solely at his own risk.
 ******************************************************************************/
 
-#include "MultiPlatform.h"
-
 #include <stdio.h>
 #include <stdlib.h>
 #include "JanusC.h"
 #include "Statistics.h"
 #include "FERSlib.h"
 #include "console.h"
-
+#include "MultiPlatform.h"
 
 // ****************************************************************************************
 // Global Variables

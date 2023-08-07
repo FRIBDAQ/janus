@@ -18,6 +18,7 @@
 #define _FERSLIB_H				// Protect against multiple inclusion
 
 #include <stdint.h>
+#include <math.h>
 #include "MultiPlatform.h"
 
 #ifdef FERS_5202
@@ -45,6 +46,10 @@
 #define NODATA_TIMEOUT				100		// time to wait after there is no data from the board to consider it empty
 #define STOP_TIMEOUT				500		// timeout for forcing the RX thread to go in idle state after the stop of the run in the boards
 
+#define TDL_COMMAND_DELAY			1000000	// Delay for the command execution in TDlink (the delay must be greater than the maximum delivery time of the command acress the TDL chains). 1 LSB = 10 ns
+
+#define THROUGHPUT_METER			0		// Must be 0 in normal operation (can be used to test the data throughput in different points of the readout process)
+
 #ifdef FERS_5202
 #define CLK_PERIOD					8		// clock period in ns (for reg settings)
 #elif FERS_5203
@@ -52,10 +57,11 @@
 #define TDC_CLK_PERIOD				(CLK_PERIOD*2)			// TDC clock period in ns
 #define TDC_PULSER_CLK_PERIOD		(TDC_CLK_PERIOD / 32)	// TDC Pulser clock
 #define TDC_LSB_ps					(TDC_CLK_PERIOD / 8 / 1.024)	// TDC LSB in ps (clock * 8 + 1024 taps)
+#define CLK2LSB						4096
 #endif
 
 #define MAX_WAVEFORM_LENGTH			2048
-#define MAX_LIST_SIZE				512
+#define MAX_LIST_SIZE				2048
 #define MAX_TEST_NWORDS				4
 #define MAX_SERV_NWORDS				6			// Max number of words in service event
 
@@ -75,6 +81,12 @@
 #define RXSTATUS_IDLE		1
 #define RXSTATUS_RUNNING	2
 #define RXSTATUS_EMPTYING	3
+
+// Readout Status
+#define ROSTATUS_IDLE				0	// idle (acquisition not running)
+#define ROSTATUS_RUNNING			1	// running (data readout)
+#define ROSTATUS_EMPTYING			2	// boards stopped, reading last data in the pipes
+#define ROSTATUS_FLUSHING			3	// flushing old data (clear)
 
 // Error Codes
 #define FERSLIB_ERR_GENERIC				-1
@@ -115,6 +127,7 @@
 #define ACQMODE_COMMON_STOP			0x12  // 
 #define ACQMODE_STREAMING			0x22  // 
 #define ACQMODE_TRG_MATCHING		0x32  // 
+#define ACQMODE_TEST_MODE			0x01  //
 
 #define MEASMODE_LEAD_ONLY			0x01
 #define MEASMODE_LEAD_TRAIL			0x03
@@ -147,12 +160,6 @@
 #define ROMODE_TRGTIME_SORTING		0x0001	// Enable event sorting by Trigger Tstamp 
 #define ROMODE_TRGID_SORTING		0x0002	// Enable event sorting by Trigger ID
 
-// Readout Status
-#define ROSTATUS_IDLE				0	// idle (acquisition not running)
-#define ROSTATUS_RUNNING			1	// running (data readout)
-#define ROSTATUS_EMPTYING			2	// boards stopped, reading last data in the pipes
-#define ROSTATUS_FLUSHING			3	// flushing old data (clear)
-
 
 // Data width for Energy, ToA and ToT
 #ifdef FERS_5202
@@ -180,6 +187,22 @@
 #define FERS_NODE(handle)				((handle >> 20) & 0xF)
 #define FERS_CHAIN(handle)				((handle >> 24) & 0xF)
 #define FERS_CNCINDEX(handle)			((handle >> 30) & 0xF)
+
+// Fimrware upgrade via TDL
+#define FUP_BA							0xFF000000
+#define FUP_CONTROL_REG					1023
+#define FUP_PARAM_REG					1022
+#define FUP_RESULT_REG					1021
+#define FUP_CMD_READ_VERSION			0xFF
+#define POLY							0x82f63b78
+
+// Other macros
+#ifndef max
+#define max(a,b) ((a) > (b) ? (a) : (b))
+#endif
+#ifndef min 
+#define min(a,b) ((a) < (b) ? (a) : (b))
+#endif
 
 //******************************************************************
 // TDL-chain Info Struct
@@ -291,6 +314,7 @@ typedef struct {
 #elif FERS_5203
 typedef struct {
 	double tstamp_us;
+	uint64_t tstamp_clk;
 	uint64_t trigger_id;
 	uint16_t nhits;
 	uint32_t header1[8];
@@ -368,7 +392,7 @@ int FERS_CloseDevice(int handle);
 int FERS_TotalAllocatedMemory();
 int FERS_Reset_IPaddress(int handle);
 int FERS_Get_CncPath(char *dev_path, char *cnc_path);
-int FERS_InitTDLchains(int handle);
+int FERS_InitTDLchains(int handle, float DelayAdjust[FERSLIB_MAX_NTDL][FERSLIB_MAX_NNODES]);
 bool FERS_TDLchainsInitialized(int handle);
 
 // *****************************************************************
@@ -392,7 +416,7 @@ int FERS_SetCommonPedestal(int handle, uint16_t Pedestal);
 int FERS_EnablePedestalCalibration(int handle, int enable);
 int FERS_GetChannelPedestalBeforeCalib(int handle, int ch, uint16_t *PedLG, uint16_t *PedHG);
 int FERS_Get_FPGA_Temp(int handle, float *temp);
-int FERS_Get_PIC_Temp(int handle, float* temp);
+int FERS_Get_Board_Temp(int handle, float* temp);
 #ifdef FERS_5203
 int FERS_Get_TDC0_Temp(int handle, float* temp);
 int FERS_Get_TDC1_Temp(int handle, float* temp);
@@ -439,7 +463,6 @@ int TDC_DoStartStopMeasurement(int handle, int tdc_id, double *tof_ns);
 // *****************************************************************
 // Data Readout
 // *****************************************************************
-int FERS_InitReadoutMutex();
 int FERS_InitReadout(int handle, int ROmode, int *AllocatedSize);
 int FERS_CloseReadout(int handle);
 int FERS_FlushData(int handle);

@@ -32,10 +32,19 @@ $(SRCDIR)/%.o: $(SRCDIR)/%.cpp
 $(TARGET): $(OBJECTS)
 	$(CC) $(OBJECTS) $(LDFLAGS) -o $(BINDIR)/$@ $(LDADD)
 	
-
 # BintoCsv make
-$(TARGETMACRO): 
-	$(CC) -o $(BINDIR)/$@ $(CFLAGS) $(MACRODIR)/$(TARGETMACRO).cpp
+OBJMACRO = $(MACRODIR)/BinToCsv.o $(MACRODIR)/BinaryDataFERS.o $(MACRODIR)/BinaryData_5202.o $(MACRODIR)/BinaryData_5203.o
+
+$(MACRODIR)/%.o: $(MACRODIR)/%.cpp
+	$(CC) $(CFLAGS) -c $< -o $@
+	
+.PRECIOUS: $(TARGETMACRO) $(OBJMACRO)
+
+$(TARGETMACRO):  $(OBJMACRO)
+	$(CC) $(OBJMACRO) -o $(BINDIR)/$@
+
+# $(TARGETMACRO): 
+# 	$(CC) -o $(BINDIR)/$@ $(CFLAGS) $(MACRODIR)/$(TARGETMACRO).cpp
 	
 cleanjanus:
 	-rm -f $(SRCDIR)/*.o

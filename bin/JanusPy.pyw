@@ -84,6 +84,12 @@ class Open_GUI(Frame):
 		self.guimodegui.trace('w', lambda name, index, mode:self.Tabs.update_guimode(self.guimodegui.get()))
 		self.Tabs.par_def_svar["AcquisitionMode"].trace('w', lambda name, index, mode:self.Tabs.update_guimode(self.guimodegui.get(), 0))
 		self.Tabs.update_guimode(self.guimodegui.get())
+		
+		self.DebugGUI = IntVar()
+		self.DebugGUI.set(0)
+
+		self.OpenAndFWupg = IntVar()
+		self.OpenAndFWupg.set(0)
 
 		self.AddMenu()
 		self.bglabel.place_forget()
@@ -167,7 +173,7 @@ class Open_GUI(Frame):
 		if len(cfg.cfg_file_list) > 0:
 			mmsg = "You are overwriting the paramters with other cfg file:\n"
 			for cfile in cfg.cfg_file_list:
-				mmsg = mmsg + "\t" + cfile + "\n"
+				mmsg = mmsg + " - " + cfile + "\n"
 			mmsg = mmsg + "The previous parameter values are lost, the new ones are displaied on GUI!\n"	
 			# mmsg = mmsg + "The new parameter values are loaded on JanusC but not shown on GUI!"
 			self.Tabs.Output.insert(END, mmsg, 'empty')
@@ -180,7 +186,7 @@ class Open_GUI(Frame):
 	def AddMenu(self):
 		self.mGuiMenu = Menu(self.master)
 		self.menu_file = Menu(self.mGuiMenu, tearoff=0)
-		self.menu_file.add_command(label='Read Config File', command=self.Ctrl.ReadCfgFile)
+		self.menu_file.add_command(label='Load Config File', command=self.Ctrl.ReadCfgFile)
 		self.menu_file.add_command(label='Save Config File', command=self.Ctrl.SaveCfgFile)
 		self.menu_file.add_command(label='Save Config File As', command=self.Ctrl.SaveCfgFileAs)
 		self.menu_file.add_command(label="Load Macro", command=self.Ctrl.OpenExternalCfg)
@@ -195,6 +201,7 @@ class Open_GUI(Frame):
 		self.menu_mode.add_radiobutton(label='Basic', variable=self.guimodegui, value='b')
 		self.menu_mode.add_radiobutton(label='Advanced',variable=self.guimodegui, value='a')
 		self.menu_mode.add_checkbutton(label="Show warning pop-up", variable=self.Ctrl.show_warning)
+		self.menu_mode.add_checkbutton(label="Verbose socket messages", variable=self.DebugGUI)
 		self.menu_help = Menu(self.mGuiMenu, tearoff=0)
 		self.menu_help.add_command(label='About', command=self.Help_About)
 
@@ -241,7 +248,7 @@ class Open_GUI(Frame):
 		if sys.platform.find('win') < 0: fname = "JanusC"
 		if not os.path.exists(fname):	#   Error: JanusC is not in the folder and cannot be launched
 			Jmsg="Warning, JanusC executable is missing!!!\nPlease, check if the antivirus cancel it during the unzip (Windows)"
-			Jmsg=Jmsg+"\nor run make from the main folder (Linux)"
+			Jmsg=Jmsg+"or run make from the main folder (Linux)"
 			messagebox.showwarning(title=None, message=Jmsg)
 			self.Ctrl.plugged.set(0)
 			return
@@ -296,6 +303,12 @@ class Open_GUI(Frame):
 				self.Ctrl.SaveCfgFileAs()
 				self.Ctrl.plugged.set(0)
 
+		# Dump on file LogGUI
+		if self.DebugGUI.get():
+			with open("JanusPyLog.log", "w") as f:
+				for line in self.Tabs.Output.dump(1.0, END, test=True):
+					f.write(line[1])
+
 		self.quit()
 
 
@@ -327,8 +340,15 @@ class Open_GUI(Frame):
 					enable_hvmon = 0
 			
 			cmsg = comm.GetString()  # server.recv_data() from socket
-			if len(cmsg) > 0:				
-				print("Message from board: ", cmsg)	# debug
+			if len(cmsg) > 0:
+				if self.DebugGUI.get():
+					print("Message from board: ", cmsg)	# debug
+					forgrd = "verbose"
+					with open("JanusPylog.log", "a") as f:
+						f.write("Message from board: ", cmsg)
+					if cmsg[0] != 'm' or cmsg != 'w':	# Verbose message
+						self.Tabs.Output.insert(END, cmsg[1:] + "\n", forgrd)
+						self.Tabs.Output.yview_scroll(100, UNITS)
 				if cmsg[0] != 'w' and pcmsg == 'w':	# print Warning on LOG and raise a warning pop-up
 					if self.Ctrl.show_warning.get(): messagebox.showwarning(title=None, message="WARNING(s)!!!\n\n" + wmsg, parent=self.master)
 					self.Ctrl.RisedWarning.set(1)
@@ -341,8 +361,8 @@ class Open_GUI(Frame):
 					forgrd = 'normal'
 					if cmsg.find("ERROR") != -1: 
 						forgrd = 'error'  
-						# cmsg = cmsg[:-1]	# 
-					self.Tabs.Output.insert(END, "{}".format(cmsg[1:]), forgrd)
+						cmsg = cmsg[:-1]	# DNIN: to be tested
+					self.Tabs.Output.insert(END, cmsg[1:], forgrd)
 					self.Tabs.Output.yview_scroll(100, UNITS)
 				elif cmsg[0] == 'a': # acquisition status
 					status = int(cmsg[1:3])
@@ -354,7 +374,7 @@ class Open_GUI(Frame):
 					self.Ctrl.SetAcqStatus(status, status_msg)	# With cmsg[0]=='R' there is a redundance
 					self.Tabs.TabsUpdateStatus(status)
 					if status == sh.ACQSTATUS_ERROR: 
-						self.Tabs.Output.insert(END, '', 'normal')
+						self.Tabs.Output.insert(END, '\n', 'normal')
 					if status == sh.ACQSTATUS_READY: 
 						self.mGuiMenu.entryconfig("FWupgrade", state="normal")
 						if pr_status == 2: #!= status: # Only when connect 
@@ -363,11 +383,22 @@ class Open_GUI(Frame):
 							comm.SendCmd("I{}".format(self.Tabs.change_stat_integral.get()))
 					else: self.mGuiMenu.entryconfig("FWupgrade", state="disabled")
 					if status == sh.ACQSTATUS_UPGRADING_FW:
-						self.UpgStat.configure(text = status_msg)
+						if "Progress" in status_msg:
+							self.UpgStat.configure(text = f"{status_msg}%")
+						else:
+							self.UpgStat.configure(text = status_msg)
 						s = status_msg.split()
 						if len(s) > 1 and s[0].find('Progress') >= 0:
-							if float(s[1]) >= 100: self.CloseUpgradeWin()
+							if float(s[1]) >= 100: self.notify_succesfull("Firmware Upgrade") # self.CloseUpgradeWin()
 							else: self.upg_progress['value'] = float(s[1])
+				elif cmsg[0] == 'F': # Firmware not found
+					ret = messagebox.askyesno("FPGA Firmware not found", cmsg[1:-8])
+					if ret: 
+						self.OpenAndFWupg.set(1)
+						comm.SendCmd('y')
+						self.FPGAupgrade()
+						# self.mGuiMenu.entryconfig("FWupgrade", state="normal")
+					else: comm.SendCmd('n')				
 				elif cmsg[0] == 'i': # board info
 					self.Tabs.update_brd_info(cmsg[1:])
 				#elif cmsg[0] == 'p': # Plot Type
@@ -397,6 +428,8 @@ class Open_GUI(Frame):
 					except:
 						wmsg = wmsg + my_msg[0] + ":" + my_msg[1]
 					# wmsg = wmsg + cmsg[10:]
+				elif cmsg[0] == "u": # Messages related to frmware upgrade fails
+					if self.Ctrl.show_warning.get(): messagebox.showwarning(title=None, message=cmsg[1:] + wmsg, parent=self.master)
 			else:	
 				time.sleep(0.1)
 
@@ -404,6 +437,15 @@ class Open_GUI(Frame):
 	# *******************************************************************************
 	# Firmware Upgrade
 	# *******************************************************************************
+	def notify_succesfull(self, func):
+		messagebox.showinfo(title=func, message=f"{func} succesfully completed!")
+		if self.OpenAndFWupg.get():
+			self.Ctrl.plugged.set(0)
+			self.OpenAndFWupg.set(0)
+
+		self.CloseUpgradeWin()
+
+
 	def uCupgrade(self):
 		os.startfile("AllInOneJar.jar")
 
@@ -465,9 +507,14 @@ class Open_GUI(Frame):
 		#ff = open("FWupgfile.txt", "w")
 		#ff.write(self.FWupg_fname)
 		#ff.close()
-		comm.SendCmd('U')
-		comm.SendString(self.Tbrd.get())
-		comm.SendString(self.FWupg_fname)
+		if not self.OpenAndFWupg.get():
+			comm.SendCmd('U')
+			comm.SendString(self.Tbrd.get())
+			# comm.SendString(f'{self.Tbrd.get()}{self.FWupg_fname}')
+			comm.SendString(self.FWupg_fname)
+		else:
+			comm.SendString(f'U{self.FWupg_fname}')
+
 
 	def read_header(self):
 		self.info_new_fw = []
@@ -547,7 +594,7 @@ class Open_GUI(Frame):
 # *****************************************************************************
 # Main
 # *****************************************************************************
-cfg.ReadParamDescription("param_defs.txt", sh.sections, sh.params)
+sh.Version = cfg.ReadParamDescription("param_defs.txt", sh.sections, sh.params)
 cfg.ReadConfigFile(sh.params, sh.CfgFile, 0)
 cfg.WriteConfigFile(sections, sh.params, sh.CfgFile, 1)
 

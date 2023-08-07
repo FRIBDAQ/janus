@@ -411,6 +411,9 @@ class CtrlPanel():
 			self.bin2csv_button["state"] = NORMAL
 			self.AcqStatus.config(fg='black')
 			s1 = msg.split('#')
+			self.enable_runvarsave = False
+			self.RunNumber.set(s1[1].split()[0])
+			self.enable_runvarsave = True
 			if params['EnableJobs'].default == '1': self.bstart.config(image=self.img_startjob)
 			else: 
 				self.bstart.config(image=self.img_start)
@@ -460,9 +463,10 @@ class CtrlPanel():
 				self.prev_brd[1] = rmp_board
 		elif status == sh.ACQSTATUS_STAIRCASE or status == sh.ACQSTATUS_HOLDSCAN: # running staircase or holdscan
 			self.AcqStatus.config(bg='white')
-			if status == sh.ACQSTATUS_STAIRCASE: self.runled.set_color("green") 
+			# if status == sh.ACQSTATUS_STAIRCASE: self.runled.set_color("green")   DNIN: Is there a reason to not turn on the led during DelayScan?
+			self.runled.set_color("green") 
 			self.bstart.config(state=DISABLED)
-			self.bstop.config(state=DISABLED)
+			self.bstop.config(state=NORMAL)
 			self.bpause.config(state=DISABLED)
 			self.bsingle.config(state=DISABLED)
 			self.bclear.config(state=DISABLED)
@@ -497,8 +501,8 @@ class CtrlPanel():
 		self.ExtCfgLoad = Toplevel()
 		self.ExtCfgLoad.geometry("{}x{}+{}+{}".format(xw, yw, 550, 200))
 		self.ExtCfgLoad.protocol("WM_DELETE_WINDOW", self.CloseExternalCfg)
-		self.mf = Frame(self.ExtCfgLoad, width=xw, height=yw, relief=RIDGE).place(x=0, y=0) # , bd=2	
 		self.ExtCfgLoad.grab_set()
+		self.mf = Frame(self.ExtCfgLoad, width=xw, height=yw, relief=RIDGE).place(x=0, y=0) # , bd=2	
 
 		self.ExtCfgFileName = [] # Cfg File path
 		self.IsExtFileOpen = True

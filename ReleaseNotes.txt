@@ -5,6 +5,22 @@
 *************************************************************************************************************************
 
 -------------------------------------------------------------------------------------------------------------------------
+Release 3.2.3 - 04/08/2023
+-------------------------------------------------------------------------------------------------------------------------
+- Bug fix on USB connection in linux with >1 boards
+
+-------------------------------------------------------------------------------------------------------------------------
+Release 3.2.2 - 10/07/2023
+-------------------------------------------------------------------------------------------------------------------------
+- Updated the managment of the Digital Probe for FW Major Rev. >= 5
+- Improved the readout data for TDL connection
+- Implemented new communication protocol for eth/usb connection, valid for FW Major Rev. >= 5
+- Added control to let the FW upgrade only through eth/usb
+- Implemented the stop function for Staricase and Hold-Delay runs
+- Version of Binary Data file updated to 3.2, together with the BinToCsv converter
+- Implemented FERS FW upgrade through DT5215
+
+-------------------------------------------------------------------------------------------------------------------------
 Release 3.1.0 - 06/04/2023
 -------------------------------------------------------------------------------------------------------------------------
 - Bug fix in FERS_readout in chain and node reading

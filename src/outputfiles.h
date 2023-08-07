@@ -27,10 +27,12 @@
 #include "JanusC.h"
 
 int OpenOutputFiles(int RunNumber);
+int WriteListfileHeader();
 int CloseOutputFiles();
 int SaveRawData(uint32_t *buff, int nw);
 int SaveList(int brd, double ts, uint64_t trgid, void *generic_ev, int dtq);
 int SaveHistos();
 int SaveRunInfo();
+//int SaveMeasurement();
 
 #endif

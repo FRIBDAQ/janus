@@ -33,7 +33,7 @@
 #define STREAMING_PORT		"9000"	// Data RX Port (streaming)
 
 #define TDL_BLK_SIZE	(1024)						// Max size of one packet in the recv 
-#define RX_BUFF_SIZE	(1024*1024)					// Size of the local Rx buffer
+#define RX_BUFF_SIZE	(16*1024*1024)					// Size of the local Rx buffer
 
 #define LLBUFF_SIZE		(32*1024)
 #define TDLINK_HEADER_SIZE	32 // cluster header size in bytes
@@ -41,13 +41,15 @@
 // *********************************************************************************************************
 // Global variables
 // *********************************************************************************************************
-uint32_t TDL_NumNodes[FERSLIB_MAX_NCNC][FERSLIB_MAX_NTDL] = { 0 };	// num of nodes in the chain
+uint32_t TDL_NumNodes[FERSLIB_MAX_NCNC][FERSLIB_MAX_NTDL] = { 0 };	// num of nodes in the chain. Inizialized to <0 or >MAX_NBRD_IN_NODE, to avoid multiple enumaration
+float FiberDelayAdjust[FERSLIB_MAX_NCNC][FERSLIB_MAX_NTDL][FERSLIB_MAX_NNODES];	// Fiber length (in meters) for individual tuning of the propagation delay along the TDL daisy chains
+int InitDelayAdjust[FERSLIB_MAX_NCNC] = { 0 };
 
 static f_socket_t FERS_CtrlSocket[FERSLIB_MAX_NCNC] = {f_socket_invalid};	// slow control (R/W reg)
 static f_socket_t FERS_DataSocket[FERSLIB_MAX_NCNC] = {f_socket_invalid};	// data streaming
 static char *RxBuff[FERSLIB_MAX_NCNC][2] = { NULL };	// Rx data buffers (two "ping-pong" buffers, one write, one read)
-static uint32_t RxBuff_rp[FERSLIB_MAX_NCNC] = { 0 };	// read pointer in Rx data buffer
-static uint32_t RxBuff_wp[FERSLIB_MAX_NCNC] = { 0 };	// write pointer in Rx data buffer
+//static uint32_t RxBuff_rp[FERSLIB_MAX_NCNC] = { 0 };	// read pointer in Rx data buffer
+//static uint32_t RxBuff_wp[FERSLIB_MAX_NCNC] = { 0 };	// write pointer in Rx data buffer
 static int RxB_w[FERSLIB_MAX_NCNC] = { 0 };				// 0 or 1 (which is the buffer being written)
 static int RxB_r[FERSLIB_MAX_NCNC] = { 0 };				// 0 or 1 (which is the buffer being read)
 static int RxB_Nbytes[FERSLIB_MAX_NCNC][2] = { 0 };		// Number of bytes written in the buffer
@@ -498,6 +500,9 @@ int LLtdl_SendCommand(int cindex, int chain, int node, uint32_t cmd, uint32_t de
 		f_socket_cleanup();
 		return -1;
 	}
+	if (delay >= 100000)
+		Sleep(delay / 100000);
+
 	iResult = recv(sck, sendbuf, 4, 0);
 	if (iResult == f_socket_error) {
 		if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("Send Cmd, recv failed with error: %d\n", f_socket_errno);
@@ -658,6 +663,8 @@ static void* tdl_data_receiver(void *params) {
 	int nbrx, nbreq, res, empty=0;
 	int FlushBuffer = 0;
 	int WrReady = 1;
+	//static char* bpnt;
+	static uint32_t RxBuff_wp[FERSLIB_MAX_NCNC] = { 0 };	// write pointer in Rx data buffer
 	char *wpnt;
 	uint64_t ct, pt, tstart, tstop, tdata = 0;
 	fd_set socks;
@@ -676,17 +683,12 @@ static void* tdl_data_receiver(void *params) {
 	pt = ct;
 	while(1) {
 		ct = get_time();
-		lock(RxMutex[bindex]);
 		if (QuitThread[bindex]) break;
 		if (RxStatus[bindex] == RXSTATUS_IDLE) {
+			lock(RxMutex[bindex]);
 			if ((FERS_ReadoutStatus == ROSTATUS_RUNNING) && empty) {  // start of run
-				// ReadData Stuff
-
-				ReadData_Init[bindex] = 1;
-	 			//RdReady[bindex] = 0;
-				//Nbr[bindex] = 0;
 				// Clear Buffers
-				RxBuff_rp[bindex] = 0;
+				ReadData_Init[bindex] = 1;
 				RxBuff_wp[bindex] = 0;
 				RxB_r[bindex] = 0;
 				RxB_w[bindex] = 0;
@@ -704,6 +706,7 @@ static void* tdl_data_receiver(void *params) {
 					strcpy(st, asctime(gmtime(&ss)));
 					st[strlen(st) - 1] = 0;
 					fprintf(Dump[bindex], "\nRUN_STARTED at %s\n", st);
+					if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[INFO][BRD %02d] Run Started\n", bindex);
 					fflush(Dump[bindex]);
 				}
 				RxStatus[bindex] = RXSTATUS_RUNNING;
@@ -723,21 +726,22 @@ static void* tdl_data_receiver(void *params) {
 					}
 					if (res == 0) empty = 1;
 					else nbrx = recv(FERS_DataSocket[bindex], RxBuff[bindex][0], RX_BUFF_SIZE, 0);
-					if (!empty && (DebugLogs & DBLOG_LL_MSGDUMP)) {
-						fprintf(Dump[bindex], "Reading old data...byte read=%d - Rx:%d, RO:%d\n", nbrx, RxStatus[bindex], FERS_ReadoutStatus);
-						fflush(Dump[bindex]);
-					}
+					if (!empty && (DebugLogs & DBLOG_LL_MSGDUMP)) fprintf(Dump[bindex], "Reading old data...\n");
 				}
 				unlock(RxMutex[bindex]);
 				Sleep(10);
 				continue;
 			}
+			unlock(RxMutex[bindex]);
 		}
 
 		if ((RxStatus[bindex] == RXSTATUS_RUNNING) && (FERS_ReadoutStatus != ROSTATUS_RUNNING)) {  // stop of run 
+			lock(RxMutex[bindex]);
 			tstop = ct;
 			RxStatus[bindex] = RXSTATUS_EMPTYING;
-			if (DebugLogs & DBLOG_LL_MSGDUMP) fprintf(Dump[bindex], "Board Stopped. Emptying data (T=%.3f) - Rx:%d, RO:%d\n", 0.001 * (tstop - tstart), RxStatus[bindex], FERS_ReadoutStatus);
+			if (DebugLogs & DBLOG_LL_MSGDUMP) fprintf(Dump[bindex], "Board Stopped. Emptying data (T=%.3f)\n", 0.001 * (tstop - tstart));
+			if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[INFO][BRD %02d] Stop Command issued (T=%.3f)\n", bindex, 0.001 * (tstop - tstart));
+			unlock(RxMutex[bindex]);
 		}
 
 		if (RxStatus[bindex] == RXSTATUS_EMPTYING) {
@@ -745,31 +749,34 @@ static void* tdl_data_receiver(void *params) {
 			//  - flush command 
 			//  - there is no data for more than NODATA_TIMEOUT
 			//  - STOP_TIMEOUT after the stop to the boards
+			lock(RxMutex[bindex]);
 			if ((FERS_ReadoutStatus == ROSTATUS_FLUSHING) || ((ct - tdata) > NODATA_TIMEOUT) || ((ct - tstop) > STOP_TIMEOUT)) {  
 				RxStatus[bindex] = RXSTATUS_IDLE;
 				lock(FERS_RoMutex);
 				if (FERS_RunningCnt > 0) FERS_RunningCnt--;
 				unlock(FERS_RoMutex);
-				if (DebugLogs & DBLOG_LL_MSGDUMP) fprintf(Dump[bindex], "Run stopped (T=%.3f) - Rx:%d, RO:%d\n", 0.001 * (ct - tstart), RxStatus[bindex], FERS_ReadoutStatus);
+				if (DebugLogs & DBLOG_LL_MSGDUMP) fprintf(Dump[bindex], "Run stopped (T=%.3f)\n", 0.001 * (ct - tstart));
+				if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[INFO][BRD %02d] RX Thread is now IDLE. (T=%.3f)\n", bindex, 0.001 * (ct - tstart));
 				empty = 0;
 				unlock(RxMutex[bindex]);
 				continue;
 			}
+			unlock(RxMutex[bindex]);
 		}
 
 		if (!WrReady) {  // end of current buff reached => switch to the other buffer (if available for writing)
+			lock(RxMutex[bindex]);
 			if (RxB_Nbytes[bindex][RxB_w[bindex]] > 0) {  // the buffer is not empty (being used for reading) => retry later
 				unlock(RxMutex[bindex]);
 				Sleep(1);
 				continue;
 			}
+			unlock(RxMutex[bindex]);
 			WrReady = 1;
 		} 
 
 		wpnt = RxBuff[bindex][RxB_w[bindex]] + RxBuff_wp[bindex];
 		nbreq = RX_BUFF_SIZE - RxBuff_wp[bindex];  // try to read enough bytes to fill the buffer
-		unlock(RxMutex[bindex]);
-
 		FD_ZERO(&socks); 
 		FD_SET((int)FERS_DataSocket[bindex], &socks);
 		res = select((int)FERS_DataSocket[bindex] + 1, &socks, NULL, NULL, &timeout);
@@ -793,7 +800,19 @@ static void* tdl_data_receiver(void *params) {
 		}
 		tdata = ct;
 
-		lock(RxMutex[bindex]);
+#if (THROUGHPUT_METER == 1)
+		// Rate Meter: print raw data throughput (RxBuff_wp is not updated, thus the data consumer doesn't see any data to process)
+		static uint64_t totnb = 0, lt = ct, l0 = ct;
+		totnb += nbrx;
+		if ((ct - lt) > 1000) {
+			printf("%6.1f s: %10.6f MB/s\n", float(ct - l0) / 1000, float(totnb) / (ct - lt) / 1000);
+			totnb = 0;
+			lt = ct;
+		}
+		unlock(RxMutex[bindex]);
+		continue;
+#endif
+
 		RxBuff_wp[bindex] += nbrx;
 		if ((ct - pt) > 10) {  // every 10 ms, check if the data consumer is waiting for data or if the thread has to quit
 			if (QuitThread[bindex]) break;  
@@ -802,9 +821,11 @@ static void* tdl_data_receiver(void *params) {
 		}
 
 		if ((RxBuff_wp[bindex] == RX_BUFF_SIZE) || FlushBuffer) {  // the current buffer is full or must be flushed
+			lock(RxMutex[bindex]);
 			RxB_Nbytes[bindex][RxB_w[bindex]] = RxBuff_wp[bindex];
 			RxB_w[bindex] ^= 1;  // switch to the other buffer
 			RxBuff_wp[bindex] = 0;
+			unlock(RxMutex[bindex]); 
 			WrReady = 0;
 			FlushBuffer = 0;
 		}
@@ -816,7 +837,6 @@ static void* tdl_data_receiver(void *params) {
 			}
 			//fflush(Dump[bindex]);
 		}
-		unlock(RxMutex[bindex]);
 	}
 
 	RxStatus[bindex] = RXSTATUS_OFF;
@@ -834,12 +854,15 @@ static void* tdl_data_receiver(void *params) {
 // --------------------------------------------------------------------------------------------------------- 
 int LLtdl_ReadData(int bindex, char *buff, int maxsize, int *nb) {
 	char *rpnt;
+	static char* bpnt;
 	static int RdReady[FERSLIB_MAX_NBRD] = { 0 };
 	static int Nbr[FERSLIB_MAX_NBRD] = { 0 };
+	static int Rd_pnt[FERSLIB_MAX_NBRD] = { 0 };	// read pointer in Rx data buffer
 
 	*nb = 0;
-	if (trylock(RxMutex[bindex]) != 0) return 0;
+	//if (trylock(RxMutex[bindex]) != 0) return 0;
 	if (ReadData_Init[bindex]) {
+		while (trylock(RxMutex[bindex]));
 		RdReady[bindex] = 0;
 		Nbr[bindex] = 0;
 		ReadData_Init[bindex] = 0;
@@ -848,11 +871,11 @@ int LLtdl_ReadData(int bindex, char *buff, int maxsize, int *nb) {
 	} 
 
 	if ((RxStatus[bindex] != RXSTATUS_RUNNING) && (RxStatus[bindex] != RXSTATUS_EMPTYING)) {
-		unlock(RxMutex[bindex]);
 		return 2;
 	}
 
 	if (!RdReady[bindex]) {
+		if (trylock(RxMutex[bindex]) != 0) return 0;
 		if (RxB_Nbytes[bindex][RxB_r[bindex]] == 0) {  // The buffer is empty => assert "WaitingForData" and return 0 bytes to the caller
 			WaitingForData[bindex] = 1;
 			unlock(RxMutex[bindex]);
@@ -860,33 +883,38 @@ int LLtdl_ReadData(int bindex, char *buff, int maxsize, int *nb) {
 		}
 		RdReady[bindex] = 1;
 		Nbr[bindex] = RxB_Nbytes[bindex][RxB_r[bindex]];  // Get the num of bytes available for reading in the buffer
+		bpnt = RxBuff[bindex][RxB_r[bindex]];
+		Rd_pnt[bindex] = 0;
 		WaitingForData[bindex] = 0;
+		unlock(RxMutex[bindex]);
 	}
 
-	rpnt = RxBuff[bindex][RxB_r[bindex]] + RxBuff_rp[bindex];
-	*nb = Nbr[bindex] - RxBuff_rp[bindex];  // num of bytes currently available for reading in RxBuff
-	if (*nb > maxsize) *nb = maxsize;
+	rpnt = bpnt + Rd_pnt[bindex];
+	*nb = Nbr[bindex] - Rd_pnt[bindex];  // num of bytes currently available for reading in RxBuff
+	if (*nb > maxsize) 
+		*nb = maxsize;
 	if (*nb > 0) {
 		memcpy(buff, rpnt, *nb);
-		RxBuff_rp[bindex] += *nb;
+		Rd_pnt[bindex] += *nb;
 
-		//if (DebugLogs & DBLOG_LL_READDUMP) {
-		//	for (int i = 0; i < *nb; i += 4) {
-		//		uint32_t* d32 = (uint32_t*)(rpnt + i);
-		//		fprintf(DumpRead[bindex], "%08X\n", *d32);
-		//	}
-		//	fprintf(DumpRead[bindex], "\n");
-		//	//fflush(DumpRead[bindex]);
-		//}
+		if (DebugLogs & DBLOG_LL_READDUMP) {
+			for (int i = 0; i < *nb; i += 4) {
+				uint32_t* d32 = (uint32_t*)(rpnt + i);
+				fprintf(DumpRead[bindex], "%08X\n", *d32);
+			}
+			fprintf(DumpRead[bindex], "\n");
+			// fflush(DumpRead[bindex]);
+		}
 	}
 
-	if (RxBuff_rp[bindex] == Nbr[bindex]) {  // end of current buff reached => switch to other buffer 
+	if (Rd_pnt[bindex] == Nbr[bindex]) {  // end of current buff reached => switch to other buffer 
+		while (trylock(RxMutex[bindex]));
 		RxB_Nbytes[bindex][RxB_r[bindex]] = 0;  
 		RxB_r[bindex] ^= 1;
-		RxBuff_rp[bindex] = 0;
+		//RxBuff_rp[bindex] = 0;
 		RdReady[bindex] = 0;
+		unlock(RxMutex[bindex]);
 	}
-	unlock(RxMutex[bindex]);
 	return 1;
 }
 
@@ -964,6 +992,18 @@ int LLtdl_OpenDevice(char *board_ip_addr, int cindex) {
 		sprintf(filename, "ll_readData_log_%d.txt", cindex);
 		DumpRead[cindex] = fopen(filename, "w");
 	}
+
+	// Set timeout on receive
+#ifdef _WIN32	
+	DWORD timeout = FERS_CONNECT_TIMEOUT * 1000;
+	setsockopt(FERS_CtrlSocket[cindex], SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof timeout);
+#else
+	struct timeval tv;
+	tv.tv_sec = FERS_CONNECT_TIMEOUT;
+	tv.tv_usec = 0;
+	setsockopt(FERS_CtrlSocket[cindex], SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof tv);
+#endif
+
 	thread_create(tdl_data_receiver, &cindex, &ThreadID[cindex]);
 	started = 0;
 	while(!started) {
@@ -975,61 +1015,91 @@ int LLtdl_OpenDevice(char *board_ip_addr, int cindex) {
 	for(int chain=0; chain < FERSLIB_MAX_NTDL; chain++) {
 		FERS_TDL_ChainInfo_t tdl_info;
 		ret |= LLtdl_GetChainInfo(cindex, chain, &tdl_info);
+		if (ret != 0) return ret;
 		if (tdl_info.Status <= 2) // Not enumerated before
 			TDL_NumNodes[cindex][chain] = 0;
 		else
 			TDL_NumNodes[cindex][chain] = tdl_info.BoardCount;
 	}
+	// Remove timeout on receive
+#ifdef WIN32
+	timeout = 0;
+	setsockopt(FERS_CtrlSocket[cindex], SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof timeout);
+#else
+	tv.tv_sec = 0;
+	tv.tv_usec = 0;
+	setsockopt(FERS_CtrlSocket[cindex], SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof tv);
+#endif
 	return 0;
 }
 
 // --------------------------------------------------------------------------------------------------------- 
 // Description: Initialize the TDlink chains (enumerate chains, the send sync commands)
 // Inputs:		board_ip_addr = IP address of the concentrator
+//				DelayAdjust = individual fiber delay adjust
 // Outputs:		cindex = concentrator index
 // Return:		0=OK, negative number = error code
 // --------------------------------------------------------------------------------------------------------- 
-int LLtdl_InitTDLchains(int cindex) {
+int LLtdl_InitTDLchains(int cindex, float DelayAdjust[FERSLIB_MAX_NTDL][FERSLIB_MAX_NNODES]) {
 	int ret = 0, chain;
-	uint32_t delay = 1000;  // CTIN: set delay as a function of the number of boards in the chain
+	float max_delay = 0, node_delay, flength, del_sum;
+	uint32_t i;
 	bool not_enumerated_before = false;
+
+	if (DelayAdjust != NULL) {
+		memcpy(FiberDelayAdjust[cindex], DelayAdjust, sizeof(float) * FERSLIB_MAX_NTDL * FERSLIB_MAX_NNODES);
+		InitDelayAdjust[cindex] = 1;
+	}
+
 	for (chain = 0; chain < FERSLIB_MAX_NTDL; chain++) {
 		FERS_TDL_ChainInfo_t tdl_info;
 		ret |= LLtdl_GetChainInfo(cindex, chain, &tdl_info);
 		if (tdl_info.Status > 0) {
 			if (tdl_info.Status <= 2) {
 				not_enumerated_before = true;
-			}
-			else {
+			} else {
 				TDL_NumNodes[cindex][chain] = tdl_info.BoardCount;
 			}
-		}
-		else {
+		} else {
 			TDL_NumNodes[cindex][chain] = 0;
 		}
-
 	}
 	//reset all chains if not enumerated before
 	if (not_enumerated_before == true)
 		LLtdl_ResetChains(cindex);
-		
+
+	// Find maximum delay 
+	for (chain = 0; chain < FERSLIB_MAX_NTDL; chain++) {
+		del_sum = 0;
+		for (i = 0; i < TDL_NumNodes[cindex][chain]; i++) {
+			flength = (InitDelayAdjust[cindex] || (DelayAdjust[chain][i] == 0)) ? DEFAULT_FIBER_LENGTH : DelayAdjust[chain][i];
+			del_sum += FIBER_DELAY(flength);
+		}
+		max_delay = max(del_sum, max_delay);
+	}
+	max_delay = (float)ceil(max_delay);
+
 	for(chain=0; chain < FERSLIB_MAX_NTDL; chain++) {
 		ret = 0;
-		if (not_enumerated_before == true) // Not enumerated before
-		{
+		if (not_enumerated_before == true) { // Not enumerated before
 			ret |= LLtdl_EnumChain(cindex, chain, &TDL_NumNodes[cindex][chain]);
 		}
 		if (ret == -15) {
 			TDL_NumNodes[cindex][chain] = 0;
-		}
-		else { 
+		} else { 
 			// Set the propagation delay between the nodes on the optical chain.
-			for (uint32_t i = 0; i < TDL_NumNodes[cindex][chain]; i++) {
-				// Delay ~= 22 + 0.781 * length (in m)
-				const int DELAY_COMP = 22;  // this is the correct delay compensation for a fiber of 30 cm
-				//const int DELAY_COMP = 53;  // this is the correct delay compensation for a fiber of 40 m
-				uint32_t delay = DELAY_COMP * (TDL_NumNodes[cindex][chain] - i - 1);
-				uint32_t data = (chain << 24) | (i << 16) | delay;
+			//for (uint32_t i = 0; i < TDL_NumNodes[cindex][chain]; i++) {
+			//	// Delay ~= 22 + 0.781 * length (in m)
+			//	const int DELAY_COMP = 22;  // this is the correct delay compensation for a fiber of 30 cm
+			//	//const int DELAY_COMP = 53;  // this is the correct delay compensation for a fiber of 40 m
+			//	uint32_t prop_delay = DELAY_COMP * (TDL_NumNodes[cindex][chain] - i - 1);
+			//	uint32_t data = (chain << 24) | (i << 16) | prop_delay;
+			node_delay = max_delay;
+			for (i=0; i< TDL_NumNodes[cindex][chain]; ++i) {
+				flength = (InitDelayAdjust[cindex] || (DelayAdjust[chain][i] == 0)) ? DEFAULT_FIBER_LENGTH : DelayAdjust[chain][i];
+				node_delay -= FIBER_DELAY(flength);
+				if (node_delay < 0) node_delay = 0;
+				uint32_t data = (chain << 24) | (i < 16) | (uint32_t)node_delay;
 				ret = LLtdl_CncWriteRegister(cindex, VR_SYNC_DELAY, data);
 				if (ret < 0) return FERSLIB_ERR_COMMUNICATION;
 			}
@@ -1038,15 +1108,16 @@ int LLtdl_InitTDLchains(int cindex) {
 			if (ret) return FERSLIB_ERR_COMMUNICATION;
 		}
 	}
-	uint32_t cmd_delay = 1000;  // CTIN: set delay as a function of the number of boards in the chain (?)
+
+	//uint32_t cmd_delay = TDL_COMMAND_DELAY;  // CTIN: set delay as a function of the number of boards in the chain (?)
 	ret = 0;
-	ret |= LLtdl_SendCommandBroadcast(cindex, CMD_TDL_SYNC, cmd_delay);
-	ret |= LLtdl_SendCommandBroadcast(cindex, CMD_TDL_SYNC, cmd_delay); // CTIN: may need 2 sync commands (not clear why...)
-	Sleep(300);  // CTIN: do you need this ???
-	ret |= LLtdl_SendCommandBroadcast(cindex, CMD_TIME_RESET, cmd_delay);
-	ret |= LLtdl_SendCommandBroadcast(cindex, CMD_TIME_RESET, cmd_delay);
-	ret |= LLtdl_SendCommandBroadcast(cindex, CMD_RES_PTRG, cmd_delay);
-	ret |= LLtdl_SendCommandBroadcast(cindex, CMD_RES_PTRG, cmd_delay);
+	ret |= LLtdl_SendCommandBroadcast(cindex, CMD_TDL_SYNC, TDL_COMMAND_DELAY);
+	//ret |= LLtdl_SendCommandBroadcast(cindex, CMD_TDL_SYNC, cmd_delay); // CTIN: may need 2 sync commands (not clear why...)
+	//Sleep(300);  // CTIN: do you need this ???
+	ret |= LLtdl_SendCommandBroadcast(cindex, CMD_TIME_RESET, TDL_COMMAND_DELAY);
+	//ret |= LLtdl_SendCommandBroadcast(cindex, CMD_TIME_RESET, cmd_delay);
+	ret |= LLtdl_SendCommandBroadcast(cindex, CMD_RES_PTRG, TDL_COMMAND_DELAY);
+	//ret |= LLtdl_SendCommandBroadcast(cindex, CMD_RES_PTRG, cmd_delay);
 	if (ret) return FERSLIB_ERR_COMMUNICATION;
 	if (not_enumerated_before) {
 		ret = LLtdl_SyncChains(cindex);
@@ -1086,16 +1157,9 @@ int LLtdl_CloseDevice(int cindex)
 	unlock(RxMutex[cindex]);
 
 	shutdown(FERS_CtrlSocket[cindex], SHUT_SEND);
-#ifndef _WIN32
-	unsigned char data;
-	while (recv(FERS_CtrlSocket[cindex], &data, sizeof(data), 0) != 0);
-#endif
 	if (FERS_CtrlSocket[cindex] != f_socket_invalid) f_socket_close(FERS_CtrlSocket[cindex]);
 
 	shutdown(FERS_DataSocket[cindex], SHUT_SEND);
-#ifndef _WIN32
-	while (recv(FERS_DataSocket[cindex], &data, sizeof(data), 0) != 0);
-#endif
 	if (FERS_DataSocket[cindex] != f_socket_invalid) f_socket_close(FERS_DataSocket[cindex]);
 
 	f_socket_cleanup();

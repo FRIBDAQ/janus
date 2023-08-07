@@ -37,8 +37,6 @@ uint8_t datatype = 0x0;	// XXTA XCHL	C=Counting T=ToT A=ToA (timestamp) H=HG L=L
 uint8_t fnumSW = 0;
 uint8_t snumSW = 0;
 uint8_t tnumSW = 0;
-uint16_t cacchio = 0;
-int WriteHeader = 1;
 char dtq_mode_ch[5][15] = { " ", "Spectroscopy", "Timing", "Spect_Timing", "Counting" };
 
 
@@ -91,7 +89,6 @@ int OpenOutputFiles(int RunNumber)
 		CreateOutFileName("sync", RunNumber, 0, filename);
 		of_sync = fopen(filename, "w");
 	}
-	WriteHeader = 1;
 	return 0;
 }
 
@@ -131,71 +128,89 @@ int SaveRawData(uint32_t *buff, int nw)
 	return 0;
 }
 
+// ****************************************************
+// Write Header of List Output Files
+// ****************************************************
+int WriteListfileHeader() {
+	// Get software and data file version	
+	sscanf(SW_RELEASE_NUM, "%" SCNu8 ".%" SCNu8 ".%" SCNu8, &fnumSW, &snumSW, &tnumSW);
+	sscanf(FILE_LIST_VER, "%" SCNu8 ".%" SCNu8, &fnumFVer, &snumFVer);
+	uint16_t brdVer = 0;
+#ifdef FERS_5203	
+	//sscanf("52.03", "%" SCNu8 ".%" SCNu8, &fbrdVer, &sbrdVer);
+	sscanf("5203", "%" SCNu16, &brdVer);
+#else
+	sscanf("5202", "%" SCNu16, &brdVer);
+#endif	
+
+	int16_t rn = (int16_t)RunVars.RunNumber;
+	// Write headers, common for all the list files
+	type_file = WDcfg.AcquisitionMode & 0x0F;  // dtq & 0x0F;
+	if (of_list_b != NULL) {
+		float tmpLSB = float(TOA_LSB_ns);
+		uint16_t enbin = WDcfg.EHistoNbin;
+		//uint32_t tmask = WDcfg.ChEnableMask1[brd];	// see below
+		uint8_t header_size = 
+			sizeof(header_size) + 5 * sizeof(fnumFVer) + sizeof(brdVer) + sizeof(rn) + sizeof(type_file) +
+			sizeof(enbin) + sizeof(WDcfg.OutFileUnit) + sizeof(tmpLSB) + sizeof(Stats.start_time);
+
+		//fwrite(&header_size, sizeof(header_size), 1, of_list_b);
+		fwrite(&fnumFVer, sizeof(fnumFVer), 1, of_list_b);
+		fwrite(&snumFVer, sizeof(snumFVer), 1, of_list_b);
+		fwrite(&fnumSW, sizeof(fnumSW), 1, of_list_b);
+		fwrite(&snumSW, sizeof(snumSW), 1, of_list_b);
+		fwrite(&tnumSW, sizeof(tnumSW), 1, of_list_b);
+		fwrite(&brdVer, sizeof(brdVer), 1, of_list_b);	// next File Format
+		fwrite(&rn, sizeof(rn), 1, of_list_b);
+		fwrite(&type_file, sizeof(type_file), 1, of_list_b); // Acquisition Mode
+		fwrite(&enbin, sizeof(enbin), 1, of_list_b);
+		fwrite(&WDcfg.OutFileUnit, sizeof(WDcfg.OutFileUnit), 1, of_list_b);	// Type of unit used for Time. 0 LSB, 1 ns
+		fwrite(&tmpLSB, sizeof(tmpLSB), 1, of_list_b);	// Keep it as float for homogenity with A5203, the value of the LSB of which is not fixed
+		//fwrite(&tmask, sizeof(tmask), 1, of_list_b);	// uncomment if we want the Channel Mask
+		fwrite(&Stats.start_time, sizeof(Stats.start_time), 1, of_list_b);
+	}
+	if (of_list_a != NULL) {
+		char unit[10];
+		if (WDcfg.OutFileUnit) strcpy(unit, "ns");
+		else strcpy(unit, "LSB");
+		fprintf(of_list_a, "//************************************************\n");
+		fprintf(of_list_a, "// File Format Version %s\n", FILE_LIST_VER);
+		//fprintf(of_list_a, "// Janus _%" PRIu16 " Release % s\n", brdVer, SW_RELEASE_NUM);   // For next File Format
+		fprintf(of_list_a, "// Janus Release %s\n", SW_RELEASE_NUM);
+		fprintf(of_list_a, "// Acquisition Mode: %s\n", dtq_mode_ch[type_file]);
+		fprintf(of_list_a, "// Energy Histogram Channels: %d\n", WDcfg.EHistoNbin);
+		fprintf(of_list_a, "// ToA/ToT LSB: %.1f ns\n", TOA_LSB_ns);
+		char mytime[100];
+		//strcpy(mytime, ctime(&Stats.time_of_start));
+		strcpy(mytime, asctime(gmtime(&Stats.time_of_start)));
+		mytime[strlen(mytime) - 1] = 0;
+		//fprintf(of_list_a, "// Run%d start time: %s UTC\n", rn, mytime);	// For next File Format
+		fprintf(of_list_a, "// Run start time: %s UTC\n", mytime);
+		fprintf(of_list_a, "//************************************************\n");
+
+		int dtqh = WDcfg.AcquisitionMode & 0x0F;
+		if (dtqh == DTQ_SPECT) {
+			fprintf(of_list_a, "       Tstamp_us        TrgID   Brd  Ch       LG       HG\n");
+		} else if (dtqh == DTQ_TSPECT) {
+			if (WDcfg.EnableToT) fprintf(of_list_a, "       Tstamp_us        TrgID   Brd  Ch       LG       HG   ToA_%s   ToT_%s\n", unit, unit);
+			else fprintf(of_list_a, "       Tstamp_us        TrgID   Brd  Ch       LG       HG   ToA_%s\n", unit);
+		} else if (dtqh == DTQ_TIMING) {
+			if (WDcfg.EnableToT) fprintf(of_list_a, "       Tstamp_us        Brd  Ch   ToA_%s   ToT_%s\n", unit, unit);
+			else fprintf(of_list_a, "       Tstamp_us        Brd  Ch   ToA_%s\n", unit);
+		} else if (dtqh == DTQ_COUNT) {
+			fprintf(of_list_a, "       Tstamp_us        TrgID   Brd  Ch          Cnt\n");
+		}
+	}
+	if (of_sync != NULL)
+		fprintf(of_sync, "Brd    Tstamp_us      TrgID \n");
+
+}
 
 // ****************************************************
 // Save List
 // ****************************************************
 int SaveList(int brd, double ts, uint64_t trgid, void *generic_ev, int dtq)
 {
-	// Get software and data file version	
-	sscanf(SW_RELEASE_NUM, "%" SCNu8 ".%" SCNu8 ".%" SCNu8, &fnumSW, &snumSW, &tnumSW);
-	sscanf(FILE_LIST_VER, "%" SCNu8 ".%" SCNu8, &fnumFVer, &snumFVer);
-
-	// Write headers, common for all the list files
-	if (WriteHeader) {
-		type_file = dtq & 0x0F;
-		if (of_list_b != NULL) {
-			float tmpLSB = float(TOA_LSB_ns);
-			uint16_t enbin = WDcfg.EHistoNbin;
-			//uint32_t tmask = WDcfg.ChEnableMask1[brd];	// see below
-			fwrite(&fnumFVer, sizeof(fnumFVer), 1, of_list_b);
-			fwrite(&snumFVer, sizeof(snumFVer), 1, of_list_b);
-			fwrite(&fnumSW, sizeof(fnumSW), 1, of_list_b);
-			fwrite(&snumSW, sizeof(snumSW), 1, of_list_b);
-			fwrite(&tnumSW, sizeof(tnumSW), 1, of_list_b);
-			fwrite(&type_file, sizeof(type_file), 1, of_list_b);
-			fwrite(&enbin, sizeof(enbin), 1, of_list_b);
-			fwrite(&WDcfg.OutFileUnit, sizeof(WDcfg.OutFileUnit), 1, of_list_b);	// Type of unit used for Time. 0 LSB, 1 ns
-			fwrite(&tmpLSB, sizeof(tmpLSB), 1, of_list_b);	// Keep it as float for homogenity with A5203, the value of the LSB of which is not fixed
-			//fwrite(&tmask, sizeof(tmask), 1, of_list_b);	// uncomment if we want the Channel Mask
-			fwrite(&Stats.start_time, sizeof(Stats.start_time), 1, of_list_b);
-		}		
-		if (of_list_a != NULL) {
-			char unit[10];
-			if (WDcfg.OutFileUnit) strcpy(unit, "ns");
-			else strcpy(unit, "LSB");
-			fprintf(of_list_a, "//************************************************\n");
-			fprintf(of_list_a, "// File Format Version %s\n", FILE_LIST_VER);
-			fprintf(of_list_a, "// Janus Release %s\n", SW_RELEASE_NUM);
-			fprintf(of_list_a, "// Acquisition Mode: %s\n", dtq_mode_ch[type_file]);
-			fprintf(of_list_a, "// Energy Histogram Channels: %d\n", WDcfg.EHistoNbin);
-			fprintf(of_list_a, "// ToA/ToT LSB: %.1f ns\n", TOA_LSB_ns);
-			char mytime[100];
-			//strcpy(mytime, ctime(&Stats.time_of_start));
-			strcpy(mytime, asctime(gmtime(&Stats.time_of_start)));
-			mytime[strlen(mytime) - 1] = 0;
-			fprintf(of_list_a, "// Run start time: %s UTC\n", mytime);
-			fprintf(of_list_a, "//************************************************\n");
-
-			int dtqh = dtq & 0xF;
-			if (dtqh == DTQ_SPECT) {
-				fprintf(of_list_a, "       Tstamp_us        TrgID   Brd  Ch       LG       HG\n");
-			} else if (dtqh == DTQ_TSPECT) {
-				if (WDcfg.EnableToT) fprintf(of_list_a, "       Tstamp_us        TrgID   Brd  Ch       LG       HG   ToA_%s   ToT_%s\n", unit, unit);
-				else fprintf(of_list_a, "       Tstamp_us        TrgID   Brd  Ch       LG       HG   ToA_%s\n", unit);
-			} else if (dtqh == DTQ_TIMING) {
-				if (WDcfg.EnableToT) fprintf(of_list_a, "       Tstamp_us        TrgID   Brd  Ch   ToA_%s   ToT_%s\n", unit, unit);
-				else fprintf(of_list_a, "       Tstamp_us        TrgID   Brd  Ch   ToA_%s\n", unit);
-			} else if (dtqh == DTQ_COUNT) {
-				fprintf(of_list_a, "       Tstamp_us        TrgID   Brd  Ch          Cnt\n");
-			}
-		}
-		if (of_sync != NULL) 
-			fprintf(of_sync, "Brd    Tstamp_us      TrgID \n");
-
-		WriteHeader = 0;
-	}
-
 	// ----------------------------------------------------------------------------------
 	// SPECT/SPECT_TIMING MODE
 	// ----------------------------------------------------------------------------------
@@ -257,7 +272,7 @@ int SaveList(int brd, double ts, uint64_t trgid, void *generic_ev, int dtq)
 					uint16_t tmp_nrgL = tmp_enL[i];
 					uint16_t tmp_nrgH = tmp_enH[i];
 					float tmpToA = float(ev->tstamp[i] * TOA_LSB_ns);
-					float tmpToT = float(ev->ToT[i] * TOA_LSB_ns);
+					float tmpToT = (tmpToA == 0) ? 0 : float(ev->ToT[i] * TOA_LSB_ns);  // don't write ToT if there is no ToA
 					fwrite(&i, sizeof(i), 1, of_list_b);	// Channel	
 					fwrite(&tmp_type, sizeof(tmp_type), 1, of_list_b);
 					if (data_t[i] & 0x01) fwrite(&tmp_nrgL, sizeof(ev->energyLG[i]), 1, of_list_b);
@@ -289,13 +304,11 @@ int SaveList(int brd, double ts, uint64_t trgid, void *generic_ev, int dtq)
 						if (ev->tstamp[i] > 0) {
 							if (WDcfg.OutFileUnit) fprintf(of_list_a, "%8.1f ", 0.5 * ev->tstamp[i]);
 							else fprintf(of_list_a, "%8d ", ev->tstamp[i]);
-						}
-						else fprintf(of_list_a, "       - ");
-						if (WDcfg.EnableToT && (ev->ToT[i] > 0)) {
+						} else fprintf(of_list_a, "       - ");
+						if (WDcfg.EnableToT && (ev->ToT[i] > 0) && (ev->tstamp[i] > 0)) {  // Don't write ToT if there is no ToA
 							if (WDcfg.OutFileUnit) fprintf(of_list_a, "%8.1f ", 0.5 * ev->ToT[i]);
 							else fprintf(of_list_a, "%8d ", ev->ToT[i]);
-						}
-						else fprintf(of_list_a, "       - ");
+						} else fprintf(of_list_a, "       - ");
 					}
 					fprintf(of_list_a, "\n");
 				}
@@ -383,7 +396,7 @@ int SaveList(int brd, double ts, uint64_t trgid, void *generic_ev, int dtq)
 			mydtype = (uint8_t*)malloc(ev->nhits * sizeof(uint8_t));
 			uint16_t size = sizeof(size) + sizeof(b8) + sizeof(ts) + sizeof(ev->nhits); // +sizeof(trgid); //trgid = 0 in timing mode
 			// DNIN: as in Spect, tstamp and ToT may not be in data simultaneously, or simply ToT is disabled.
-			// Size have to be computed hit-wise
+			// Size must to be computed hit-wise
 			size += ev->nhits * (sizeof(ev->channel[i]) + sizeof(datatype));
 			for (int chit = 0; chit < ev->nhits; ++chit) {
 				datatype = 0x0;
@@ -428,7 +441,7 @@ int SaveList(int brd, double ts, uint64_t trgid, void *generic_ev, int dtq)
 		if (of_list_a != NULL) {
 			int evg = 1;
 			for(i=0; i<ev->nhits; i++) {
-				if (evg) fprintf(of_list_a, "%16.3lf %12" PRIu64 " ", ts, trgid);
+				if (evg) fprintf(of_list_a, "%16.3lf" PRIu64 " ", ts);  //fprintf(of_list_a, "%16.3lf %12" PRIu64 " ", ts, trgid);
 				else fprintf(of_list_a, "                              ");
 				evg = 0;
 				fprintf(of_list_a, "   %02d  %02d ", brd, ev->channel[i]);
@@ -544,7 +557,7 @@ int SaveHistos()
 }
 
 /******************************************************
-* Save Run Infp
+* Save Run Info
 ******************************************************/
 int SaveRunInfo()
 {
@@ -572,26 +585,27 @@ int SaveRunInfo()
 	t = localtime(&tt);
 	strftime(str, sizeof(str) - 1, "%d/%m/%Y %H:%M", t);
 	fprintf(iof, "Stop Time:  %s\n", str);
-	fprintf(iof, "Elapsed time = %.2f s\n", Stats.current_tstamp_us[0] / 1e6); //     RO_Stats.CurrentTimeStamp_us / 1e6);
+	fprintf(iof, "Elapsed time = %.3f s\n", Stats.current_tstamp_us[0] / 1e6); //     RO_Stats.CurrentTimeStamp_us / 1e6);
 	fprintf(iof, "********************************************************************* \n");
 	fprintf(iof, "\n\n********************************************************************* \n");
 	fprintf(iof, "Setup:\n");
 	fprintf(iof, "********************************************************************* \n");
 	fprintf(iof, "Software Version: Janus %s\n", SW_RELEASE_NUM);
 	fprintf(iof, "Output data format version: %s\n", FILE_LIST_VER);
+	FERS_BoardInfo_t BoardInfo;
 	for (b = 0; b < WDcfg.NumBrd; b++) {
-		rr = FERS_ReadRegister(handle[b], a_fw_rev, &FPGArev);  // Read FW revision
-		rr |= FERS_ReadRegister(handle[b], 0xF0000000, &MICrev);  // Read FW revision
-		rr |= FERS_ReadRegister(handle[b], a_pid, &pid);  // Read PID
+		rr = FERS_ReadBoardInfo(handle[b], &BoardInfo); // Read Board Info
 		if (rr != 0)
 			return -1;
 		char fver[100];
-		if (FPGArev == 0) sprintf(fver, "BootLoader");
-		else sprintf(fver, "%d.%d (Build = %04X)", (FPGArev >> 8) & 0xFF, (FPGArev) & 0xFF, (FPGArev >> 16) & 0xFFFF);
-		fprintf(iof, "Board %d:\n", b);
+		//if (FPGArev == 0) sprintf(fver, "BootLoader"); DNIN: mixed with an old version checker with register.
+		//else 
+		sprintf(fver, "%d.%d (Build = %04X)", (BoardInfo.FPGA_FWrev >> 8) & 0xFF, (BoardInfo.FPGA_FWrev) & 0xFF, (BoardInfo.FPGA_FWrev >> 16) & 0xFFFF);
+		fprintf(iof, "Board %d:", b);
+		fprintf(iof, "\tModel = %s\n", BoardInfo.ModelName);
+		fprintf(iof, "\t\tPID = %" PRIu32 "\n", BoardInfo.pid);
 		fprintf(iof, "\t\tFPGA FW revision = %s\n", fver);
-		fprintf(iof, "\t\tuC FW revision = %08X\n", MICrev);
-		fprintf(iof, "\t\tPID = %d\n", pid);
+		fprintf(iof, "\t\tuC FW revision = %08X\n", BoardInfo.uC_FWrev);
 	}
 	// CTIN: save event statistics
 	/*
@@ -608,10 +622,10 @@ int SaveRunInfo()
 		sprintf(fname, "%sJanus_Config_Run%d.txt", WDcfg.DataFilePath, RunVars.RunNumber);
 		cfg = fopen(fname, "r");
 		if (cfg == NULL) 
-			sprintf(fname, "Janus_Config.txt");
+			sprintf(fname, CONFIG_FILENAME);
 	}
 	else
-		sprintf(fname, "Janus_Config.txt");
+		sprintf(fname, CONFIG_FILENAME);
 
 	fprintf(iof, "\n\n********************************************************************* \n");
 	fprintf(iof, "Config file: %s\n", fname);

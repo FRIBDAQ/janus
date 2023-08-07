@@ -143,7 +143,7 @@ void HVControlPanel(int handle)
 			printf("[t] Data Type    %d              \n", DataType);
 			printf("[r] Read HV Reg  %d (0x%08X)     \n", Rdata, Rdata);
 			printf("[w] Write HV Reg %d (0x%08X)     \n", Wdata, Wdata);
-			printf("[q] quit\n\n");
+			printf("[q] Return\n\n");
 			printf("Vmon = %.3f V              \n", vmon);
 			printf("Imon = %.3f mA             \n", imon);
 			printf("OvC = %d, OvV = %d         \n", OvC, OvV);
@@ -284,7 +284,7 @@ void CitirocControlPanel(int handle)
 void ManualController(int handle) 
 {
 	int c=0, i, print_menu=1, pagenum;
-	static uint32_t base=0x0100, ch=0, offs=0, addr, rdata=0, wdata=0, cmd=0, status;
+	static uint32_t base=0x0100, ch=0, offs=0, addr, rdata=0, wdata=0, cmd=0;
 	static uint32_t i2c_reg_addr=0, i2c_reg_rdata=0, i2c_reg_wdata=0, i2c_dev_index=0;
 	uint8_t fpage[FLASH_PAGE_SIZE];
 	uint32_t *buff = NULL;
@@ -361,7 +361,6 @@ void ManualController(int handle)
 					}
 					if (c == 'l') {
 						char line[500];
-						int s = 0;
 						int PLLindex = 0, ret = 0;
 						char fname[200] = "D:\\work\\a5203\\PLL\\Si5394_Reg.txt";
 						uint32_t addr, data_r, devaddr;
@@ -484,21 +483,21 @@ void ManualController(int handle)
 		if (print_menu) {
 			ClearScreen();
 			printf("Board n. %d\n", FERS_INDEX(handle));
-			printf("[b] change base      (%04X)\n", base);
-			printf("[c] change channel   (%02d)\n", ch);
-			printf("[+] next channel\n");
-			printf("[-] prev channel\n");
-			printf("[a] set address      (%08X)\n", addr);
-			printf("[r] read reg         (%08X)\n", rdata);
-			printf("[w] write reg        (%08X)\n", wdata);
-			printf("[s] send command     (%02X)\n", cmd);
-			printf("[i] i2c R/W reg\n");
-			printf("[R] read flash page\n");
-			printf("[W] write flash page\n");
+			printf("[b] Change base      (%04X)\n", base);
+			printf("[c] Change channel   (%02d)\n", ch);
+			printf("[+] Next channel\n");
+			printf("[-] Prev channel\n");
+			printf("[a] Set address      (%08X)\n", addr);
+			printf("[r] Read reg         (%08X)\n", rdata);
+			printf("[w] Write reg        (%08X)\n", wdata);
+			printf("[s] Send command     (%02X)\n", cmd);
+			printf("[i] I2C R/W reg\n");
+			printf("[R] Read flash page\n");
+			printf("[W] Write flash page\n");
 #ifdef FERS_5202
 			printf("[p] read pedestal calibration\n");
 #endif
-			printf("[q] quit\n");
+			printf("[q] Return\n");
 			print_menu = 0;
 		}
 	}
@@ -586,7 +585,7 @@ int ScanThreshold(int handle)
 	uint16_t nstep = (RunVars.StaircaseCfg[SCPARAM_MAX] - RunVars.StaircaseCfg[SCPARAM_MIN])/RunVars.StaircaseCfg[SCPARAM_STEP] + 1;
 	float dwell_s = (float)RunVars.StaircaseCfg[SCPARAM_DWELL] / 1000;
 
-	Con_printf("CSm", "Scanning thresholds:\n");
+	Con_printf("CSm", "Scanning thresholds (press 'S' to stop):\n");
 	Con_printf("Sa", "%02dRunning Staircase (0 %%)", ACQSTATUS_STAIRCASE);
 
 	st = fopen(SCAN_THR_FILENAME, "w");
@@ -612,11 +611,12 @@ int ScanThreshold(int handle)
 		thr = start + s * step;
 		FERS_WriteRegister(handle, a_qd_coarse_thr, thr);	// Threshold for Q-discr
 		FERS_WriteRegister(handle, a_td_coarse_thr, thr);	// Threshold for T-discr
-		FERS_WriteRegister(handle, a_scbs_ctrl, 0x000);		// set citiroc index = 0
-		FERS_SendCommand(handle, CMD_CFG_ASIC);
 		FERS_WriteRegister(handle, a_scbs_ctrl, 0x200);		// set citiroc index = 1
 		FERS_SendCommand(handle, CMD_CFG_ASIC);
-		Sleep(500);
+		Sleep(20);
+		FERS_WriteRegister(handle, a_scbs_ctrl, 0x000);		// set citiroc index = 0
+		FERS_SendCommand(handle, CMD_CFG_ASIC);
+		Sleep(20);
 		FERS_WriteRegister(handle, a_trg_mask, 0x20); // enable periodic trigger
 		FERS_SendCommand(handle, CMD_RES_PTRG);  // Reset period trigger counter and count for dwell time
 		Sleep((int)(dwell_s/1000 + 200));  // wait for a complete dwell time (+ margin), then read counters
@@ -638,6 +638,10 @@ int ScanThreshold(int handle)
 			Con_printf("Sa", "%02dRunning Staircase (%d %%)", ACQSTATUS_STAIRCASE, perc);
 			fprintf(st, "%10.3e %10.3e ", Tor_cnt/dwell_s, Qor_cnt/dwell_s);
 			fprintf(st, "\n");
+		}
+		if (Con_kbhit()) {
+			if (Con_getch() == 'S')
+				break;
 		}
 	}
 
@@ -676,7 +680,7 @@ int ScanHoldDelay(int handle)
 		Stats.Hold_PHA_2Dmap[b][ch] = (uint32_t *)calloc(512 * nstep * 2, sizeof(uint32_t)); // DNIN: this works but the problem need to be further investigated(double the memory allocation)
 	}
 
-	Con_printf("CSm", "Scanning Hold Delay\n");
+	Con_printf("CSm", "Scanning Hold Delay (press 'S' to stop)\n");
 	Con_printf("Sa", "%02dRunning Hold-Scan (0 %%)", ACQSTATUS_HOLD_SCAN);
 
 	FERS_StopAcquisition(&hh, 1, STARTRUN_ASYNC);
@@ -684,6 +688,7 @@ int ScanHoldDelay(int handle)
 	FERS_WriteRegisterSlice(handle, a_acq_ctrl, 12, 13, 3); // 0=auto, 1=high gain, 2=low gain, 3=both
 	FERS_WriteRegister(handle, a_trg_mask, WDcfg.TriggerMask);  
 	FERS_WriteRegister(handle, a_run_mask, 0x01); 
+	FERS_SetCommonPedestal(handle, WDcfg.Pedestal);
 
 	for(si = 0; si < nstep; si++) {
 		delay = start + step * si;
@@ -711,15 +716,23 @@ int ScanHoldDelay(int handle)
 					Stats.Hold_PHA_2Dmap[b][ch][y*nstep + x]++;
 				}
 				ns++;
-			} else break;
+			} else {
+				break;
+			}
 		}
-		if (i < nmean) 
+		if (i < nmean) {
 			break;
+		}
 		Con_printf("CSm", "Hold-Delay = %3d ns (%2d %%)\n", delay, 100*(delay-start)/(stop-start));
 		Con_printf("Sa", "%02dRunning Hold-Scan (%d %%)", ACQSTATUS_HOLD_SCAN, 100*(delay-start)/(stop-start));
 		FERS_StopAcquisition(&hh, 1, STARTRUN_ASYNC);
 		Sleep(100);
 		FERS_FlushData(handle);
+		if (Con_kbhit()) {
+			if (Con_getch() == 'S')
+				break;
+		}
+
 	}
 	Con_printf("Sa", "%02dRunning Hold-Scan (100 %%)", ACQSTATUS_HOLD_SCAN);
 	Con_printf("Sa", "%02dDone\n", ACQSTATUS_HOLD_SCAN);

@@ -39,6 +39,8 @@
 #define a_tref_window      0x0100004C   //  Tref coincidence window (for list mode)
 #define a_dwell_time       0x01000050   //  Dwell time (periodic trigger) in clk cyclces. 0 => OFF
 #define a_list_size        0x01000054   //  Number of 32 bit words in a packet in timing mode (list mode)
+#define a_pck_maxcnt       0x01000064   //  Max num of packets transmitted to the TDL
+#define a_dprobe           0x01000068   //  Digital probes (signal inspector)
 #define a_channel_mask_0   0x01000100   //  Input Channel Mask (ch  0 to 31)
 #define a_channel_mask_1   0x01000104   //  Input Channel Mask (ch 32 to 63)
 #define a_citiroc_cfg      0x01000108   //  Citiroc common configuration bits
@@ -173,6 +175,8 @@
 #define DPROBE_DATA_VALID				6
 #define DPROBE_CLK_1024					7
 #define DPROBE_VAL_WINDOW				8
+#define DPROBE_T_OR						9
+#define DPROBE_Q_OR						10
 
 #define GAIN_SEL_AUTO					0
 #define GAIN_SEL_HIGH					1

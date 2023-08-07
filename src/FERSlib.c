@@ -13,9 +13,9 @@
 * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. The user relies on the
 * software, documentation and results solely at his own risk.
 ******************************************************************************/
-#include "MultiPlatform.h"
 
 #ifdef _WIN32
+#include "MultiPlatform.h"
 #include <Windows.h>
 #endif
 #include <stdlib.h>
@@ -26,6 +26,10 @@
 
 #include "FERS_LL.h"
 #include "FERSlib.h"
+
+#ifndef _WIN32
+#include "MultiPlatform.h"
+#endif
 
 #define EVBUFF_SIZE			(16*1024)
 
@@ -145,7 +149,9 @@ int FERS_OpenDevice(char *path, int *handle)
 		if (cnc_handle == -1) {
 			if (i == FERSLIB_MAX_NCNC) return FERSLIB_ERR_MAX_NBOARD_REACHED;
 			CncIndex = i;
-			if ((strstr(path, "eth") != NULL) || (strstr(path, "usb") != NULL)) {  // Ethernet or Usb
+			if (strstr(path, "eth") != NULL) {  // Ethernet
+				ret = LLtdl_OpenDevice(ss[1], CncIndex);
+			} else if (strstr(path, "usb") != NULL) {  // Usb
 				ret = LLtdl_OpenDevice(ss[1], CncIndex);
 			}
 			if (ret < 0) return FERSLIB_ERR_COMMUNICATION;
@@ -173,7 +179,7 @@ int FERS_OpenDevice(char *path, int *handle)
 			sscanf(ss[3], "%d", &chain);
 			sscanf(ss[4], "%d", &node);
 			if ((chain < 0) || (chain >= FERSLIB_MAX_NTDL) || (node < 0) || (node >= FERSLIB_MAX_NNODES)) return FERSLIB_ERR_INVALID_PATH;
-			ret = LLtdl_InitTDLchains(cindex);
+			ret = LLtdl_InitTDLchains(cindex, NULL);
 			if (ret < 0) return ret;
 			if (node >= (int)TDL_NumNodes[cindex][chain]) return FERSLIB_ERR_INVALID_PATH;
 			CncOpenHandles[cindex]++;
@@ -317,11 +323,12 @@ int FERS_Get_CncPath(char *dev_path, char *cnc_path)
 // --------------------------------------------------------------------------------------------------------- 
 // Description: Initialize the TDL chains 
 // Inputs:		handle = concentrator handle
+//				DelayAdjust = individual fiber delay adjust
 // Return:		0=OK, negative number = error code
 // --------------------------------------------------------------------------------------------------------- 
-int FERS_InitTDLchains(int handle) 
+int FERS_InitTDLchains(int handle, float DelayAdjust[FERSLIB_MAX_NTDL][FERSLIB_MAX_NNODES]) 
 {
-	return LLtdl_InitTDLchains(FERS_CNCINDEX(handle));
+	return LLtdl_InitTDLchains(FERS_CNCINDEX(handle), DelayAdjust);
 }
 
 // --------------------------------------------------------------------------------------------------------- 
@@ -387,7 +394,7 @@ int FERS_SendCommand(int handle, uint32_t cmd) {
 	if (cmd == CMD_ACQ_START) FERS_ReadoutStatus = ROSTATUS_RUNNING;
 	if (cmd == CMD_ACQ_STOP) FERS_ReadoutStatus = ROSTATUS_IDLE;
 	if (FERS_CONNECTIONTYPE(handle) == FERS_CONNECTIONTYPE_TDL)
-		return (LLtdl_SendCommand(FERS_CNCINDEX(handle), FERS_CHAIN(handle), FERS_NODE(handle), cmd, 100));
+		return (LLtdl_SendCommand(FERS_CNCINDEX(handle), FERS_CHAIN(handle), FERS_NODE(handle), cmd, TDL_COMMAND_DELAY));
 	else
 		return (FERS_WriteRegister(handle, a_commands, cmd));
 }
@@ -403,7 +410,7 @@ int FERS_SendCommandBroadcast(int *handle, uint32_t cmd, uint32_t delay) {
 	if (cmd == CMD_ACQ_START) FERS_ReadoutStatus = ROSTATUS_RUNNING;
 	if (cmd == CMD_ACQ_STOP) FERS_ReadoutStatus = ROSTATUS_IDLE;
 	if (FERS_CONNECTIONTYPE(*handle) == FERS_CONNECTIONTYPE_TDL) {
-		if (delay == 0) delay = 100;  // CTIN: manage auto delay mode (the minimum depends on the num of boards in the TDL chain)
+		if (delay == 0) delay = TDL_COMMAND_DELAY;  // CTIN: manage auto delay mode (the minimum depends on the num of boards in the TDL chain)
 		return (LLtdl_SendCommandBroadcast(FERS_CNCINDEX(handle[0]), cmd, delay));  // CTIN: manage multiple concentrators
 	}
 	else return FERSLIB_ERR_NOT_APPLICABLE;
@@ -725,18 +732,19 @@ int FERS_Get_FPGA_Temp(int handle, float *temp) {
 	return ret;
 }
 
+
 #ifdef FERS_5203
 // --------------------------------------------------------------------------------------------------------- 
-// Description: Get PIC board Temperature
+// Description: Get board Temperature (between PIC and FPGA)
 // Inputs:		handle = board handle 
 // Outputs:     temp = PIC board temperature (Celsius)
 // Return:		0=OK, negative number = error code
 // --------------------------------------------------------------------------------------------------------- 
-int FERS_Get_PIC_Temp(int handle, float* temp) {
+int FERS_Get_Board_Temp(int handle, float* temp) {
 	uint32_t data;
 	int ret;
 	for (int i = 0; i < 5; i++) {
-		ret = FERS_ReadRegister(handle, a_pic_temp, &data);
+		ret = FERS_ReadRegister(handle, a_board_temp, &data);
 		*temp = (float)(data / 4.);
 		if ((*temp > 0) && (*temp < 125)) break;
 	}
@@ -1283,25 +1291,49 @@ int TDC_DoStartStopMeasurement(int handle, int tdc_id, double *tof_ns)
 // Firmware Upgrade
 // *********************************************************
 
-static int waitFlashfree(int handle) 
+static int waitFlashfree(int handle)
 {
+	uint32_t reg_add;
 	uint32_t status;
+	if (FERS_CONNECTIONTYPE(handle) != FERS_CONNECTIONTYPE_TDL)
+		reg_add = 8189;
+	else
+		reg_add = FUP_BA + FUP_RESULT_REG;
 	do {
 		//Inserire qui un timeout a 5 secondi
-		FERS_ReadRegister(handle, 8189, &status);
+		FERS_ReadRegister(handle, reg_add, &status);
 	} while (status != 1);
 	return 0;
 }
 
+uint32_t crc32c(uint32_t crc, const unsigned char* buf, size_t len)
+{
+	int k;
+
+	crc = ~crc;
+	while (len--) {
+		crc ^= *buf++;
+		for (k = 0; k < 8; k++)
+			crc = crc & 1 ? (crc >> 1) ^ POLY : crc >> 1;
+	}
+	return ~crc;
+}
+
 static int WriteFPGAFirmwareOnFlash(int handle, char *pageText, int textLen, void(*ptr)(char *msg, int progress))
 {
-	uint32_t temp = 0;
-	uint32_t datarow[8192];
-	uint32_t rw = 0;
-	uint32_t rd = 0;
+	uint32_t temp;
+	uint32_t* datarow;  // [8192] ;
+	size_t msize;
+	if (FERS_CONNECTIONTYPE(handle) == FERS_CONNECTIONTYPE_TDL)
+		msize = 1024;
+	else
+		msize = 8192;
+	datarow = (uint32_t*)calloc(msize, sizeof(uint32_t));
+
 	uint32_t *i_pageText;
 	const uint32_t chunk_size_byte = 60 * 512 ;
 	const uint32_t n_chunks = (uint32_t)ceil((double)textLen / chunk_size_byte);
+	uint32_t crc_R, crc_T;
 
 	for (int cnk = 0; cnk < (int)n_chunks; cnk++) {
 		i_pageText = (uint32_t*)&(pageText[cnk*chunk_size_byte]);
@@ -1311,16 +1343,38 @@ static int WriteFPGAFirmwareOnFlash(int handle, char *pageText, int textLen, voi
 		for (int i = 0; i < (int)(chunk_size_byte/4); i++)
 			datarow[i] = i_pageText[i];
 	
-		uint32_t cmd = 0xA;
-		datarow[8190] = cnk*chunk_size_byte;
-		datarow[8191] = cmd;
-		const int ChunkSize = 64;
-		for (int i = 0; i < 8192; i += ChunkSize) {
-			if (FERS_CONNECTIONTYPE(handle) == FERS_CONNECTIONTYPE_ETH)
-				LLeth_WriteMem(FERS_INDEX(handle), i, (char *)(&datarow[i]), ChunkSize * 4);
-			else if (FERS_CONNECTIONTYPE(handle) == FERS_CONNECTIONTYPE_USB)
-				LLusb_WriteMem(FERS_INDEX(handle), i, (char *)(&datarow[i]), ChunkSize * 4);
+		if (FERS_CONNECTIONTYPE(handle) == FERS_CONNECTIONTYPE_TDL) {
+			for (int i = 0; i < 512; i++) {
+				FERS_WriteRegister(handle, FUP_BA + i, datarow[i]);
+			}
+
+			FERS_WriteRegister(handle, FUP_BA + FUP_CONTROL_REG, 0x1F);
+			crc_T = crc32c(0, (unsigned char*)i_pageText, 512 * 4);
+			do {
+				FERS_ReadRegister(handle, FUP_BA + FUP_CONTROL_REG, &temp);
+			} while (temp == 0x1F);
+
+			FERS_ReadRegister(handle, FUP_BA + FUP_RESULT_REG, &crc_R);
+			if (crc_R != crc_T) {
+				printf("CRC TX error: %08X %08X\n", crc_R, crc_T);
+			}
+
+
+			FERS_WriteRegister(handle, FUP_BA + FUP_PARAM_REG, cnk * chunk_size_byte);
+			FERS_WriteRegister(handle, FUP_BA + FUP_CONTROL_REG, 0xA);
+		} else {
+			uint32_t cmd = 0xA;
+			datarow[8190] = cnk * chunk_size_byte;
+			datarow[8191] = cmd;
+			const int ChunkSize = 64;
+			for (int i = 0; i < 8192; i += ChunkSize) {
+				if (FERS_CONNECTIONTYPE(handle) == FERS_CONNECTIONTYPE_ETH)
+					LLeth_WriteMem(FERS_INDEX(handle), i, (char*)(&datarow[i]), ChunkSize * 4);
+				else if (FERS_CONNECTIONTYPE(handle) == FERS_CONNECTIONTYPE_USB)
+					LLusb_WriteMem(FERS_INDEX(handle), i, (char*)(&datarow[i]), ChunkSize * 4);
+			}
 		}
+
 		waitFlashfree(handle);
 
 		if (ptr != NULL) {
@@ -1331,24 +1385,38 @@ static int WriteFPGAFirmwareOnFlash(int handle, char *pageText, int textLen, voi
 	return 0;
 }
 
-static int EraseFPGAFirmwareFlash(int handle,  uint32_t size_in_byte) 
+static int EraseFPGAFirmwareFlash(int handle, uint32_t size_in_byte)
 {
-	FERS_WriteRegister(handle, 8190, size_in_byte);
+	uint32_t reg_add0, reg_add1;
+	if (FERS_CONNECTIONTYPE(handle) != FERS_CONNECTIONTYPE_TDL) {
+		reg_add0 = 8190;
+		reg_add1 = 8191;
+	} else {
+		reg_add0 = FUP_BA + FUP_PARAM_REG;
+		reg_add1 = FUP_BA + FUP_CONTROL_REG;
+	}
+	FERS_WriteRegister(handle, reg_add0, size_in_byte);
 	Sleep(10);
-	FERS_WriteRegister(handle, 8191, 0x1);
+	FERS_WriteRegister(handle, reg_add1, 0x1);
 	Sleep(10);
 	waitFlashfree(handle);
 	return 0;
 }
 
-static int FirmwareBootApplication(int handle) 
+static int FirmwareBootApplication(int handle)
 {
-	FERS_WriteRegister(handle, 8191, 0xFE);
+	uint32_t reg_add0;
+	if (FERS_CONNECTIONTYPE(handle) != FERS_CONNECTIONTYPE_TDL) {
+		reg_add0 = 8191;
+	} else {
+		reg_add0 = FUP_BA + FUP_CONTROL_REG;
+	}
+	FERS_WriteRegister(handle, reg_add0, 0xFE);
 	Sleep(10);
 	return 0;
 }
 
-static int RebootFromFWuploader(int handle) 
+static int RebootFromFWuploader(int handle)
 {
 	FERS_WriteRegister(handle, 0x0100FFF0, 1);
 	Sleep(10);
@@ -1373,8 +1441,6 @@ int FERS_CheckBootloaderVersion(int handle, int *isInBootloader, uint32_t *versi
 	*isInBootloader = 0;
 	*version = 0;
 	*release = 0;
-	if (FERS_CONNECTIONTYPE(handle) == FERS_CONNECTIONTYPE_TDL)
-		return 0;
 
 	for (int i = 0; i < 3; i++) {
 		res = FERS_WriteRegister(handle, 8191, 0xFF);
@@ -1382,7 +1448,7 @@ int FERS_CheckBootloaderVersion(int handle, int *isInBootloader, uint32_t *versi
 		Sleep(5);
 	}
 	
-	if (FERS_CONNECTIONTYPE(handle) == FERS_CONNECTIONTYPE_ETH) 
+	if (FERS_CONNECTIONTYPE(handle) == FERS_CONNECTIONTYPE_ETH)
 		res = LLeth_ReadMem(FERS_INDEX(handle), 0, buffer, 16);
 	else if (FERS_CONNECTIONTYPE(handle) == FERS_CONNECTIONTYPE_USB)
 		res = LLusb_ReadMem(FERS_INDEX(handle), 0, buffer, 16);
@@ -1397,6 +1463,30 @@ int FERS_CheckBootloaderVersion(int handle, int *isInBootloader, uint32_t *versi
 	return 0;
 }
 
+int FUP_CheckControllerVersion(int handle, int* isValid, uint32_t* version, uint32_t* release)
+{
+	*isValid = 0;
+	*version = 0;
+	*release = 0;
+	FERS_WriteRegister(handle, 0xFF000000 + FUP_CONTROL_REG, FUP_CMD_READ_VERSION);
+
+	uint32_t key;
+	FERS_ReadRegister(handle, 0xFF000000 + 0, &key);
+	FERS_ReadRegister(handle, 0xFF000000 + 1, version);
+	FERS_ReadRegister(handle, 0xFF000000 + 2, release);
+
+	printf("key: %x\n", key);
+	printf("version: %x\n", version);
+	printf("timestamp: %x\n", release);
+
+	if (key == 0xA1FFAA1B) {
+		printf("unlock key ok\n");
+		*isValid = 1;
+	} else {
+		printf("key not ok\n");
+	}
+	return 0;
+}
 
 // --------------------------------------------------------------------------------------------------------- 
 // Description: Upgrade the FPGA firmware 
@@ -1405,13 +1495,12 @@ int FERS_CheckBootloaderVersion(int handle, int *isInBootloader, uint32_t *versi
 //				ptr = call back function (used for messaging during the upgrade)
 // Return:		0=OK, negative number = error code
 // --------------------------------------------------------------------------------------------------------- 
-int FERS_FirmwareUpgrade(int handle, FILE *fp, void(*ptr)(char *msg, int progress)) 
+int FERS_FirmwareUpgrade(int handle, FILE *fp, void(*ptr)(char *msg, int progress))
 {
-	// create check for firmware hedaer
-
-	int isInBootloader, msize, retfsf;
+	int isInBootloader, isValid, msize, retfsf;
 	uint32_t BLversion;
 	uint32_t BLrelease;
+	uint32_t FUPversion, FUPrelease;
 	char msg[100];
 	char header[5][100]; // header reading
 	uint16_t board_family[20] = {};
@@ -1421,6 +1510,7 @@ int FERS_FirmwareUpgrade(int handle, FILE *fp, void(*ptr)(char *msg, int progres
 	int firmware_size_byte =0;
 
 	if (fp == NULL) return FERSLIB_ERR_INVALID_FWFILE;
+	//if (FERS_CONNECTIONTYPE(handle) == FERS_CONNECTIONTYPE_TDL) return FERSLIB_ERR_OPER_NOT_ALLOWED;
 	// check for header
 	retfsf = fscanf(fp, "%s", header[0]);
 	if (strcmp(header[0], "$$$$CAEN-Spa") == 0) { // header is found in FW_File
@@ -1439,8 +1529,7 @@ int FERS_FirmwareUpgrade(int handle, FILE *fp, void(*ptr)(char *msg, int progres
 						printf("\n");
 						i = 15;
 						break;
-					}
-					else {
+					} else {
 						sscanf(header[4], "%" SCNu16, &board_family[j]);
 						++board_compatibility;
 					}
@@ -1459,15 +1548,15 @@ int FERS_FirmwareUpgrade(int handle, FILE *fp, void(*ptr)(char *msg, int progres
 		if (retfsf == 0) {
 			// NOTE: if the firmware is corrupted, then the board info cannot be read and it is not possible to check the compatibility.
 			//       Nevertheless, the upgrade cannot be skipped, otherwise it won't be possible to recover
-		for (int i = 0; i < board_compatibility; ++i) {
-			if (BInfo.FERSCode == board_family[i]) {
-				board_family[board_compatibility] = 1;
-				break;
+			for (int i = 0; i < board_compatibility; ++i) {
+				if (BInfo.FERSCode == board_family[i]) {
+					board_family[board_compatibility] = 1;
+					break;
+				}
 			}
-		}
-		if (board_family[board_compatibility] == 0) { // raise an error, the firmware is not compatible with the board
-			(*ptr)("ERROR! The firmware version is not compatible with the model of board %d", handle); // set also which board is raising?
-			return FERSLIB_ERR_UPGRADE_ERROR;
+			if (board_family[board_compatibility] == 0) { // raise an error, the firmware is not compatible with the board
+				(*ptr)("ERROR! The firmware version is not compatible with the model of board %d", handle); // set also which board is raising?
+				return FERSLIB_ERR_UPGRADE_ERROR;
 			}
 		}
 	}
@@ -1490,24 +1579,40 @@ int FERS_FirmwareUpgrade(int handle, FILE *fp, void(*ptr)(char *msg, int progres
 	if (!firmware)	return FERSLIB_ERR_UPGRADE_ERROR;
 	fread(firmware, firmware_size_byte, 1, fp);
 
-	// Reboot from FWloader
-	(*ptr)("Reboot from Firmware loader", 0);
-	RebootFromFWuploader(handle);
-	if (FERS_CONNECTIONTYPE(handle) == FERS_CONNECTIONTYPE_USB)
-		LLusb_StreamEnable(FERS_INDEX(handle), false);
-	FERS_FlushData(handle);
+	if (FERS_CONNECTIONTYPE(handle) == FERS_CONNECTIONTYPE_TDL) {
+		FERS_FlushData(handle);
 
-	for (int i=0; i<20; i++) {
-		FERS_CheckBootloaderVersion(handle, &isInBootloader, &BLversion, &BLrelease);
-		if (isInBootloader) break;
-		Sleep(100);
+		for (int i = 0; i < 20; i++) {
+			FUP_CheckControllerVersion(handle, &isValid, &FUPversion, &FUPrelease);
+			if (isValid) break;
+			Sleep(100);
+		}
+		if (!isValid) {
+			(*ptr)("ERROR: Fiber uploader not installed!", 0);
+			return FERSLIB_ERR_UPGRADE_ERROR;
+		}
+		sprintf(msg, "Fiber uploader version %X, build: %8X", FUPversion, FUPrelease);
+		(*ptr)(msg, 0);
+	} else {
+		// Reboot from FWloader
+		(*ptr)("Reboot from Firmware loader", 0);
+		RebootFromFWuploader(handle);
+		if (FERS_CONNECTIONTYPE(handle) == FERS_CONNECTIONTYPE_USB)
+			LLusb_StreamEnable(FERS_INDEX(handle), false);
+		FERS_FlushData(handle);
+
+		for (int i = 0; i < 20; i++) {
+			FERS_CheckBootloaderVersion(handle, &isInBootloader, &BLversion, &BLrelease);
+			if (isInBootloader) break;
+			Sleep(100);
+		}
+		if (!isInBootloader) {
+			(*ptr)("ERROR: FW loader not installed!", 0);
+			return FERSLIB_ERR_UPGRADE_ERROR;
+		}
+		sprintf(msg, "FW loader version %X, build: %8X", BLversion, BLrelease);
+		(*ptr)(msg, 0);
 	}
-	if (!isInBootloader) {
-		(*ptr)("ERROR: FW loader not installed!", 0);
-		return FERSLIB_ERR_UPGRADE_ERROR;
-	}
-	sprintf(msg, "FW loader version %X, build: %8X", BLversion, BLrelease);
-	(*ptr)(msg, 0);
 
 	// Erase FPGA
 	(*ptr)("Erasing FPGA...", 0);

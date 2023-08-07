@@ -6,10 +6,8 @@
 
 ------------------------------------------------------------------------------
 
-    Janus version 3.1.0 README 
+    Janus README
     
-    May 2023
-
 ------------------------------------------------------------------------------
 
 TABLE OF CONTENTS
@@ -25,6 +23,7 @@ A. SYSTEM REQUIREMENTS
    
   - Microsoft Windows (>)10 or Linux
   - python 3 (>3.8 suggested) with tkinter
+  - g++ <= 11 (linux)
    
 
 B. INSTALLATION
@@ -41,4 +40,4 @@ Linux:
 C. SUPPORT   
 -----------
         
-For technical support, go to https://www.caen.it/mycaen/support/ (login and MyCAEN+ account required).
+For technical support, go to https://www.caen.it/mycaen/support/ (login and MyCAEN+ account required)

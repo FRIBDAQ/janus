@@ -485,8 +485,6 @@ int ParseConfigFile(FILE* f_ini, Config_t* WDcfg, bool fcall)
 		WDcfg->TriggerMask = 0;
 		WDcfg->TriggerLogic = 0;
 		WDcfg->MajorityLevel = 2;
-		WDcfg->T0_outMask = 0;
-		WDcfg->T1_outMask = 0;
 		WDcfg->Tref_Mask = 0;
 		WDcfg->TrefWindow = 100;
 		WDcfg->PtrgPeriod = 0;
@@ -499,8 +497,6 @@ int ParseConfigFile(FILE* f_ini, Config_t* WDcfg, bool fcall)
 		WDcfg->HV_Adjust_Range = 1;
 		WDcfg->EnableQdiscrLatch = 1;
 		WDcfg->GainSelect = GAIN_SEL_AUTO;
-		WDcfg->AnalogProbe = 0;
-		WDcfg->DigitalProbe = 0;
 		WDcfg->WaveformLength = 800;
 		WDcfg->Trg_HoldOff = 0;
 		WDcfg->Pedestal = 100;
@@ -601,6 +597,7 @@ int ParseConfigFile(FILE* f_ini, Config_t* WDcfg, bool fcall)
 		if (streq(str, "TriggerSource"))		sprintf(str, "BunchTrgSource");
 		if (streq(str, "DwellTime"))			sprintf(str, "PtrgPeriod");
 		if (streq(str, "TrgTimeWindow"))		sprintf(str, "TstampCoincWindow");
+		if (streq(str, "Hit_HoldOff"))			sprintf(str, "Trg_HoldOff");
 
  		if (streq(str, "Open"))	{
 			if (brd==-1) {
@@ -614,7 +611,7 @@ int ParseConfigFile(FILE* f_ini, Config_t* WDcfg, bool fcall)
 				//WDcfg->NumBrd++;
 			}
 		}
-		else if (streq(str, "WriteRegister")) {	
+		if (streq(str, "WriteRegister")) {	
 			if (WDcfg->GWn < MAX_GW) {
 				WDcfg->GWbrd[WDcfg->GWn]=brd;
 				fscanf(f_ini, "%x", (int *)&WDcfg->GWaddr[WDcfg->GWn]);
@@ -625,7 +622,7 @@ int ParseConfigFile(FILE* f_ini, Config_t* WDcfg, bool fcall)
 				Con_printf("LCSw", "WARNING: MAX_GW Generic Write exceeded (%d). Change MAX_GW and recompile\n", MAX_GW);
 			}
 		}
-		else if (streq(str, "WriteRegisterBits")) {
+		if (streq(str, "WriteRegisterBits")) {
 			if (WDcfg->GWn < MAX_GW) {
 				int start, stop, data;
 				WDcfg->GWbrd[WDcfg->GWn]=brd;
@@ -640,7 +637,7 @@ int ParseConfigFile(FILE* f_ini, Config_t* WDcfg, bool fcall)
 				Con_printf("LCSw", "WARNING: MAX_GW Generic Write exceeded (%d). Change MAX_GW and recompile\n", MAX_GW);
 			}
 		}
-		else if (streq(str, "AcquisitionMode")) {
+		if (streq(str, "AcquisitionMode")) {
 			fscanf(f_ini, "%s", str1);
 			if		(streq(str1, "COUNTING"))			WDcfg->AcquisitionMode = ACQMODE_COUNT;
 			else if	(streq(str1, "SPECTROSCOPY"))		WDcfg->AcquisitionMode = ACQMODE_SPECT;
@@ -652,7 +649,7 @@ int ParseConfigFile(FILE* f_ini, Config_t* WDcfg, bool fcall)
 			else if	(streq(str1, "WAVEFORM"))			WDcfg->AcquisitionMode = ACQMODE_WAVE;
 			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);        
 		}
-		else if (streq(str, "StartRunMode")) {
+		if (streq(str, "StartRunMode")) {
 			fscanf(f_ini, "%s", str1);
 			if		(streq(str1, "MANUAL"))			WDcfg->StartRunMode = STARTRUN_ASYNC;  // keep "MANUAL" option for backward compatibility
 			else if	(streq(str1, "ASYNC"))			WDcfg->StartRunMode = STARTRUN_ASYNC;  
@@ -661,14 +658,14 @@ int ParseConfigFile(FILE* f_ini, Config_t* WDcfg, bool fcall)
 			else if	(streq(str1, "TDL"))			WDcfg->StartRunMode = STARTRUN_TDL;  
 			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
 		}
-		else if (streq(str, "StopRunMode")) {
+		if (streq(str, "StopRunMode")) {
 			fscanf(f_ini, "%s", str1);
 			if		(streq(str1, "MANUAL"))			WDcfg->StopRunMode = STOPRUN_MANUAL;
 			else if	(streq(str1, "PRESET_TIME"))	WDcfg->StopRunMode = STOPRUN_PRESET_TIME;
 			else if	(streq(str1, "PRESET_COUNTS"))	WDcfg->StopRunMode = STOPRUN_PRESET_COUNTS;
 			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
 		}
-		else if (streq(str, "BunchTrgSource")) {
+		if (streq(str, "BunchTrgSource")) {
 			fscanf(f_ini, "%s", str1);
 			if		(streq(str1, "SW_ONLY"))		WDcfg->TriggerMask = 0x1;
 			else if	(streq(str1, "T1-IN"))			WDcfg->TriggerMask = 0x3;
@@ -680,7 +677,7 @@ int ParseConfigFile(FILE* f_ini, Config_t* WDcfg, bool fcall)
 			else if	(streq(str1, "MASK"))			fscanf(f_ini, "%x", &WDcfg->TriggerMask);
 			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
 		}
-		else if (streq(str, "TriggerLogic")) {
+		if (streq(str, "TriggerLogic")) {
 			fscanf(f_ini, "%s", str1);
 			if		(streq(str1, "OR64"))			WDcfg->TriggerLogic = 0;
 			else if	(streq(str1, "AND2_OR32"))		WDcfg->TriggerLogic = 1;
@@ -689,7 +686,7 @@ int ParseConfigFile(FILE* f_ini, Config_t* WDcfg, bool fcall)
 			else if	(streq(str1, "MAJ32_AND2"))		WDcfg->TriggerLogic = 5;
 			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
 		}
-		else if (streq(str, "TrefSource")) {
+		if (streq(str, "TrefSource")) {
 			fscanf(f_ini, "%s", str1);
 			if		(streq(str1, "T0-IN"))			WDcfg->Tref_Mask = 0x1;
 			else if	(streq(str1, "T1-IN"))			WDcfg->Tref_Mask = 0x2;
@@ -700,7 +697,7 @@ int ParseConfigFile(FILE* f_ini, Config_t* WDcfg, bool fcall)
 			else if	(streq(str1, "MASK"))			fscanf(f_ini, "%x", &WDcfg->Tref_Mask);
 			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
 		}
-		else if (streq(str, "ValidationSource")) {
+		if (streq(str, "ValidationSource")) {
 			fscanf(f_ini, "%s", str1);
 			if		(streq(str1, "SW_CMD"))			WDcfg->Validation_Mask = 0x1;
 			else if	(streq(str1, "T0-IN"))			WDcfg->Validation_Mask = 0x2;
@@ -708,7 +705,7 @@ int ParseConfigFile(FILE* f_ini, Config_t* WDcfg, bool fcall)
 			else if	(streq(str1, "MASK"))			fscanf(f_ini, "%x", &WDcfg->Validation_Mask);
 			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
 		}
-		else if (streq(str, "ValidationMode")) {
+		if (streq(str, "ValidationMode")) {
 			fscanf(f_ini, "%s", str1);
 			if		(streq(str1, "DISABLED"))		WDcfg->Validation_Mode = 0;
 			else if	(streq(str1, "ACCEPT"))			WDcfg->Validation_Mode = 1;
@@ -716,19 +713,19 @@ int ParseConfigFile(FILE* f_ini, Config_t* WDcfg, bool fcall)
 			else if	(streq(str1, "MASK"))			fscanf(f_ini, "%x", &WDcfg->Validation_Mask);
 			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
 		}
-		else if (streq(str, "CountingMode")) {
+		if (streq(str, "CountingMode")) {
 			fscanf(f_ini, "%s", str1);
 			if		(streq(str1, "SINGLES"))		WDcfg->Counting_Mode = 0;
 			else if	(streq(str1, "PAIRED_AND"))		WDcfg->Counting_Mode = 1;
 			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
 		}
-		else if (streq(str, "TrgIdMode")) {
+		if (streq(str, "TrgIdMode")) {
 			fscanf(f_ini, "%s", str1);
 			if		(streq(str1, "TRIGGER_CNT"))	WDcfg->TrgIdMode = 0;
 			else if	(streq(str1, "VALIDATION_CNT"))	WDcfg->TrgIdMode = 1;
 			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
 		}
-		else if (streq(str, "VetoSource")) {
+		if (streq(str, "VetoSource")) {
 			fscanf(f_ini, "%s", str1);
 			if		(streq(str1, "DISABLED"))		WDcfg->Veto_Mask = 0x0;
 			else if	(streq(str1, "SW_CMD"))			WDcfg->Veto_Mask = 0x1;
@@ -737,48 +734,56 @@ int ParseConfigFile(FILE* f_ini, Config_t* WDcfg, bool fcall)
 			else if	(streq(str1, "MASK"))			fscanf(f_ini, "%x", &WDcfg->Veto_Mask);
 			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
 		}
-		else if (streq(str, "EventBuildingMode")) {
+		if (streq(str, "EventBuildingMode")) {
 			fscanf(f_ini, "%s", str1);
 			if		(streq(str1, "DISABLED"))		WDcfg->EventBuildingMode = EVBLD_DISABLED;
 			else if	(streq(str1, "TRGTIME_SORTING"))WDcfg->EventBuildingMode = EVBLD_TRGTIME_SORTING;
 			else if	(streq(str1, "TRGID_SORTING"))	WDcfg->EventBuildingMode = EVBLD_TRGID_SORTING;
 			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
 		}
-		else if (streq(str, "T0_Out")) {
+		if (streq(str, "T0_Out")) {
 			fscanf(f_ini, "%s", str1);
-			if		(streq(str1, "T0-IN"))			WDcfg->T0_outMask = 0x001;
-			else if	(streq(str1, "BUNCHTRG"))		WDcfg->T0_outMask = 0x002;
-			else if	(streq(str1, "T-OR"))			WDcfg->T0_outMask = 0x004;
-			else if	(streq(str1, "RUN"))			WDcfg->T0_outMask = 0x008;
-			else if	(streq(str1, "PTRG"))			WDcfg->T0_outMask = 0x010;
-			else if	(streq(str1, "BUSY"))			WDcfg->T0_outMask = 0x020;
-			else if	(streq(str1, "DPROBE"))			WDcfg->T0_outMask = 0x040;
-			else if	(streq(str1, "TLOGIC"))			WDcfg->T0_outMask = 0x080;
-			else if	(streq(str1, "SQ_WAVE"))		WDcfg->T0_outMask = 0x100;
-			else if	(streq(str1, "TDL_SYNC"))		WDcfg->T0_outMask = 0x200;
-			else if	(streq(str1, "RUN_SYNC"))		WDcfg->T0_outMask = 0x400;
-			else if	(streq(str1, "ZERO"))			WDcfg->T0_outMask = 0x000;
-			else if	(streq(str1, "MASK"))			fscanf(f_ini, "%x", &WDcfg->T0_outMask);
+			if		(streq(str1, "T0-IN"))			SetBoardParam((int *)WDcfg->T0_outMask, 0x001);
+			else if	(streq(str1, "BUNCHTRG"))		SetBoardParam((int *)WDcfg->T0_outMask, 0x002);
+			else if	(streq(str1, "T-OR"))			SetBoardParam((int *)WDcfg->T0_outMask, 0x004);
+			else if	(streq(str1, "RUN"))			SetBoardParam((int *)WDcfg->T0_outMask, 0x008);
+			else if	(streq(str1, "PTRG"))			SetBoardParam((int *)WDcfg->T0_outMask, 0x010);
+			else if	(streq(str1, "BUSY"))			SetBoardParam((int *)WDcfg->T0_outMask, 0x020);
+			else if	(streq(str1, "DPROBE"))			SetBoardParam((int *)WDcfg->T0_outMask, 0x040);
+			else if	(streq(str1, "TLOGIC"))			SetBoardParam((int *)WDcfg->T0_outMask, 0x080);
+			else if	(streq(str1, "SQ_WAVE"))		SetBoardParam((int *)WDcfg->T0_outMask, 0x100);
+			else if	(streq(str1, "TDL_SYNC"))		SetBoardParam((int *)WDcfg->T0_outMask, 0x200);
+			else if	(streq(str1, "RUN_SYNC"))		SetBoardParam((int *)WDcfg->T0_outMask, 0x400);
+			else if	(streq(str1, "ZERO"))			SetBoardParam((int *)WDcfg->T0_outMask, 0x000);
+			else if (streq(str1, "MASK")) {
+				int val;
+				fscanf(f_ini, "%x", &val);
+				SetBoardParam((int*)WDcfg->T0_outMask, val);
+			}
 			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
 		}
-		else if (streq(str, "T1_Out")) {
+		if (streq(str, "T1_Out")) {
 			fscanf(f_ini, "%s", str1);
-			if		(streq(str1, "T1-IN"))			WDcfg->T1_outMask = 0x001;
-			else if	(streq(str1, "BUNCHTRG"))		WDcfg->T1_outMask = 0x002;
-			else if	(streq(str1, "Q-OR"))			WDcfg->T1_outMask = 0x004;
-			else if	(streq(str1, "RUN"))			WDcfg->T1_outMask = 0x008;
-			else if	(streq(str1, "PTRG"))			WDcfg->T1_outMask = 0x010;
-			else if	(streq(str1, "BUSY"))			WDcfg->T1_outMask = 0x020;
-			else if	(streq(str1, "DPROBE"))			WDcfg->T1_outMask = 0x040;
-			else if	(streq(str1, "TLOGIC"))			WDcfg->T1_outMask = 0x080;
-			else if	(streq(str1, "SQ_WAVE"))		WDcfg->T1_outMask = 0x100;
-			else if	(streq(str1, "TDL_SYNC"))		WDcfg->T1_outMask = 0x200;
-			else if	(streq(str1, "RUN_SYNC"))		WDcfg->T1_outMask = 0x400;
-			else if	(streq(str1, "ZERO"))			WDcfg->T1_outMask = 0x000;
-			else if	(streq(str1, "MASK"))			fscanf(f_ini, "%x", &WDcfg->T1_outMask);
+			if		(streq(str1, "T1-IN"))			SetBoardParam((int*)WDcfg->T1_outMask, 0x001);
+			else if (streq(str1, "BUNCHTRG"))		SetBoardParam((int*)WDcfg->T1_outMask, 0x002);
+			else if (streq(str1, "Q-OR"))			SetBoardParam((int*)WDcfg->T1_outMask, 0x004);
+			else if (streq(str1, "RUN"))			SetBoardParam((int*)WDcfg->T1_outMask, 0x008);
+			else if (streq(str1, "PTRG"))			SetBoardParam((int*)WDcfg->T1_outMask, 0x010);
+			else if (streq(str1, "BUSY"))			SetBoardParam((int*)WDcfg->T1_outMask, 0x020);
+			else if (streq(str1, "DPROBE"))			SetBoardParam((int*)WDcfg->T1_outMask, 0x040);
+			else if (streq(str1, "TLOGIC"))			SetBoardParam((int*)WDcfg->T1_outMask, 0x080);
+			else if (streq(str1, "SQ_WAVE"))		SetBoardParam((int*)WDcfg->T1_outMask, 0x100);
+			else if (streq(str1, "TDL_SYNC"))		SetBoardParam((int*)WDcfg->T1_outMask, 0x200);
+			else if (streq(str1, "RUN_SYNC"))		SetBoardParam((int*)WDcfg->T1_outMask, 0x400);
+			else if (streq(str1, "ZERO"))			SetBoardParam((int*)WDcfg->T1_outMask, 0x000);
+			else if (streq(str1, "MASK")) {
+				int val;
+				fscanf(f_ini, "%x", &val);
+				SetBoardParam((int*)WDcfg->T1_outMask, val);
+			}
 			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
 		}
-		else if (streq(str, "TestPulseSource")) {
+		if (streq(str, "TestPulseSource")) {
 			fscanf(f_ini, "%s", str1);
 			if		(streq(str1, "OFF"))			WDcfg->TestPulseSource = -1;
 			else if	(streq(str1, "EXT"))			WDcfg->TestPulseSource = TEST_PULSE_SOURCE_EXT;
@@ -788,7 +793,7 @@ int ParseConfigFile(FILE* f_ini, Config_t* WDcfg, bool fcall)
 			else if	(streq(str1, "SW-CMD"))			WDcfg->TestPulseSource = TEST_PULSE_SOURCE_SW_CMD;
 			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
 		}
-		else if (streq(str, "TestPulseDestination")) {
+		if (streq(str, "TestPulseDestination")) {
 			fscanf(f_ini, "%s", str1);
 			if		(streq(str1, "ALL"))			WDcfg->TestPulseDestination = TEST_PULSE_DEST_ALL;
 			else if	(streq(str1, "EVEN"))			WDcfg->TestPulseDestination = TEST_PULSE_DEST_EVEN;
@@ -797,14 +802,14 @@ int ParseConfigFile(FILE* f_ini, Config_t* WDcfg, bool fcall)
 			else if	(streq(str1, "CH"))				fscanf(f_ini, "%d", &WDcfg->TestPulseDestination);
 			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
 		}
-		else if (streq(str, "TestPulsePreamp")) {
+		if (streq(str, "TestPulsePreamp")) {
 			fscanf(f_ini, "%s", str1);
 			if		(streq(str1, "HG"))			WDcfg->TestPulsePreamp = TEST_PULSE_PREAMP_HG;
 			else if	(streq(str1, "LG"))			WDcfg->TestPulsePreamp = TEST_PULSE_PREAMP_LG;
 			else if	(streq(str1, "BOTH"))		WDcfg->TestPulsePreamp = TEST_PULSE_PREAMP_BOTH;
 			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
 		}
-		else if (streq(str, "LG_ShapingTime")) {
+		if (streq(str, "LG_ShapingTime")) {
 			float st = GetTime(f_ini, "ns");
 			if      ((st==0) || (st==87.5))		WDcfg->LG_ShapingTime = 0;
 			else if ((st==1) || (st==75))		WDcfg->LG_ShapingTime = 1;
@@ -815,7 +820,7 @@ int ParseConfigFile(FILE* f_ini, Config_t* WDcfg, bool fcall)
 			else if ((st==6) || (st==12.5))		WDcfg->LG_ShapingTime = 6;
 			else 	Con_printf("LCSw", "WARNING: Shaping Time LG: invalid setting\n");
 		}
-		else if (streq(str, "HG_ShapingTime")) {
+		if (streq(str, "HG_ShapingTime")) {
 			float st = GetTime(f_ini, "ns");
 			if      ((st==0) || (st==87.5))		WDcfg->HG_ShapingTime = 0;
 			else if ((st==1) || (st==75))		WDcfg->HG_ShapingTime = 1;
@@ -826,83 +831,99 @@ int ParseConfigFile(FILE* f_ini, Config_t* WDcfg, bool fcall)
 			else if ((st==6) || (st==12.5))		WDcfg->HG_ShapingTime = 6;
 			else 	Con_printf("LCSw", "WARNING: Shaping Time HG: invalid setting\n");
 		}
-		else if (streq(str, "AnalogProbe")) {
+		if (streq(str, "AnalogProbe") || streq(str, "AnalogProbe0") || streq(str, "AnalogProbe1")) {
+			int ap = 0;
+			if (streq(str, "AnalogProbe1")) ap = 1;
 			fscanf(f_ini, "%s", str1);
-			if		(streq(str1, "OFF"))			WDcfg->AnalogProbe = APROBE_OFF;
-			else if	(streq(str1, "FAST"))			WDcfg->AnalogProbe = APROBE_FAST;
-			else if	(streq(str1, "SLOW_LG"))		WDcfg->AnalogProbe = APROBE_SLOW_LG;
-			else if	(streq(str1, "SLOW_HG"))		WDcfg->AnalogProbe = APROBE_SLOW_HG;
-			else if	(streq(str1, "PREAMP_LG"))		WDcfg->AnalogProbe = APROBE_PREAMP_LG;
-			else if	(streq(str1, "PREAMP_HG"))		WDcfg->AnalogProbe = APROBE_PREAMP_HG;
+			if		(streq(str1, "OFF"))			WDcfg->AnalogProbe[ap] = APROBE_OFF;
+			else if	(streq(str1, "FAST"))			WDcfg->AnalogProbe[ap] = APROBE_FAST;
+			else if	(streq(str1, "SLOW_LG"))		WDcfg->AnalogProbe[ap] = APROBE_SLOW_LG;
+			else if	(streq(str1, "SLOW_HG"))		WDcfg->AnalogProbe[ap] = APROBE_SLOW_HG;
+			else if	(streq(str1, "PREAMP_LG"))		WDcfg->AnalogProbe[ap] = APROBE_PREAMP_LG;
+			else if	(streq(str1, "PREAMP_HG"))		WDcfg->AnalogProbe[ap] = APROBE_PREAMP_HG;
 			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
+			if (streq(str, "AnalogProbe")) WDcfg->AnalogProbe[1] = WDcfg->AnalogProbe[0];
 		}
-		else if (streq(str, "DigitalProbe")) {
+		if (streq(str, "DigitalProbe") || streq(str, "DigitalProbe0") || streq(str, "DigitalProbe1")) {
 			int val;
+			int dp = 0;
+			if (streq(str, "DigitalProbe1")) dp = 1;
 			fscanf(f_ini, "%s", str1);
-			if		(streq(str1, "OFF"))			WDcfg->DigitalProbe = DPROBE_OFF;
-			else if	(streq(str1, "PEAK_LG"))		WDcfg->DigitalProbe = DPROBE_PEAK_LG;
-			else if	(streq(str1, "PEAK_HG"))		WDcfg->DigitalProbe = DPROBE_PEAK_HG;
-			else if	(streq(str1, "HOLD"))			WDcfg->DigitalProbe = DPROBE_HOLD;
-			else if	(streq(str1, "START_CONV"))		WDcfg->DigitalProbe = DPROBE_START_CONV;
-			else if	(streq(str1, "DATA_COMMIT"))	WDcfg->DigitalProbe = DPROBE_DATA_COMMIT;
-			else if	(streq(str1, "DATA_VALID"))		WDcfg->DigitalProbe = DPROBE_DATA_VALID;
-			else if	(streq(str1, "CLK_1024"))		WDcfg->DigitalProbe = DPROBE_CLK_1024;
-			else if	(streq(str1, "VAL_WINDOW"))		WDcfg->DigitalProbe = DPROBE_VAL_WINDOW;
+			if		(streq(str1, "OFF"))			WDcfg->DigitalProbe[dp] = DPROBE_OFF;
+			else if	(streq(str1, "PEAK_LG"))		WDcfg->DigitalProbe[dp] = DPROBE_PEAK_LG;
+			else if	(streq(str1, "PEAK_HG"))		WDcfg->DigitalProbe[dp] = DPROBE_PEAK_HG;
+			else if	(streq(str1, "HOLD"))			WDcfg->DigitalProbe[dp] = DPROBE_HOLD;
+			else if	(streq(str1, "START_CONV"))		WDcfg->DigitalProbe[dp] = DPROBE_START_CONV;
+			else if	(streq(str1, "DATA_COMMIT"))	WDcfg->DigitalProbe[dp] = DPROBE_DATA_COMMIT;
+			else if	(streq(str1, "DATA_VALID"))		WDcfg->DigitalProbe[dp] = DPROBE_DATA_VALID;
+			else if	(streq(str1, "CLK_1024"))		WDcfg->DigitalProbe[dp] = DPROBE_CLK_1024;
+			else if	(streq(str1, "VAL_WINDOW"))		WDcfg->DigitalProbe[dp] = DPROBE_VAL_WINDOW;
+			else if	(streq(str1, "T_OR"))			WDcfg->DigitalProbe[dp] = DPROBE_T_OR;
+			else if	(streq(str1, "Q_OR"))			WDcfg->DigitalProbe[dp] = DPROBE_Q_OR;
 			else if	(strstr(str1, "ACQCTRL") != NULL) {
 				char *c = strchr(str1, '_');
 				sscanf(c+1, "%d", &val);
-				WDcfg->DigitalProbe = 0x80000000 | val;
+				WDcfg->DigitalProbe[dp] = 0x80000000 | val;
 			} else if	(strstr(str1, "CRIF") != NULL) {
 				char *c = strchr(str1, '_');
 				sscanf(c+1, "%d", &val);
-				WDcfg->DigitalProbe = 0x80010000 | val;
+				WDcfg->DigitalProbe[dp] = 0x80010000 | val;
 			} else if	(strstr(str1, "DTBLD") != NULL) {
 				char *c = strchr(str1, '_');
 				sscanf(c+1, "%d", &val);
-				WDcfg->DigitalProbe = 0x80020000 | val;
-			} else if	(strstr(str1, "TSTMP") != NULL) {
-				char *c = strchr(str1, '_');
-				sscanf(c+1, "%d", &val);
-				WDcfg->DigitalProbe = 0x80030000 | val;
+				WDcfg->DigitalProbe[dp] = 0x80020000 | val;
+			} else if (strstr(str1, "TSTMP") != NULL) {
+				char* c = strchr(str1, '_');
+				sscanf(c + 1, "%d", &val);
+				WDcfg->DigitalProbe[dp] = 0x80030000 | val;
+			} else if (strstr(str1, "TDL") != NULL) {
+				char* c = strchr(str1, '_');
+				sscanf(c + 1, "%d", &val);
+				WDcfg->DigitalProbe[dp] = 0x80040000 | val;
+			} else if (strstr(str1, "PMP") != NULL) {
+				char* c = strchr(str1, '_');
+				sscanf(c + 1, "%d", &val);
+				WDcfg->DigitalProbe[dp] = 0x80050000 | val;
 			} else if	((str1[0]=='0') && (tolower(str1[1])=='x')) {
 				sscanf(str1+2, "%x", &val);
-				WDcfg->DigitalProbe = 0x80000000 | val;
-			}
+				WDcfg->DigitalProbe[dp] = 0x80000000 | val;
+			} 
 			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
+			if (streq(str, "DigitalProbe")) WDcfg->DigitalProbe[1] = WDcfg->DigitalProbe[0];
 		}
-		else if (streq(str, "CitirocCfgMode")) {
+		if (streq(str, "CitirocCfgMode")) {
 			fscanf(f_ini, "%s", str1);
 			if		(streq(str1, "FROM_FILE"))		WDcfg->CitirocCfgMode = CITIROC_CFG_FROM_FILE;
 			else if	(streq(str1, "FROM_REGS"))		WDcfg->CitirocCfgMode = CITIROC_CFG_FROM_REGS;
 			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
 		}
-		else if (streq(str, "PeakDetectorMode")) {
+		if (streq(str, "PeakDetectorMode")) {
 			fscanf(f_ini, "%s", str1);
 			if		(streq(str1, "PEAK_STRETCH"))	WDcfg->PeakDetectorMode = 0;
 			else if	(streq(str1, "TRACK&HOLD"))		WDcfg->PeakDetectorMode = 1;
 			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
 		}
-		else if (streq(str, "FastShaperInput")) {
+		if (streq(str, "FastShaperInput")) {
 			fscanf(f_ini, "%s", str1);
 			if		((streq(str1, "HG-PA") || streq(str1, "HG")))	WDcfg->FastShaperInput = FAST_SHAPER_INPUT_HGPA;
 			else if	((streq(str1, "LG-PA") || streq(str1, "LG")))	WDcfg->FastShaperInput = FAST_SHAPER_INPUT_LGPA;
 			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
 		}
-		else if (streq(str, "HV_Adjust_Range")) {
+		if (streq(str, "HV_Adjust_Range")) {
 			fscanf(f_ini, "%s", str1);
 			if		((streq(str1, "2.5")      || streq(str1, "0")))		WDcfg->HV_Adjust_Range = 0;
 			else if	((streq(str1, "4.5")      || streq(str1, "1")))		WDcfg->HV_Adjust_Range = 1;
 			else if	(streq(str1, "DISABLED"))							WDcfg->HV_Adjust_Range = -1;
 			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
 		}
-		else if (streq(str, "MuxNSmean")) {
+		if (streq(str, "MuxNSmean")) {
 			fscanf(f_ini, "%s", str1);
 			if		((streq(str1, "1")  || streq(str1, "0")))		WDcfg->MuxNSmean = 0;
 			else if	((streq(str1, "4")  || streq(str1, "1")))		WDcfg->MuxNSmean = 1;
 			else if	((streq(str1, "16") || streq(str1, "2")))		WDcfg->MuxNSmean = 2;
 			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
 		}
-		else if (streq(str, "GainSelect")) {
+		if (streq(str, "GainSelect")) {
 			fscanf(f_ini, "%s", str1);
 			if		((streq(str1, "HIGH") || streq(str1, "HG")))	WDcfg->GainSelect = GAIN_SEL_HIGH;
 			else if	((streq(str1, "LOW")  || streq(str1, "LG")))	WDcfg->GainSelect = GAIN_SEL_LOW;
@@ -910,7 +931,7 @@ int ParseConfigFile(FILE* f_ini, Config_t* WDcfg, bool fcall)
 			else if	(streq(str1, "BOTH"))							WDcfg->GainSelect = GAIN_SEL_BOTH;
 			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
 		}
-		else if (streq(str, "TempSensType")) {
+		if (streq(str, "TempSensType")) {
 			fscanf(f_ini, "%s", str1);
 			if (streq(str1, "TMP37")) {
 				WDcfg->TempSensCoeff[0] = 0;
@@ -938,13 +959,13 @@ int ParseConfigFile(FILE* f_ini, Config_t* WDcfg, bool fcall)
 				}
 			}
 		}
-		else if (streq(str, "OF_OutFileUnit")) {
+		if (streq(str, "OF_OutFileUnit")) {
 			fscanf(f_ini, "%s", str1);
 			if (streq(str1, "LSB"))					WDcfg->OutFileUnit = 0;
 			else if (streq(str1, "ns"))				WDcfg->OutFileUnit = 1;
 			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
 		}
-		else if (streq(str, "SupprZeroCntListFile")) {
+		if (streq(str, "SupprZeroCntListFile")) {
 			fscanf(f_ini, "%s", str1);
 			if (streq(str1, "DISABLED"))			WDcfg->SupprZeroCntListFile = 0;
 			else if (streq(str1, "ENABLED"))		WDcfg->SupprZeroCntListFile = 1;
@@ -994,7 +1015,12 @@ int ParseConfigFile(FILE* f_ini, Config_t* WDcfg, bool fcall)
 		if (streq(str, "EnableChannelTrgout"))		WDcfg->EnableChannelTrgout	= GetInt(f_ini);
 		if (streq(str, "MuxClkPeriod"))				WDcfg->MuxClkPeriod			= (uint32_t)GetTime(f_ini, "ns");
 		if (streq(str, "Pedestal"))					WDcfg->Pedestal				= GetInt(f_ini);
-		if (streq(str, "ProbeChannel"))				WDcfg->ProbeChannel			= GetInt(f_ini);
+		if (streq(str, "ProbeChannel0"))			WDcfg->ProbeChannel[0] = GetInt(f_ini);
+		if (streq(str, "ProbeChannel1"))			WDcfg->ProbeChannel[1] = GetInt(f_ini);
+		if (streq(str, "ProbeChannel")) {
+			WDcfg->ProbeChannel[0] = GetInt(f_ini);
+			WDcfg->ProbeChannel[1] = GetInt(f_ini);
+		}
 		if (streq(str, "MajorityLevel"))			WDcfg->MajorityLevel		= GetInt(f_ini);
 		if (streq(str, "RunNumber_AutoIncr"))		WDcfg->RunNumber_AutoIncr	= GetInt(f_ini);
 		if (streq(str, "EnableTempFeedback"))		WDcfg->EnableTempFeedback	= GetInt(f_ini);
@@ -1003,24 +1029,24 @@ int ParseConfigFile(FILE* f_ini, Config_t* WDcfg, bool fcall)
 		if (streq(str, "EnableCntZeroSuppr"))		WDcfg->EnableCntZeroSuppr	= GetInt(f_ini);
 		if (streq(str, "AskHVShutDownOnExit"))		WDcfg->AskHVShutDownOnExit  = GetInt(f_ini);
 
-		if (streq(str, "ZS_Threshold_LG"))				SetChannelParam(WDcfg->ZS_Threshold_LG,				GetInt(f_ini));
-		if (streq(str, "ZS_Threshold_HG"))				SetChannelParam(WDcfg->ZS_Threshold_HG,				GetInt(f_ini));
-		if (streq(str, "QD_FineThreshold"))				SetChannelParam(WDcfg->QD_FineThreshold,			GetInt(f_ini));
-		if (streq(str, "TD_FineThreshold"))				SetChannelParam(WDcfg->TD_FineThreshold,			GetInt(f_ini));
-		if (streq(str, "HG_Gain"))						SetChannelParam(WDcfg->HG_Gain,						GetInt(f_ini));
-		if (streq(str, "LG_Gain"))						SetChannelParam(WDcfg->LG_Gain,						GetInt(f_ini));
-		if (streq(str, "HV_IndivAdj"))					SetChannelParam(WDcfg->HV_IndivAdj,					GetInt(f_ini));		
-		else if (streq(str, "TD_CoarseThreshold"))		SetBoardParam((int *)WDcfg->TD_CoarseThreshold,		GetInt(f_ini));	// for Romualdo
-		else if (streq(str, "ChEnableMask0"))			SetBoardParam((int *)WDcfg->ChEnableMask0,			GetHex(f_ini));
-		else if (streq(str, "ChEnableMask1"))			SetBoardParam((int *)WDcfg->ChEnableMask1,			GetHex(f_ini));
-		else if (streq(str, "Q_DiscrMask0"))			SetBoardParam((int *)WDcfg->Q_DiscrMask0,			GetHex(f_ini));
-		else if (streq(str, "Q_DiscrMask1"))			SetBoardParam((int *)WDcfg->Q_DiscrMask1,			GetHex(f_ini));
-		else if (streq(str, "Tlogic_Mask0"))			SetBoardParam((int *)WDcfg->Tlogic_Mask0,			GetHex(f_ini));
-		else if (streq(str, "Tlogic_Mask1"))			SetBoardParam((int *)WDcfg->Tlogic_Mask1,			GetHex(f_ini));
-		else if (streq(str, "HV_Vbias"))				SetBoardParamFloat(WDcfg->HV_Vbias,					GetVoltage(f_ini));
-		else if (streq(str, "HV_Imax"))					SetBoardParamFloat(WDcfg->HV_Imax,					GetCurrent(f_ini));  // Imax is expressed in mA
+		if (streq(str, "ZS_Threshold_LG"))			SetChannelParam(WDcfg->ZS_Threshold_LG,				GetInt(f_ini));
+		if (streq(str, "ZS_Threshold_HG"))			SetChannelParam(WDcfg->ZS_Threshold_HG,				GetInt(f_ini));
+		if (streq(str, "QD_FineThreshold"))			SetChannelParam(WDcfg->QD_FineThreshold,			GetInt(f_ini));
+		if (streq(str, "TD_FineThreshold"))			SetChannelParam(WDcfg->TD_FineThreshold,			GetInt(f_ini));
+		if (streq(str, "HG_Gain"))					SetChannelParam(WDcfg->HG_Gain,						GetInt(f_ini));
+		if (streq(str, "LG_Gain"))					SetChannelParam(WDcfg->LG_Gain,						GetInt(f_ini));
+		if (streq(str, "HV_IndivAdj"))				SetChannelParam(WDcfg->HV_IndivAdj,					GetInt(f_ini));		
+		if (streq(str, "TD_CoarseThreshold"))		SetBoardParam((int *)WDcfg->TD_CoarseThreshold,		GetInt(f_ini));	// for Romualdo
+		if (streq(str, "ChEnableMask0"))			SetBoardParam((int *)WDcfg->ChEnableMask0,			GetHex(f_ini));
+		if (streq(str, "ChEnableMask1"))			SetBoardParam((int *)WDcfg->ChEnableMask1,			GetHex(f_ini));
+		if (streq(str, "Q_DiscrMask0"))				SetBoardParam((int *)WDcfg->Q_DiscrMask0,			GetHex(f_ini));
+		if (streq(str, "Q_DiscrMask1"))				SetBoardParam((int *)WDcfg->Q_DiscrMask1,			GetHex(f_ini));
+		if (streq(str, "Tlogic_Mask0"))				SetBoardParam((int *)WDcfg->Tlogic_Mask0,			GetHex(f_ini));
+		if (streq(str, "Tlogic_Mask1"))				SetBoardParam((int *)WDcfg->Tlogic_Mask1,			GetHex(f_ini));
+		if (streq(str, "HV_Vbias"))					SetBoardParamFloat(WDcfg->HV_Vbias,					GetVoltage(f_ini));
+		if (streq(str, "HV_Imax"))					SetBoardParamFloat(WDcfg->HV_Imax,					GetCurrent(f_ini));  // Imax is expressed in mA
 			
-		else if (streq(str, "Load"))					LoadExtCfgFile(f_ini, WDcfg);
+		if (streq(str, "Load"))					LoadExtCfgFile(f_ini, WDcfg);
 
 		if (!ValidParameterName || !ValidParameterValue || !ValidUnits) {
 			if (!ValidUnits && ValidParameterValue)
