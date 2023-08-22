@@ -42,7 +42,7 @@
 // Global variables
 // *********************************************************************************************************
 uint32_t TDL_NumNodes[FERSLIB_MAX_NCNC][FERSLIB_MAX_NTDL] = { 0 };	// num of nodes in the chain. Inizialized to <0 or >MAX_NBRD_IN_NODE, to avoid multiple enumaration
-float FiberDelayAdjust[FERSLIB_MAX_NCNC][FERSLIB_MAX_NTDL][FERSLIB_MAX_NNODES];	// Fiber length (in meters) for individual tuning of the propagation delay along the TDL daisy chains
+float FiberDelayAdjust[FERSLIB_MAX_NCNC][FERSLIB_MAX_NTDL][FERSLIB_MAX_NNODES] = { 0 };	// Fiber length (in meters) for individual tuning of the propagation delay along the TDL daisy chains
 int InitDelayAdjust[FERSLIB_MAX_NCNC] = { 0 };
 
 static f_socket_t FERS_CtrlSocket[FERSLIB_MAX_NCNC] = {f_socket_invalid};	// slow control (R/W reg)
@@ -1072,7 +1072,7 @@ int LLtdl_InitTDLchains(int cindex, float DelayAdjust[FERSLIB_MAX_NTDL][FERSLIB_
 	for (chain = 0; chain < FERSLIB_MAX_NTDL; chain++) {
 		del_sum = 0;
 		for (i = 0; i < TDL_NumNodes[cindex][chain]; i++) {
-			flength = (InitDelayAdjust[cindex] || (DelayAdjust[chain][i] == 0)) ? DEFAULT_FIBER_LENGTH : DelayAdjust[chain][i];
+			flength = (InitDelayAdjust[cindex] || (FiberDelayAdjust[cindex][chain][i] == 0)) ? DEFAULT_FIBER_LENGTH : FiberDelayAdjust[cindex][chain][i];// (DelayAdjust[chain][i] == 0) DelayAdjust[chain][i];  
 			del_sum += FIBER_DELAY(flength);
 		}
 		max_delay = max(del_sum, max_delay);
@@ -1096,7 +1096,7 @@ int LLtdl_InitTDLchains(int cindex, float DelayAdjust[FERSLIB_MAX_NTDL][FERSLIB_
 			//	uint32_t data = (chain << 24) | (i << 16) | prop_delay;
 			node_delay = max_delay;
 			for (i=0; i< TDL_NumNodes[cindex][chain]; ++i) {
-				flength = (InitDelayAdjust[cindex] || (DelayAdjust[chain][i] == 0)) ? DEFAULT_FIBER_LENGTH : DelayAdjust[chain][i];
+				flength = (InitDelayAdjust[cindex] || (FiberDelayAdjust[cindex][chain][i] == 0)) ? DEFAULT_FIBER_LENGTH : FiberDelayAdjust[cindex][chain][i];
 				node_delay -= FIBER_DELAY(flength);
 				if (node_delay < 0) node_delay = 0;
 				uint32_t data = (chain << 24) | (i < 16) | (uint32_t)node_delay;

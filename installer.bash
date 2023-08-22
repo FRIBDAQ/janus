@@ -51,9 +51,7 @@ echo "*************************************************"
 echo "Compiling JanusC ..."
 
 #Compile JanusC
-set -o pipefail
-make all 2>&1 tee make.log
-set +o pipefail
+make all
 res=$?
 if [ $res -ne 0 ]; then
 	echo "ERROR: Compilation failed"

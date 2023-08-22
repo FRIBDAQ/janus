@@ -578,6 +578,15 @@ class TabsPanel():
 							"Tlogic_Mask0" : [self.masktd, 380/sh.Win_Tabs_W, ypos['Tlogic_Mask0']/sh.Win_Tabs_H, 109/sh.Win_Tabs_W, 0.08]}
 
 
+	# ***************************************************************************************
+	# Update params
+	# ***************************************************************************************
+	def set_output_log(self, text, option='normal'):
+		self.Output['state'] = NORMAL
+		self.Output.insert(END, text, option)
+		self.Output.yview_scroll(100, UNITS)
+		self.Output['state'] = DISABLED
+
 
 	# ***************************************************************************************
 	# Update params
