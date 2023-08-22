@@ -374,6 +374,7 @@ class CtrlPanel():
 			self.enable_runvarsave = True
 
 	def SetAcqStatus(self, status, msg):
+		self.AcqStatus["state"] = NORMAL
 		self.AcqStatus.delete(1.0, END)
 		self.AcqStatus.insert(INSERT, msg)
 		self.bin2csv_button["state"] = NORMAL
@@ -479,6 +480,8 @@ class CtrlPanel():
 					if prog >= 100:
 						self.sc_run.config(state=NORMAL)
 						self.CloseSpecialRunWin()
+
+		self.AcqStatus["state"] = DISABLED
 
 
 	#####################################################################################

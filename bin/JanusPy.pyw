@@ -121,17 +121,15 @@ class Open_GUI(Frame):
 
 	def CfgLoadOnLog(self, myname):
 		print("Load configuration from '" + myname + "'\n")
-		self.Tabs.Output.insert(END, "Load configuration from '" + myname + "'\n")
-		self.Tabs.Output.yview_scroll(100, UNITS)
+		self.Tabs.set_output_log("Load configuration from '" + myname + "'\n")
 
 	def CfgSaveOnLog(self, myname):
 		if myname.find("ACOPY_") != -1:	# not used at the moment
 			myname = myname.replace("ACOPY_", "")
-			self.Tabs.Output.insert(END, "Save a configuration copy as '" + myname + "'\n")
+			self.Tabs.set_output_log("Save a configuration copy as '" + myname + "'\n")
 		else:
-			self.Tabs.Output.insert(END, "Save configuration as '" + myname + "'\n")
+			self.Tabs.set_output_log("Save configuration as '" + myname + "'\n")
 			print("Save configuration as '" + myname + "'\n")
-		self.Tabs.Output.yview_scroll(100, UNITS)
 
 	def NotifyCsvStarted(self):
 		mytext = "Converting to CSV format the following binary files:\n"
@@ -140,8 +138,7 @@ class Open_GUI(Frame):
 				mytext = mytext + " - " + name.get() + "\n"
 		mytext = mytext + "Please, check the opened shell to monitor the CSV conversion status ...\n"
 
-		self.Tabs.Output.insert(END, mytext)
-		self.Tabs.Output.yview_scroll(100, UNITS)
+		self.Tabs.set_output_log(mytext)
 
 	# GUI self warning
 	def WrittenEmptyEntries(self):
@@ -151,23 +148,20 @@ class Open_GUI(Frame):
 				empt = self.Tabs.param_rename[empt]
 				mymsg = empt + " default entry is left blank. Janus will use its default value\n"
 				wrmsg = wrmsg + empt + "\n"
-				self.Tabs.Output.insert(END, mymsg, 'empty')
-				self.Tabs.Output.yview_scroll(100, UNITS)
+				self.Tabs.set_output_log(mymsg, 'empty')
 			if len(cfg.empty_field) > 1: wrmsg = wrmsg + "default entries are left Blank.\nJanus will use its default values\n\n" 
 			elif len(cfg.empty_field) > 0: wrmsg = wrmsg + "default entry is left Blank.\nJanus will use its default value\n\n" 
 			if len(cfg.gain_check) > 0:
 				mm = "".join(gcheck for gcheck in cfg.gain_check)
-				self.Tabs.Output.insert(END, mm, 'warning')
+				self.Tabs.set_output_log(mm, 'warning')
 				self.Ctrl.RisedWarning.set(1)
-				self.Tabs.Output.yview_scroll(100, UNITS)
 				wrmsg = wrmsg + mm
 			if self.Ctrl.show_warning.get(): 
 				messagebox.showwarning(title=None, message=wrmsg)
 
 		if len(cfg.jobs_check) > 0: # Last job < first job 
-			self.Tabs.Output.insert(END, cfg.jobs_check[0], 'empty')
-			self.Tabs.Output.yview_scroll(100, UNITS)
-			# wrmsg = wrmsg + cfg.jobs_check[0]
+			self.Tabs.set_output_log(cfg.jobs_check[0], 'empty')
+			## wrmsg = wrmsg + cfg.jobs_check[0]
 			self.Tabs.par_def_svar['JobLastRun'].set(params['JobLastRun'].default)
 			return
 		if len(cfg.cfg_file_list) > 0:
@@ -176,7 +170,7 @@ class Open_GUI(Frame):
 				mmsg = mmsg + " - " + cfile + "\n"
 			mmsg = mmsg + "The previous parameter values are lost, the new ones are displaied on GUI!\n"	
 			# mmsg = mmsg + "The new parameter values are loaded on JanusC but not shown on GUI!"
-			self.Tabs.Output.insert(END, mmsg, 'empty')
+			self.Tabs.set_output_log(mmsg, 'empty')
 			return
 
 		
@@ -347,13 +341,11 @@ class Open_GUI(Frame):
 					with open("JanusPylog.log", "a") as f:
 						f.write("Message from board: ", cmsg)
 					if cmsg[0] != 'm' or cmsg != 'w':	# Verbose message
-						self.Tabs.Output.insert(END, cmsg[1:] + "\n", forgrd)
-						self.Tabs.Output.yview_scroll(100, UNITS)
+						self.Tabs.set_output_log(cmsg[1:] + "\n", forgrd)
 				if cmsg[0] != 'w' and pcmsg == 'w':	# print Warning on LOG and raise a warning pop-up
 					if self.Ctrl.show_warning.get(): messagebox.showwarning(title=None, message="WARNING(s)!!!\n\n" + wmsg, parent=self.master)
 					self.Ctrl.RisedWarning.set(1)
-					self.Tabs.Output.insert(END, "WARNING(s)!!!\n" + wmsg, 'warning')
-					self.Tabs.Output.yview_scroll(100, UNITS)
+					self.Tabs.set_output_log("WARNING(s)!!!\n" + wmsg, 'warning')
 					wmsg = ""					
 					pcmsg = cmsg[0]
 				#dest = sdata[0].decode('utf-8')
@@ -362,8 +354,7 @@ class Open_GUI(Frame):
 					if cmsg.find("ERROR") != -1: 
 						forgrd = 'error'  
 						cmsg = cmsg[:-1]	# DNIN: to be tested
-					self.Tabs.Output.insert(END, cmsg[1:], forgrd)
-					self.Tabs.Output.yview_scroll(100, UNITS)
+					self.Tabs.set_output_log(cmsg[1:], forgrd)
 				elif cmsg[0] == 'a': # acquisition status
 					status = int(cmsg[1:3])
 					status_msg = cmsg[3:]
@@ -374,7 +365,7 @@ class Open_GUI(Frame):
 					self.Ctrl.SetAcqStatus(status, status_msg)	# With cmsg[0]=='R' there is a redundance
 					self.Tabs.TabsUpdateStatus(status)
 					if status == sh.ACQSTATUS_ERROR: 
-						self.Tabs.Output.insert(END, '\n', 'normal')
+						self.Tabs.set_output_log('\n', 'normal')
 					if status == sh.ACQSTATUS_READY: 
 						self.mGuiMenu.entryconfig("FWupgrade", state="normal")
 						if pr_status == 2: #!= status: # Only when connect 

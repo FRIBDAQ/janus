@@ -9,7 +9,7 @@ BINDIR = bin
 MYDEF = FERS_5202
 
 TARGETMACRO = BinToCsv
-MACRODIR = macros
+MACRODIR = macros/BinToCsv
 
 .PHONY: default conversion all clean
 
