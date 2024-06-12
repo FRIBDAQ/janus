@@ -113,15 +113,23 @@ void RingBufferHandler::writeToRing(bool isHeader) {
     CPhysicsEventItem item(tstamp_int, m_SourceId, 0, m_SizeToWrite + 1024);
 
     void *dest = item.getBodyCursor();
+
+    uint16_t inclusiveSize = 2 + (!isHeader)*2 + m_SizeToWrite + 4;
+    memcpy(dest, &inclusiveSize, 2);
+    dest = static_cast<void *>(static_cast<uint8_t *>(dest) + 2);
+
     if (!isHeader) {
-      uint16_t metadata = (uint16_t) m_AcqMode << 8 | (uint16_t) m_TimeUnit;
+      uint16_t metadata = (uint16_t) m_AcqMode << 8 | (uint16_t) m_TimeUnit;  
       memcpy(dest, &metadata, 2);
-    } else {
-      memcpy(dest, &m_SizeToWrite, 2);
+      dest = static_cast<void *>(static_cast<uint8_t *>(dest) + 2);
     }
 
-    memcpy(static_cast<void *>(static_cast<uint8_t *>(dest) + 2), m_Buffer, m_SizeToWrite);
-    dest = static_cast<void *>(static_cast<uint8_t *>(dest) + 2 + m_SizeToWrite);
+    memcpy(dest, m_Buffer, m_SizeToWrite);
+    dest = static_cast<void *>(static_cast<uint8_t *>(dest) + m_SizeToWrite);
+
+    uint32_t ender = 0xffffffff;
+    memcpy(dest, &ender, 4);
+    dest = static_cast<void *>(static_cast<uint8_t *>(dest) + 4);
 
     item.setBodyCursor(dest);
     item.updateSize();
