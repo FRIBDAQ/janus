@@ -102,7 +102,7 @@ int _scanf(char *fmt, ...);
 //****************************************************************************
 // Function prototypes
 //****************************************************************************
-int InitConsole(int Mode, FILE *log);
+int InitConsole(int Mode, FILE *log, char Port[]);
 int Con_kbhit();
 int Con_getch();
 int Con_GetString(char *str, int MaxCounts);

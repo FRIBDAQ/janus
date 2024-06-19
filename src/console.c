@@ -132,7 +132,7 @@ void* ListenThread(void *arg) {
 	return NULL;
 }
 
-int ConnectSocket()
+int ConnectSocket(char Port[])
 {
 
 	f_socket_t ConnectSocket = f_socket_invalid;
@@ -155,7 +155,7 @@ int ConnectSocket()
 	hints.ai_protocol = IPPROTO_TCP;
 
 	// Resolve the server address and port
-	iResult = getaddrinfo("localhost", DEFAULT_PORT, &hints, &result); // seems works in multiplatform
+	iResult = getaddrinfo("localhost", (strcmp(Port, "") == 0 ? DEFAULT_PORT : Port), &hints, &result); // seems works in multiplatform
     if ( iResult != 0 ) {
 		Con_printf("L", "ERROR: socket getaddrinfo error: %d", iResult);
 #ifdef _WIN32
@@ -266,7 +266,7 @@ int GetStringFromGUI(char* str, int* size, int max_size) {
 // --------------------------------------------------------------------------------------------------------- 
 //  Init console window (terminal)
 // --------------------------------------------------------------------------------------------------------- 
-int InitConsole(int Mode, FILE *log) 
+int InitConsole(int Mode, FILE *log, char Port[])
 {
 	ConSocket = Mode & CONMODE_SOCKET;
 	ConLog = log;
@@ -295,7 +295,7 @@ int InitConsole(int Mode, FILE *log)
 	}
 	else {
 		// open socket to GUI (this program is client, GUI is server)
-		if (ConnectSocket() < 0) {
+		if (ConnectSocket(Port) < 0) {
 			return -1;
 		}
 	}

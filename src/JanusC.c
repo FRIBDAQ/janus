@@ -1009,11 +1009,13 @@ int main(int argc, char* argv[])
 	FILE* cfg;
 	int a1, a2, AllocSize;
 	int ROmode;
+	char port[6] = "";
 
 	// Get command line options
 	for (i = 1; i < argc; i++) {
 		if (argv[i][0] == '-') {
 			if (strcmp(argv[i] + 1, "g") == 0) SockConsole = 1;
+			if (argv[i][1] == 'p') strcpy(port, &argv[i][2]);
 			if (argv[i][1] == 'c') strcpy(ConfigFileName, &argv[i][2]);
 			if (argv[i][1] == 'u') {
 				if (argc > (i + 2)) {
@@ -1026,7 +1028,7 @@ int main(int argc, char* argv[])
 	}
 
 	MsgLog = fopen("MsgLog.txt", "w");
-	ret = InitConsole(SockConsole, MsgLog);
+	ret = InitConsole(SockConsole, MsgLog, port);
 	if (ret) {
 		printf("ERROR: init console failed\n");
 		exit(0);
