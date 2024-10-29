@@ -142,11 +142,6 @@ void RingBufferHandler::writeToRing(bool isHeader) {
 
 void RingBufferHandler::emitStateChangeToRing(bool isBegin, bool useBarrier) {
     CRingStateChangeItem item(time(NULL), m_SourceId, (useBarrier ? (isBegin ? 1 : 2) : 0), (isBegin ? BEGIN_RUN : END_RUN), m_RunNumber, 0, time(NULL), m_Title);
-    void *dest = item.getBodyCursor();
-    memcpy(dest, m_TitleWithFileHeader.c_str(), RING_TITLE_BUFFER_SIZE);
-    dest = static_cast<void *>(static_cast<uint8_t *>(dest) + RING_TITLE_BUFFER_SIZE);
-    item.setBodyCursor(dest);
-    item.updateSize();
     
     CRingBuffer* pR = m_RingBuffer.get();
     item.commitToRing(*pR);
