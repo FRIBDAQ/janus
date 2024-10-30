@@ -115,6 +115,9 @@ void RingBufferHandler::writeToRing(bool isHeader) {
     void *dest = item.getBodyCursor();
 
     uint16_t inclusiveSize = 2 + (!isHeader)*2 + m_SizeToWrite + 4;
+    uint16_t even16pad = inclusiveSize%sizeof(uint32_t) == 0 ? 0 : sizeof(uint32_t) - inclusiveSize%sizeof(uint32_t);
+    inclusiveSize += even16pad;
+
     memcpy(dest, &inclusiveSize, 2);
     dest = static_cast<void *>(static_cast<uint8_t *>(dest) + 2);
 
@@ -130,6 +133,12 @@ void RingBufferHandler::writeToRing(bool isHeader) {
     uint32_t ender = 0xffffffff;
     memcpy(dest, &ender, 4);
     dest = static_cast<void *>(static_cast<uint8_t *>(dest) + 4);
+
+    uint8_t even16maker = 0xff;
+    for (int i = 0; i < even16pad; i++) {
+      memcpy(dest, &even16maker, 1);
+      dest = static_cast<void *>(static_cast<uint8_t *>(dest) + 1);
+    }
 
     item.setBodyCursor(dest);
     item.updateSize();
