@@ -1,0 +1,59 @@
+TARGET = JanusC
+CXX = g++
+CFLAGS = -Wall -Wno-write-strings -std=c++17 -Dlinux
+LDFLAGS = -pthread -lrt 
+LDPATH = -Lferslib/local/lib
+INCLUDE = -I/usr/include/libusb-1.0
+INCLUDELIB = -Iferslib/local/include
+LDADD = -lusb-1.0 -Wl,-rpath,ferslib/local/lib -lcaenferslib
+SRCDIR = src
+BINDIR = bin
+MYDEF = FERS_5202
+
+TARGETMACRO = BinToCsv
+MACRODIR = macros/BinToCsv
+
+.PHONY: default conversion all clean
+
+default: $(TARGET)
+conversion: $(TARGETMACRO)
+all: default conversion
+
+OBJECTS = $(SRCDIR)/console.o $(SRCDIR)/FERSutils.o $(SRCDIR)/JanusC.o $(SRCDIR)/MultiPlatform.o $(SRCDIR)/outputfiles.o $(SRCDIR)/paramparser.o $(SRCDIR)/plot.o $(SRCDIR)/Statistics.o
+
+$(SRCDIR)/%.o: $(SRCDIR)/%.c
+	$(CXX) $(CFLAGS) -D$(MYDEF) -c $< -o $@ $(INCLUDELIB)
+	
+$(SRCDIR)/%.o: $(SRCDIR)/%.cpp
+	$(CXX) $(CFLAGS) -D$(MYDEF) -c $< -o $@ $(INCLUDE) $(INCLUDELIB)
+	
+#OBJECT = $(OBJECT) FERS_LLusb.o
+	
+.PRECIOUS: $(TARGET) $(OBJECTS)
+
+$(TARGET): $(OBJECTS)
+	$(CXX) $(OBJECTS) $(LDFLAGS) -o $(BINDIR)/$@ $(LDPATH) $(LDADD)
+	
+# BintoCsv make
+OBJMACRO = $(MACRODIR)/BinToCsv.o $(MACRODIR)/BinaryDataFERS.o $(MACRODIR)/BinaryData_5202.o $(MACRODIR)/BinaryData_5203.o
+
+$(MACRODIR)/%.o: $(MACRODIR)/%.cpp
+	$(CXX) $(CFLAGS) -c $< -o $@
+	
+.PRECIOUS: $(TARGETMACRO) $(OBJMACRO)
+
+$(TARGETMACRO):  $(OBJMACRO)
+	$(CXX) $(OBJMACRO) -o $(BINDIR)/$@
+
+# $(TARGETMACRO): 
+# 	$(CXX) -o $(BINDIR)/$@ $(CFLAGS) $(MACRODIR)/$(TARGETMACRO).cpp
+	
+cleanjanus:
+	-rm -f $(SRCDIR)/*.o
+	-rm -f $(BINDIR)/$(TARGET)
+	
+cleanbintocsv:
+	-rm -f $(BINDIR)/$(TARGETMACRO)
+	
+clean: cleanjanus cleanbintocsv
+	

@@ -27,7 +27,7 @@
 // Description: get time from the computer
 // Return:		time in ms
 // --------------------------------------------------------------------------------------------------------- 
-uint64_t get_time()
+uint64_t j_get_time()
 {
 	uint64_t time_ms;   // long
 	struct _timeb timebuffer;
@@ -83,7 +83,7 @@ int GetFileUpdateTime(char *fname, uint64_t *ftime)
 // Description: get time from the computer
 // Return:		time in ms
 // --------------------------------------------------------------------------------------------------------- 
-uint64_t get_time()
+uint64_t j_get_time()
 {
     uint64_t time_ms;
     struct timeval t1;

@@ -109,7 +109,7 @@ int Con_GetString(char *str, int MaxCounts);
 int Con_GetInt(int *val);
 void ClearScreen();
 void gotoxy(int x,int y);
-int Con_printf(char *dest, char *fmt, ...);
+int Con_printf(const char *dest, const char *fmt, ...);
 
 
 #endif

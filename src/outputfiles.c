@@ -17,9 +17,10 @@
 #include <stdio.h>
 #include <inttypes.h>
 
-#include "FERSlib.h"
+//#include "FERSlib.h"
 #include "console.h"
-#include "configure.h"
+//#include "configure.h"
+#include "FERSutils.h"
 #include "JanusC.h"
 #include "Statistics.h"
 
@@ -47,23 +48,23 @@ static int LocalRunNum = 0;
 // Local functions
 // ****************************************************
 static uint16_t rebin_energy(uint16_t energy) {
-	if		(WDcfg.EHistoNbin == 8192) return energy;
-	else if (WDcfg.EHistoNbin == 4096) return (energy >> 1);
-	else if (WDcfg.EHistoNbin == 2048) return (energy >> 2);
-	else if (WDcfg.EHistoNbin == 1024) return (energy >> 3);
-	else if (WDcfg.EHistoNbin == 512)  return (energy >> 4);
-	else if (WDcfg.EHistoNbin == 256)  return (energy >> 5);
+	if		(J_cfg.EHistoNbin == 8192) return energy;
+	else if (J_cfg.EHistoNbin == 4096) return (energy >> 1);
+	else if (J_cfg.EHistoNbin == 2048) return (energy >> 2);
+	else if (J_cfg.EHistoNbin == 1024) return (energy >> 3);
+	else if (J_cfg.EHistoNbin == 512)  return (energy >> 4);
+	else if (J_cfg.EHistoNbin == 256)  return (energy >> 5);
 	else return energy;
 }
 
 // Type: 0=Binary, 1=CSV, 2=ascii/txt
 static void CreateOutFileName(char *radix, int RunNumber, int type, char *filename) {
 	if (RunNumber >= 0) {
-		if (strcmp(radix, "list") == 0 && WDcfg.EnableMaxFileSize)
-			sprintf(filename, "%sRun%d.%d_%s", WDcfg.DataFilePath, RunNumber, 0, radix);
+		if (strcmp(radix, "list") == 0 && J_cfg.EnableMaxFileSize)
+			sprintf(filename, "%sRun%d.%d_%s", J_cfg.DataFilePath, RunNumber, 0, radix);
 		else
-			sprintf(filename, "%sRun%d_%s", WDcfg.DataFilePath, RunNumber, radix);
-	} else sprintf(filename, "%s%s", WDcfg.DataFilePath, radix);
+			sprintf(filename, "%sRun%d_%s", J_cfg.DataFilePath, RunNumber, radix);
+	} else sprintf(filename, "%s%s", J_cfg.DataFilePath, radix);
 	if (type == 0) strcat(filename, ".dat");
 	else if (type == 1) strcat(filename, ".csv");
 	else strcat(filename, ".txt");
@@ -72,7 +73,7 @@ static void CreateOutFileName(char *radix, int RunNumber, int type, char *filena
 // Type: 0=Binary, 1=CSV, 2=ASCII
 static void IncreaseListSubRun(int type) {
 	int srun;
-	char filename[500];
+	char filename[550];
 
 	if (type == 0) {
 		fclose(of_list_b);
@@ -90,8 +91,8 @@ static void IncreaseListSubRun(int type) {
 		srun = ascii_srun;
 		ascii_size = 0;
 	}
-	if (LocalRunNum >= 0) sprintf(filename, "%sRun%d.%d_%s", WDcfg.DataFilePath, LocalRunNum, srun, "list");
-	else sprintf(filename, "%s%s", WDcfg.DataFilePath, "list");
+	if (LocalRunNum >= 0) sprintf(filename, "%sRun%d.%d_%s", J_cfg.DataFilePath, LocalRunNum, srun, "list");
+	else sprintf(filename, "%s%s", J_cfg.DataFilePath, "list");
 	if (type == 0) {
 		strcat(filename, ".dat");
 		of_list_b = fopen(filename, "wb");
@@ -113,31 +114,31 @@ int OpenOutputFiles(int RunNumber)
 	char filename[500];
 	LocalRunNum = RunNumber;
 
-	//if ((WDcfg.OutFileEnableMask & OUTFILE_RAW_DATA_BIN) && (of_raw_b == NULL)) { 
+	//if ((J_cfg.OutFileEnableMask & OUTFILE_RAW_DATA_BIN) && (of_raw_b == NULL)) { 
 	//	CreateOutFileName("raw_data", RunNumber, 1, filename);
 	//	of_raw_b = fopen(filename, "wb");
 	//}
-	//if ((WDcfg.OutFileEnableMask & OUTFILE_RAW_DATA_ASCII) && (of_raw_a == NULL)) {
+	//if ((J_cfg.OutFileEnableMask & OUTFILE_RAW_DATA_ASCII) && (of_raw_a == NULL)) {
 	//	CreateOutFileName("raw_data", RunNumber, 0, filename);
 	//	of_raw_a = fopen(filename, "w");
 	//}
-	if ((WDcfg.OutFileEnableMask & OUTFILE_LIST_BIN) && (of_list_b == NULL)) {
+	if ((J_cfg.OutFileEnableMask & OUTFILE_LIST_BIN) && (of_list_b == NULL)) {
 		CreateOutFileName("list", RunNumber, 0, filename);
 		of_list_b = fopen(filename, "wb");
 	}
-	if ((WDcfg.OutFileEnableMask & OUTFILE_LIST_ASCII) && (of_list_a == NULL)) {
+	if ((J_cfg.OutFileEnableMask & OUTFILE_LIST_ASCII) && (of_list_a == NULL)) {
 		CreateOutFileName("list", RunNumber, 2, filename);
 		of_list_a = fopen(filename, "w");
 	}
-	if ((WDcfg.OutFileEnableMask & OUTFILE_LIST_CSV) && (of_list_c == NULL)) {
+	if ((J_cfg.OutFileEnableMask & OUTFILE_LIST_CSV) && (of_list_c == NULL)) {
 		CreateOutFileName("list", RunNumber, 1, filename);
 		of_list_c = fopen(filename, "w");
 	}
-	if ((WDcfg.OutFileEnableMask & OUTFILE_SYNC) && (of_sync == NULL)) {
+	if ((J_cfg.OutFileEnableMask & OUTFILE_SYNC) && (of_sync == NULL)) {
 		CreateOutFileName("sync", RunNumber, 2, filename);
 		of_sync = fopen(filename, "w");
 	}
-	if ((WDcfg.OutFileEnableMask & OUTFILE_SERVICE_INFO) && (of_servInfo == NULL)) {
+	if ((J_cfg.OutFileEnableMask & OUTFILE_SERVICE_INFO) && (of_servInfo == NULL)) {
 		CreateOutFileName("ServiceInfo", RunNumber, 2, filename);
 		of_servInfo = fopen(filename, "w");
 	}
@@ -198,6 +199,10 @@ int WriteListfileHeader() {
 	sscanf(SW_RELEASE_NUM, "%" SCNu8 ".%" SCNu8 ".%" SCNu8, &fnumSW, &snumSW, &tnumSW);
 	sscanf(FILE_LIST_VER, "%" SCNu8 ".%" SCNu8, &fnumFVer, &snumFVer);
 	uint16_t brdVer = 0;
+	int Enable_2nd_tstamp = FERS_GetParam_int(handle[0], "Enable_2nd_tstamp");
+	//int AcquisitionMode = FERS_GetParam_int(handle[0], "AcquisitionMode");
+	int EnableToT = FERS_GetParam_int(handle[0], "EnableToT");
+
 #ifdef FERS_5203	
 	//sscanf("52.03", "%" SCNu8 ".%" SCNu8, &fbrdVer, &sbrdVer);
 	sscanf("5203", "%" SCNu16, &brdVer);
@@ -207,14 +212,14 @@ int WriteListfileHeader() {
 
 	int16_t rn = (int16_t)RunVars.RunNumber;
 	// Write headers, common for all the list files
-	type_file = WDcfg.AcquisitionMode & 0x0F | (WDcfg.Enable_2nd_tstamp<<7);  // dtq & 0x0F;
+	type_file = (J_cfg.AcquisitionMode & 0x0F) | (Enable_2nd_tstamp<<7);  // dtq & 0x0F;
 	if (of_list_b != NULL) {   // Binary ASCII
-		float tmpLSB = float(TOA_LSB_ns);
-		uint16_t enbin = WDcfg.EHistoNbin;
-		//uint32_t tmask = WDcfg.ChEnableMask1[brd];	// see below
+		float tmpLSB = (float)TOA_LSB_ns;
+		uint16_t enbin = J_cfg.EHistoNbin;
+		//uint32_t tmask = J_cfg.ChEnableMask1[brd];	// see below
 		uint8_t header_size = 
 			sizeof(header_size) + 5 * sizeof(fnumFVer) + sizeof(brdVer) + sizeof(rn) + sizeof(type_file) +
-			sizeof(enbin) + sizeof(WDcfg.OutFileUnit) + sizeof(tmpLSB) + sizeof(Stats.start_time);
+			sizeof(enbin) + sizeof(J_cfg.OutFileUnit) + sizeof(tmpLSB) + sizeof(Stats.start_time);
 
 		//fwrite(&header_size, sizeof(header_size), 1, of_list_b);
 		fwrite(&fnumFVer, sizeof(fnumFVer), 1, of_list_b);
@@ -226,14 +231,14 @@ int WriteListfileHeader() {
 		fwrite(&rn, sizeof(rn), 1, of_list_b);
 		fwrite(&type_file, sizeof(type_file), 1, of_list_b); // Acquisition Mode
 		fwrite(&enbin, sizeof(enbin), 1, of_list_b);
-		fwrite(&WDcfg.OutFileUnit, sizeof(WDcfg.OutFileUnit), 1, of_list_b);	// Type of unit used for Time. 0 LSB, 1 ns
+		fwrite(&J_cfg.OutFileUnit, sizeof(J_cfg.OutFileUnit), 1, of_list_b);	// Type of unit used for Time. 0 LSB, 1 ns
 		fwrite(&tmpLSB, sizeof(tmpLSB), 1, of_list_b);	// Keep it as float for homogenity with A5203, the value of the LSB of which is not fixed
 		//fwrite(&tmask, sizeof(tmask), 1, of_list_b);	// uncomment if we want the Channel Mask
 		fwrite(&Stats.start_time, sizeof(Stats.start_time), 1, of_list_b);
 		bin_size += header_size;
 	}
 	char unit[10];
-	if (WDcfg.OutFileUnit) strcpy(unit, "ns");
+	if (J_cfg.OutFileUnit) strcpy(unit, "ns");
 	else strcpy(unit, "LSB");
 
 	char mytime[100];
@@ -242,14 +247,15 @@ int WriteListfileHeader() {
 	mytime[strlen(mytime) - 1] = 0;
 
 	if (of_list_a != NULL) {  //  ASCII header
-		int t_file = (WDcfg.AcquisitionMode&0xF0)? 5: type_file & 0x0F;
+		int t_file = (J_cfg.AcquisitionMode&0xF0)? 5: type_file & 0x0F;
 		fprintf(of_list_a, "//************************************************\n");
+		fprintf(of_list_a, "// Board: 5202\n");
 		fprintf(of_list_a, "// File Format Version %s\n", FILE_LIST_VER);
 		//fprintf(of_list_a, "// Janus _%" PRIu16 " Release % s\n", brdVer, SW_RELEASE_NUM);   // For next File Format
 		fprintf(of_list_a, "// Janus Release %s\n", SW_RELEASE_NUM);
 		fprintf(of_list_a, "// Acquisition Mode: %s\n", dtq_mode_ch[t_file]);
-		fprintf(of_list_a, "// Energy Histogram Channels: %d\n", WDcfg.EHistoNbin);
-		fprintf(of_list_a, "// ToA/ToT LSB: %.1f ns\n", TOA_LSB_ns);
+		if (type_file & DTQ_SPECT) fprintf(of_list_a, "// Energy Histogram Channels: %d\n", J_cfg.EHistoNbin);
+		if (type_file & DTQ_TIMING) fprintf(of_list_a, "// ToA/ToT LSB: %.1f ns\n", TOA_LSB_ns);
 		char mytime[100];
 		//strcpy(mytime, ctime(&Stats.time_of_start));
 		strcpy(mytime, asctime(gmtime(&Stats.time_of_start)));
@@ -258,35 +264,35 @@ int WriteListfileHeader() {
 		fprintf(of_list_a, "// Run start time: %s UTC\n", mytime);
 		fprintf(of_list_a, "//************************************************\n");
 
-		int dtqh = WDcfg.AcquisitionMode & 0x0F;
-		int en2ts = (WDcfg.Enable_2nd_tstamp & 1);
+		int dtqh = J_cfg.AcquisitionMode & 0x0F;
+		int en2ts = (Enable_2nd_tstamp & 1);
 		if (dtqh == DTQ_SPECT) {
 			if (en2ts) fprintf(of_list_a, "Brd  Ch       LG       HG        Tstamp_us       Tstamp2_us        TrgID			NHits\n");
 			else fprintf(of_list_a, "Brd  Ch       LG       HG        Tstamp_us        TrgID		NHits\n");
 		} else if (dtqh == DTQ_TSPECT) {
-			if (WDcfg.EnableToT) fprintf(of_list_a, "Brd  Ch       LG       HG  ToA_%-3s  ToT_%-3s", unit, unit);
+			if (EnableToT) fprintf(of_list_a, "Brd  Ch       LG       HG  ToA_%-3s  ToT_%-3s", unit, unit);
 			else fprintf(of_list_a, "Brd  Ch       LG       HG  ToA_%-3s", unit);
 			if (en2ts) fprintf(of_list_a, "        Tstamp_us       Tstamp2_us        TrgID			NHits\n");
 			else fprintf(of_list_a, "        Tstamp_us        TrgID			NHits\n");
 		} else if (dtqh == DTQ_TIMING) {
-			if (WDcfg.EnableToT) fprintf(of_list_a, "Brd  Ch  ToA_%-3s  ToT_%-3s", unit, unit);
+			if (EnableToT) fprintf(of_list_a, "Brd  Ch  ToA_%-3s  ToT_%-3s", unit, unit);
 			else fprintf(of_list_a, "Brd  Ch  ToA_%-3s", unit);
 			fprintf(of_list_a, "        Tstamp_us		NHits\n");
 		} else if (dtqh == DTQ_COUNT) {
 			if (en2ts) fprintf(of_list_a, "Brd  Ch          Cnt       Tstamp_us       Tstamp2_us        TrgID		NHits\n");
-			else fprintf(of_list_a, "Brd  Ch          Cnt       Tstamp_us        TrgID		NHits\n");
+			else fprintf(of_list_a, "Brd  Ch          Cnt       Tstamp_us        TrgID		NChs\n");
 		}
 
 		ascii_size = ftell(of_list_a);
 	}
 	if (of_list_c != NULL) {  // CSV Header
 		// Write Header
-		int t_file = (WDcfg.AcquisitionMode & 0xF0) ? 5 : type_file & 0x0F;
+		int t_file = (J_cfg.AcquisitionMode & 0xF0) ? 5 : type_file & 0x0F;
 		fprintf(of_list_c, "//************************************************\n");
 		fprintf(of_list_c, "//Board:5202\n//File_Format_Version:%s\n//Janus_Release:%s\n", FILE_LIST_VER, SW_RELEASE_NUM);
 		fprintf(of_list_c, "//Acquisition_Mode:%s\n", dtq_mode_ch[t_file]);
 		if (type_file & ACQMODE_SPECT) // Spect or TSpect mode
-			fprintf(of_list_c, "//Energy_Histo_NBins:%d\n", WDcfg.EHistoNbin);
+			fprintf(of_list_c, "//Energy_Histo_NBins:%d\n", J_cfg.EHistoNbin);
 		if ((type_file & ACQMODE_TIMING_CSTART) & 0xF) { // Timing or TSpect
 			fprintf(of_list_c, "//Time_LSB_Value_ns:0.5\n");
 			fprintf(of_list_c, "//Time_Unit:%s\n", unit);
@@ -301,27 +307,27 @@ int WriteListfileHeader() {
 		if (!(type_file & ACQMODE_TIMING_CSTART)) fprintf(of_list_c, "Trg_Id,");
 		fprintf(of_list_c, "Board_Id,Num_Hits,");
 		if ((type_file & ACQMODE_SPECT)) {
-			fprintf(of_list_c, "ChannelMask,Ch_Id,DataType,PHA_LG,PHA_HG");
+			fprintf(of_list_c, "ChannelMask,CH_Id,DataType,PHA_LG,PHA_HG");
 			if (type_file & ACQMODE_TIMING_CSTART) {
 				fprintf(of_list_c, ",ToA_%s", unit);
-				if (WDcfg.EnableToT) fprintf(of_list_c, ",ToT_%s", unit);
+				if (EnableToT) fprintf(of_list_c, ",ToT_%s", unit);
 			} 
 			fprintf(of_list_c, "\n");
 		}
 		if ((type_file & 0xF) == ACQMODE_TIMING_CSTART) {
-			fprintf(of_list_c, "Ch_Id,DataType,ToA_%s", unit);
-			if (WDcfg.EnableToT) fprintf(of_list_c, ",ToT_%s", unit);
+			fprintf(of_list_c, "CH_Id,DataType,ToA_%s", unit);
+			if (EnableToT) fprintf(of_list_c, ",ToT_%s", unit);
 			fprintf(of_list_c, "\n");
 		}
 		if ((type_file & 0xF) == ACQMODE_COUNT) {
-			fprintf(of_list_c, "ChannelMask,Ch_Id,Counts\n");
+			fprintf(of_list_c, "ChannelMask,CH_Id,Counts\n");
 		}
 		csv_size = ftell(of_list_c);
 	}
 	if (of_servInfo != NULL) {
-		fprintf(of_servInfo, "TimeStamp\t");
-		for (int j = 0; j < WDcfg.NumBrd; ++j) {
-			fprintf(of_servInfo, "\tBrd\t\tBrdTemp\t\tDetTemp\t\tFPGATemp\tHVTemp\t\tVmon\t\tImon\tHVstatus");
+		fprintf(of_servInfo, "TStampPC\t");
+		for (int j = 0; j < J_cfg.NumBrd; ++j) {
+			fprintf(of_servInfo, "\tBrd\t\tTStamp_servEvt\t\tBrdTemp\t\tDetTemp\t\tFPGATemp\tHVTemp\t\tVmon\tImon\tHVstatus\tBrdStatus");
 		}
 		fprintf(of_servInfo, "\n");
 	}
@@ -336,11 +342,17 @@ int WriteListfileHeader() {
 // ****************************************************
 int SaveList(int brd, double ts, uint64_t trgid, void *generic_ev, int dtq)
 {
-	if (bin_size > WDcfg.MaxOutFileSize && WDcfg.EnableMaxFileSize)
+	int GainSelect = FERS_GetParam_int(handle[brd], "GainSelect");
+	int EnableToT = FERS_GetParam_int(handle[brd], "EnableToT");
+	//int SupprZeroCntListFile = FERS_GetParam_int(handle[brd], "EnableCntZeroSuppr");
+	float TrefWindow = FERS_GetParam_float(handle[brd], "TrefWindow");
+	uint64_t ChEnableMask = FERS_GetParam_hex64(handle[brd], "ChEnableMask");
+
+	if (bin_size > J_cfg.MaxOutFileSize && J_cfg.EnableMaxFileSize)
 		IncreaseListSubRun(0);
-	if (ascii_size > WDcfg.MaxOutFileSize && WDcfg.EnableMaxFileSize)
+	if (ascii_size > J_cfg.MaxOutFileSize && J_cfg.EnableMaxFileSize)
 		IncreaseListSubRun(2);
-	if (csv_size > WDcfg.MaxOutFileSize && WDcfg.EnableMaxFileSize)
+	if (csv_size > J_cfg.MaxOutFileSize && J_cfg.EnableMaxFileSize)
 		IncreaseListSubRun(1);
 
 	// ----------------------------------------------------------------------------------
@@ -348,7 +360,7 @@ int SaveList(int brd, double ts, uint64_t trgid, void *generic_ev, int dtq)
 	// ----------------------------------------------------------------------------------
 	if (dtq & DTQ_SPECT) {
 		SpectEvent_t *ev = (SpectEvent_t *)generic_ev;
-		int num_of_hits=0, masked[FERSLIB_MAX_NCH] = { 0 };
+		int num_of_hits=0, masked[FERSLIB_MAX_NCH_5202] = { 0 };
 		int isTSpect = (dtq & 0x2) >> 1;
 
 		// Re-Binning
@@ -371,30 +383,30 @@ int SaveList(int brd, double ts, uint64_t trgid, void *generic_ev, int dtq)
 			}
 		}
 
-		if (of_list_b != NULL && (WDcfg.OutFileEnableMask && OUTFILE_LIST_BIN)) {
+		if (of_list_b != NULL && (J_cfg.OutFileEnableMask && OUTFILE_LIST_BIN)) {
 			uint16_t size = sizeof(size) + sizeof(b8) + sizeof(ts) + sizeof(trgid) + sizeof(ev->chmask);
 			if (dtq & 0x80) size += sizeof(ev->rel_tstamp_us);
 			for (i = 0; i < MAX_NCH; i++) {	// DNIN: Is it somehow usefull keeping the condition temp_enL/H >= 0??
 				datatype = 0;
 				if ((ev->chmask >> i) & 1) size += (sizeof(i) + sizeof(datatype));
 				else continue;
-				if (tmp_enL[i] >= 0 && ((WDcfg.GainSelect & GAIN_SEL_LOW) || WDcfg.GainSelect == GAIN_SEL_AUTO)) {
+				if (tmp_enL[i] >= 0 && ((GainSelect & GAIN_SEL_LOW) || GainSelect == GAIN_SEL_AUTO)) {
 					datatype = datatype | 0x01;
 					size += sizeof(ev->energyLG[i]);
 				}
-				if (tmp_enH[i] >= 0 && ((WDcfg.GainSelect & GAIN_SEL_HIGH) || WDcfg.GainSelect == GAIN_SEL_AUTO)) {
+				if (tmp_enH[i] >= 0 && ((GainSelect & GAIN_SEL_HIGH) || GainSelect == GAIN_SEL_AUTO)) {
 					datatype = datatype | 0x02;
 					size += sizeof(ev->energyHG[i]);
 				}
 				if (isTSpect) {
 					if (ev->tstamp[i] > 0) {
 						datatype = datatype | 0x10;
-						if (WDcfg.OutFileUnit) size += sizeof(float);
+						if (J_cfg.OutFileUnit) size += sizeof(float);
 						else size += sizeof(ev->tstamp[i]);	
 					}
-					if (WDcfg.EnableToT && (ev->ToT[i] > 0)) {
+					if (EnableToT && (ev->ToT[i] > 0)) {
 						datatype = datatype | 0x20;
-						if (WDcfg.OutFileUnit) size += sizeof(float);
+						if (J_cfg.OutFileUnit) size += sizeof(float);
 						else size += sizeof(ev->ToT[i]);
 					}
 				}
@@ -412,82 +424,128 @@ int SaveList(int brd, double ts, uint64_t trgid, void *generic_ev, int dtq)
 					uint8_t tmp_type = data_t[i];
 					uint16_t tmp_nrgL = tmp_enL[i];
 					uint16_t tmp_nrgH = tmp_enH[i];
-					float tmpToA = float(ev->tstamp[i] * TOA_LSB_ns);
-					float tmpToT = (tmpToA == 0) ? 0 : float(ev->ToT[i] * TOA_LSB_ns);  // don't write ToT if there is no ToA
+					float tmpToA = (float)(ev->tstamp[i] * TOA_LSB_ns);
+					float tmpToT = (tmpToA == 0) ? 0 : (float)(ev->ToT[i] * TOA_LSB_ns);  // don't write ToT if there is no ToA
 					fwrite(&i, sizeof(i), 1, of_list_b);	// Channel	
 					fwrite(&tmp_type, sizeof(tmp_type), 1, of_list_b);
 					if (data_t[i] & 0x01) fwrite(&tmp_nrgL, sizeof(ev->energyLG[i]), 1, of_list_b);
 					if (data_t[i] & 0x02) fwrite(&tmp_nrgH, sizeof(ev->energyHG[i]), 1, of_list_b);
 					if (data_t[i] & 0x10) {	
-						if (WDcfg.OutFileUnit) fwrite(&tmpToA, sizeof(float), 1, of_list_b);
+						if (J_cfg.OutFileUnit) fwrite(&tmpToA, sizeof(float), 1, of_list_b);
 						else fwrite(&ev->tstamp[i], sizeof(ev->tstamp[i]), 1, of_list_b);
 					}
 					if (data_t[i] & 0x20) {
-						if (WDcfg.OutFileUnit) fwrite(&tmpToT, sizeof(float), 1, of_list_b);
+						if (J_cfg.OutFileUnit) fwrite(&tmpToT, sizeof(float), 1, of_list_b);
 						else fwrite(&ev->ToT[i], sizeof(ev->ToT[i]), 1, of_list_b);
 					}
 				}
 			}
 		}
-		if (of_list_a != NULL) { 
+		if (of_list_a != NULL) {
 			int evg = 1;
-			for(i=0; i<MAX_NCH; i++) {
+			char allChVal[MAX_NCH * 512] = "";
+			for (i = 0; i < MAX_NCH; i++) {
+				char line[512] = "";
+				char cat_line[256] = "";
 				if ((ev->chmask >> i) & 1) {
-					fprintf(of_list_a, "%3d  %02d ", brd, i);
-					if (tmp_enL[i] >= 0 && ((WDcfg.GainSelect & GAIN_SEL_LOW) || WDcfg.GainSelect == GAIN_SEL_AUTO)) fprintf(of_list_a, "%8d ", tmp_enL[i]);
-					else fprintf(of_list_a, "       - "); 
-					if (tmp_enH[i] >= 0 && ((WDcfg.GainSelect & GAIN_SEL_HIGH) || WDcfg.GainSelect == GAIN_SEL_AUTO)) fprintf(of_list_a, "%8d ", tmp_enH[i]);
-					else fprintf(of_list_a, "       - "); 
+					sprintf(cat_line, "%3d  %02d ", brd, i);
+					strcat(line, cat_line);
+					//fprintf(of_list_a, "%3d  %02d ", brd, i);
+					if (tmp_enL[i] >= 0 && ((GainSelect & GAIN_SEL_LOW) || GainSelect == GAIN_SEL_AUTO)) sprintf(cat_line, "%8d ", tmp_enL[i]); // fprintf(of_list_a, "%8d ", tmp_enL[i]);
+					else sprintf(cat_line, "       - "); //fprintf(of_list_a, "       - "); 
+					strcat(line, cat_line);
+
+					if (tmp_enH[i] >= 0 && ((GainSelect & GAIN_SEL_HIGH) || GainSelect == GAIN_SEL_AUTO)) sprintf(cat_line, "%8d ", tmp_enH[i]);  //fprintf(of_list_a, "%8d ", tmp_enH[i]);
+					else sprintf(cat_line, "       - ");   //fprintf(of_list_a, "       - ");
+					strcat(line, cat_line);
+					
 					if (isTSpect) {
 						if (ev->tstamp[i] > 0) {
-							if (WDcfg.OutFileUnit) fprintf(of_list_a, "%8.1f ", 0.5 * ev->tstamp[i]);
-							else fprintf(of_list_a, "%8d ", ev->tstamp[i]);
-						} else fprintf(of_list_a, "       - ");
-						if (WDcfg.EnableToT && (ev->ToT[i] > 0) && (ev->tstamp[i] > 0)) {  // Don't write ToT if there is no ToA
-							if (WDcfg.OutFileUnit) fprintf(of_list_a, "%8.1f ", 0.5 * ev->ToT[i]);
-							else fprintf(of_list_a, "%8d ", ev->ToT[i]);
-						} else fprintf(of_list_a, "       - ");
+							if (J_cfg.OutFileUnit) sprintf(cat_line, "%8.1f ", 0.5 * ev->tstamp[i]); //fprintf(of_list_a, "%8.1f ", 0.5 * ev->tstamp[i]);
+							else sprintf(cat_line, "%8d ", ev->tstamp[i]);  //fprintf(of_list_a, "%8d ", ev->tstamp[i]);								
+						} else sprintf(cat_line, "       - "); //fprintf(of_list_a, "       - ");
+						strcat(line, cat_line);
+						if (EnableToT && (ev->ToT[i] > 0) && (ev->tstamp[i] > 0)) {  // Don't write ToT if there is no ToA
+							if (J_cfg.OutFileUnit) sprintf(cat_line, "%8.1f ", 0.5 * ev->ToT[i]); //fprintf(of_list_a, "%8.1f ", 0.5 * ev->ToT[i]);
+							else sprintf(cat_line, "%8d ", ev->ToT[i]);  //fprintf(of_list_a, "%8d ", ev->ToT[i]);
+						} else sprintf(cat_line, "       - "); //fprintf(of_list_a, "       - ");
+						strcat(line, cat_line);
 					}
 					if (evg) {
-						if (dtq & 0x80) fprintf(of_list_a, "%16.3lf %16.3f %12" PRIu64 "\t\t%d", ts, ev->rel_tstamp_us, trgid, num_of_hits);
-						else fprintf(of_list_a, "%16.3lf %12" PRIu64 "\t\t%d", ts, trgid, num_of_hits);
+						if (dtq & 0x80) sprintf(cat_line, "%16.3lf %16.3f %12" PRIu64 "\t\t%d", ts, ev->rel_tstamp_us, trgid, num_of_hits); //fprintf(of_list_a, "%16.3lf %16.3f %12" PRIu64 "\t\t%d", ts, ev->rel_tstamp_us, trgid, num_of_hits);
+						else sprintf(cat_line, "%16.3lf %12" PRIu64 "\t\t%d", ts, trgid, num_of_hits); //fprintf(of_list_a, "%16.3lf %12" PRIu64 "\t\t%d", ts, trgid, num_of_hits);
+						strcat(line, cat_line);
 					}
+
 					evg = 0;
-					fprintf(of_list_a, "\n");
+					strcat(line, "\n");
+					strcat(allChVal, line);
+					if (strlen(allChVal) > (sizeof(allChVal) - 512)) {
+						fprintf(of_list_a, "%s", allChVal);
+						fflush(of_list_a);
+						allChVal[0] = '\0';
+					}
+					//fprintf(of_list_a, "\n");
 				}
-				fflush(of_list_a);
 			}
+			fprintf(of_list_a, "%s", allChVal);
+			fflush(of_list_a);
+
 			ascii_size = ftell(of_list_a);
 		}
 		if (of_list_c != NULL) {
+			char allChVal[MAX_NCH * 512] = "";
 			for (int j = 0; j < MAX_NCH; ++j) {
+				char line[512] = "";
+				char cat_line[256] = "";	
 				if (!masked[j]) continue;
 				datatype = 0;
-				if (tmp_enL[i] >= 0 && ((WDcfg.GainSelect & GAIN_SEL_LOW) || WDcfg.GainSelect == GAIN_SEL_AUTO)) datatype = datatype | 0x01;
-				if (tmp_enH[i] >= 0 && ((WDcfg.GainSelect & GAIN_SEL_HIGH) || WDcfg.GainSelect == GAIN_SEL_AUTO)) datatype = datatype | 0x02;
+				if (tmp_enL[i] >= 0 && ((GainSelect & GAIN_SEL_LOW) || GainSelect == GAIN_SEL_AUTO)) datatype = datatype | 0x01;
+				if (tmp_enH[i] >= 0 && ((GainSelect & GAIN_SEL_HIGH) || GainSelect == GAIN_SEL_AUTO)) datatype = datatype | 0x02;
 				if (isTSpect) {
 					if (ev->tstamp[i] > 0) datatype = datatype | 0x10;
-					if (WDcfg.EnableToT && (ev->ToT[i] > 0)) datatype = datatype | 0x20;
+					if (EnableToT && (ev->ToT[i] > 0)) datatype = datatype | 0x20;
 				}
-				fprintf(of_list_c, "%lf,", ts);
-				if (dtq & 0x80) fprintf(of_list_c, "%lf,", ev->rel_tstamp_us);
-				fprintf(of_list_c, "%" PRIu64 ",%d,%d,0x%" PRIx64 ",%d,0x%" PRIx8 ",", trgid, brd, num_of_hits, ev->chmask, j, datatype);
-				if (datatype & 0x1) fprintf(of_list_c, "%" PRIu16, tmp_enL[j]);
-				else fprintf(of_list_c, "-1");
-				if (datatype & 0x2) fprintf(of_list_c, ",%" PRIu16, tmp_enH[j]);
-				else fprintf(of_list_c, ",-1");
+				sprintf(cat_line, "%lf,", ts);
+				strcat(line, cat_line);
+				//fprintf(of_list_c, "%lf,", ts);
+				if (dtq & 0x80) {
+					sprintf(cat_line, "%lf,", ev->rel_tstamp_us); //fprintf(of_list_c, "%lf,", ev->rel_tstamp_us);
+					strcat(line, cat_line);
+				}
+				sprintf(cat_line, "%" PRIu64 ",%d,%d,0x%" PRIx64 ",%d,0x%" PRIx8, trgid, brd, num_of_hits, ev->chmask, j, datatype);
+				strcat(line, cat_line);
+				//fprintf(of_list_c, "%" PRIu64 ",%d,%d,0x%" PRIx64 ",%d,0x%" PRIx8 ",", trgid, brd, num_of_hits, ev->chmask, j, datatype);
+				if (datatype & 0x1) sprintf(cat_line, ",%" PRIu16 "", tmp_enL[i]); //fprintf(of_list_c, "%" PRIu16, tmp_enL[j]);
+				else sprintf(cat_line, ",-1");  //fprintf(of_list_c, "-1");
+				strcat(line, cat_line);
+				if (datatype & 0x2) sprintf(cat_line, ",%" PRIu16, tmp_enH[j]);   //fprintf(of_list_c, ",%" PRIu16, tmp_enH[j]);
+				else sprintf(cat_line, ",-1"); //fprintf(of_list_c, ",-1");
+				strcat(line, cat_line);
 				if (isTSpect) {
 					if (datatype & 0x10) {
-						if (WDcfg.OutFileUnit) fprintf(of_list_c, ",%f", 0.5*ev->tstamp[j]);
-						else fprintf(of_list_c, ",%" PRIu32, ev->tstamp[j]);
-					} else fprintf(of_list_c, ",-1");
+						if (J_cfg.OutFileUnit) sprintf(cat_line, ",%f", 0.5 * ev->tstamp[j]);   //fprintf(of_list_c, ",%f", 0.5*ev->tstamp[j]);
+						else sprintf(cat_line, ",%" PRIu32, ev->tstamp[j]);   //fprintf(of_list_c, ",%" PRIu32, ev->tstamp[j]);
+					} else sprintf(line, "%s,-1", line);   //fprintf(of_list_c, ",-1");
+					strcat(line, cat_line);
+
 					if (datatype & 0x20) {
-						if (WDcfg.OutFileUnit) fprintf(of_list_c, ",%f", 0.5 * ev->ToT[j]);
-						else fprintf(of_list_c, ",%" PRIu16, ev->ToT[j]);
-					} else fprintf(of_list_c, ",-1");
+						if (J_cfg.OutFileUnit) sprintf(cat_line, ",%f", 0.5 * ev->ToT[j]);   //fprintf(of_list_c, ",%f", 0.5 * ev->ToT[j]);
+						else sprintf(cat_line, ",%" PRIu16, ev->ToT[j]);   //fprintf(of_list_c, ",%" PRIu16, ev->ToT[j]);
+					} else sprintf(cat_line, ",-1");   //fprintf(of_list_c, ",-1");
+					strcat(line, cat_line);
 				}
-				fprintf(of_list_c, "\n");
+
+				strcat(line, "\n"); //fprintf(of_list_c, "\n");
+				strcat(allChVal, line);
+				if (strlen(allChVal) > (sizeof(allChVal) - 512)) {
+					fprintf(of_list_c, "%s", allChVal);
+					fflush(of_list_c);
+					allChVal[0] = '\0';
+				}
 			}
+			fprintf(of_list_c, "%s", allChVal);
+			fflush(of_list_c);
 			csv_size = ftell(of_list_c);
 		}
 	}
@@ -498,87 +556,100 @@ int SaveList(int brd, double ts, uint64_t trgid, void *generic_ev, int dtq)
 	else if ((dtq & 0x0F) == DTQ_COUNT) {
 		CountingEvent_t *ev = (CountingEvent_t *)generic_ev;
 		uint8_t i, b8 = brd;
+		uint8_t chId[FERSLIB_MAX_NCH] = { 0 };
+		uint64_t cntW[FERSLIB_MAX_NCH] = { 0 };
 		
 		datatype = 0x0;
 		int num_of_hits = 0;
-		int masked[MAX_NCH] = { 0 };
+		//int masked[MAX_NCH] = { 0 };
 
-		uint64_t mask_chip1 = WDcfg.ChEnableMask1[brd];
-		ev->chmask = mask_chip1 << 32 | WDcfg.ChEnableMask0[brd];
+		// When Zero suppression is enabled, the mask is build only with the chs firing
+		// else, the mask is set at max
+		uint64_t ev_chmask = ev->chmask & ChEnableMask; 
 		
 		for (i = 0; i < MAX_NCH; ++i) {
 			if ((ev->chmask >> i) & 1) {
-				if (WDcfg.SupprZeroCntListFile == 1 && ev->counts[i] == 0)
-					continue;
-				else {
-					++num_of_hits;
-					masked[i] = 1;
-				}
+				chId[num_of_hits] = i;
+				cntW[num_of_hits] = ev->counts[i];
+				++num_of_hits;
 			}
 		}
 
-		if (of_list_b != NULL) {
+		if ((of_list_b != NULL) && (num_of_hits > 0)) {
 			uint16_t size = sizeof(size) + sizeof(b8) + sizeof(ts) + sizeof(trgid) + sizeof(ev->chmask);
 			if (dtq & 0x80) size += sizeof(ev->rel_tstamp_us);
-			for (i = 0; i < MAX_NCH; i++) {
-				if ((ev->chmask >> i) & 1) {
-					if (WDcfg.SupprZeroCntListFile == 1 && ev->counts[i] == 0)
-						continue;
-					else
-						size += (sizeof(i) + sizeof(ev->counts[i]));
-				}
-			}
+			size += num_of_hits * (sizeof(uint8_t) + sizeof(uint64_t));
 			bin_size += size;
 			fwrite(&size, sizeof(size), 1, of_list_b);
 			fwrite(&b8, sizeof(b8), 1, of_list_b);
 			fwrite(&ts, sizeof(ts), 1, of_list_b);
 			if (dtq & 0x80)	fwrite(&ev->rel_tstamp_us, sizeof(ev->rel_tstamp_us), 1, of_list_b);
 			fwrite(&trgid, sizeof(trgid), 1, of_list_b);
-			fwrite(&ev->chmask, sizeof(ev->chmask), 1, of_list_b);
-			for(i=0; i<MAX_NCH; i++) {
-				if ((ev->chmask >> i) & 1) {
-					if (WDcfg.SupprZeroCntListFile == 1 && ev->counts[i] == 0)
-						continue;
-					else {
-						fwrite(&i, sizeof(i), 1, of_list_b);
-						fwrite(&ev->counts[i], sizeof(ev->counts[i]), 1, of_list_b);
-					}
-				}
+			//fwrite(&ChEnableMask, sizeof(ev->chmask), 1, of_list_b);
+			fwrite(&ev_chmask, sizeof(ev_chmask), 1, of_list_b);
+			for (i = 0; i < num_of_hits; ++i) {
+				fwrite(&chId[i], sizeof(uint8_t), 1, of_list_b);
+				fwrite(&cntW[i], sizeof(uint64_t), 1, of_list_b);
 			}
 		}
-		if (of_list_a != NULL) {
-			int evg = 1, cnt_zero = 0;
-			for(i=0; i<MAX_NCH; i++) {
-				if ((ev->chmask >> i) & 1) {
-					if (WDcfg.SupprZeroCntListFile == 1) {
-						if (ev->counts[i] > 0) {
-							if (evg == 0 && cnt_zero != 0) fprintf(of_list_a, "                              ");
-							cnt_zero++;
-							fprintf(of_list_a, "%3d  %02d %12d", brd, i, ev->counts[i]);
-						}
-						if ((cnt_zero == 0) && (i == MAX_NCH - 1)) {
-							fprintf(of_list_a, "%03d  --          --", brd);
-						}
-					} else {
-						fprintf(of_list_a, "%3d  %02d %12d", brd, i, ev->counts[i]);
-					}
+		if ((of_list_a != NULL) && (num_of_hits > 0)) {
+			int evg = 1;
+			char allChVal[MAX_NCH * 512] = "";
+			if (num_of_hits == 0) {
+				if (dtq & 0x80) sprintf(allChVal, "%s%3d  --          -- %16.3lf %16.3f %12" PRIu64 "\t\t%d\n", allChVal, brd, ts, ev->rel_tstamp_us, trgid, num_of_hits);  //fprintf(of_list_a, "%3d  --          -- %16.3lf %16.3f %12" PRIu64 "\t\t%d\n", brd, ts, ev->rel_tstamp_us, trgid, num_of_hits);
+				else sprintf(allChVal, "%s%3d  --          -- %16.3lf %12" PRIu64 "\t\t%d\n", allChVal, brd, ts, trgid, num_of_hits);  //fprintf(of_list_a, "%3d  --          -- %16.3lf %12" PRIu64 "\t\t%d\n", brd, ts, trgid, num_of_hits);
+			} else {
+				for (i = 0; i < num_of_hits; ++i) {
+					char line[512] = "";
+					char cat_line[256] = "";
+					sprintf(line, "%s%3d  %02d %12" PRIu64, line, brd, chId[i], cntW[i]);
+					//fprintf(of_list_a, "%3d  %02d %12" PRIu64, brd, chId[i], cntW[i]);
 					if (evg) {
-						if (dtq & 0x80) fprintf(of_list_a, "%16.3lf %16.3f %12" PRIu64 "\t\t%d", ts, ev->rel_tstamp_us, trgid, num_of_hits);
-						else fprintf(of_list_a, "%16.3lf %12" PRIu64 "\t\t%d", ts, trgid, num_of_hits);
+						if (dtq & 0x80) sprintf(cat_line, "%16.3lf %16.3f %12" PRIu64 "\t\t%d", ts, ev->rel_tstamp_us, trgid, num_of_hits); //fprintf(of_list_a, "%16.3lf %16.3f %12" PRIu64 "\t\t%d", ts, ev->rel_tstamp_us, trgid, num_of_hits);
+						else sprintf(cat_line, "%16.3lf %12" PRIu64 "\t\t%d", ts, trgid, num_of_hits);  //fprintf(of_list_a, "%16.3lf %12" PRIu64 "\t\t%d", ts, trgid, num_of_hits);
+						evg = 0;
+						strcat(line, cat_line);
 					}
-					evg = 0;
-					fprintf(of_list_a, "\n");
+
+					strcat(line, "\n");
+					//fprintf(of_list_a, "\n");
+					strcat(allChVal, line);
+					// If buffer full, write on file and emptying
+					if (strlen(allChVal) > sizeof(allChVal) - 512) {
+						fprintf(of_list_a, "%s", allChVal);
+						fflush(of_list_a);
+						allChVal[0] = '\0'; // Svuota il buffer
+					}
+
 				}
 			}
+			fprintf(of_list_a, "%s", allChVal);
+			fflush(of_list_a);
 			ascii_size = ftell(of_list_a);
 		}
 		if (of_list_c != NULL) {
-			for (i = 0; i < MAX_NCH; ++i) {
-				if (!masked[i]) continue;
-				fprintf(of_list_c, "%lf,", ts);
-				if (dtq & 0x80) fprintf(of_list_c, "%lf,", ev->rel_tstamp_us);
-				fprintf(of_list_c, "%" PRIu64 ",%d,%d,0x%" PRIx64 ",%d,%" PRIu32"\n", trgid, brd, num_of_hits, ev->chmask, i, ev->counts[i]);
+			char allChVal[MAX_NCH * 512] = "";
+			for (i = 0; i < num_of_hits; ++i) {
+				char line[512] = "";
+				char cat_line[256] = "";
+				sprintf(line, "%lf,", ts);
+//				fprintf(of_list_c, "%lf,", ts);
+				if (dtq & 0x80) {
+					sprintf(cat_line, "%lf,", ev->rel_tstamp_us); //fprintf(of_list_c, "%lf,", ev->rel_tstamp_us);
+					strcat(line, cat_line);
+				}
+				//fprintf(of_list_c, "%" PRIu64 ",%d,%d,0x%" PRIx64 ",%d,%" PRIu32"\n", trgid, brd, num_of_hits, ChEnableMask, i, ev->counts[i]);
+				sprintf(cat_line, "%" PRIu64 ",%d,%d,0x%" PRIx64 ",%" PRIu8 ", %" PRIu64"\n", trgid, brd, num_of_hits, ev_chmask, chId[i], cntW[i]);
+				strcat(line, cat_line);
+				//fprintf(of_list_c, "%" PRIu64 ",%d,%d,0x%" PRIx64 ",%" PRIu8 ", % " PRIu64"\n", trgid, brd, num_of_hits, ev_chmask, chId[i], cntW[i]);
+				strcat(allChVal, line);
+				if (strlen(allChVal) > sizeof(allChVal) - 512) {
+					fprintf(of_list_c, "%s", allChVal);
+					allChVal[0] = '\0'; // Svuota il buffer
+				}
 			}
+			fprintf(of_list_c, "%s", allChVal);
+			fflush(of_list_c);
 			csv_size = ftell(of_list_c);
 		}
 	}
@@ -588,15 +659,16 @@ int SaveList(int brd, double ts, uint64_t trgid, void *generic_ev, int dtq)
 	// ----------------------------------------------------------------------------------
 	else if ((dtq & 0x0F) == DTQ_TIMING) {
 		ListEvent_t *ev = (ListEvent_t *)generic_ev;
+		double fine_tstamp = (double)((ev->tstamp_clk << 4) + (ev->Tref_tstamp & 0xF)) * TOA_LSB_ns / 1000.0;  // tstampclk is 8ns LSB, TrefTstamp is 0.5 ns, a factor 16
 		if (ev->nhits <= 0)	return 0;
 		datatype = 0x0;
 		uint32_t i;
 		uint8_t b8 = brd;
 		
-		if (of_list_b != NULL && (WDcfg.OutFileEnableMask && OUTFILE_LIST_BIN)) {
+		if (of_list_b != NULL && (J_cfg.OutFileEnableMask && OUTFILE_LIST_BIN)) {
 			uint8_t* mydtype = NULL;
 			mydtype = (uint8_t*)malloc(ev->nhits * sizeof(uint8_t));
-			uint16_t size = sizeof(size) + sizeof(b8) + sizeof(ts) + sizeof(ev->nhits); // +sizeof(trgid); //trgid = 0 in timing mode
+			uint16_t size = sizeof(size) + sizeof(b8) + sizeof(fine_tstamp) + sizeof(ev->nhits); // +sizeof(trgid); //trgid = 0 in timing mode
 			// DNIN: as in Spect, tstamp and ToT may not be in data simultaneously, or simply ToT is disabled.
 			// Size must to be computed hit-wise
 			size += ev->nhits * (sizeof(ev->channel[i]) + sizeof(datatype));
@@ -604,12 +676,12 @@ int SaveList(int brd, double ts, uint64_t trgid, void *generic_ev, int dtq)
 				datatype = 0x0;
 				if (ev->tstamp[chit] > 0) {
 					datatype = datatype | 0x10;
-					if (WDcfg.OutFileUnit) size += sizeof(float);
+					if (J_cfg.OutFileUnit) size += sizeof(float);
 					else size += sizeof(ev->tstamp[chit]);
 				}
-				if (ev->ToT[chit] > 0 && WDcfg.EnableToT) {
+				if (ev->ToT[chit] > 0 && EnableToT) {
 					datatype = datatype | 0x20;
-					if (WDcfg.OutFileUnit) size += sizeof(float);
+					if (J_cfg.OutFileUnit) size += sizeof(float);
 					else size += sizeof(ev->ToT[chit]);
 				}
 				mydtype[chit] = datatype;
@@ -618,22 +690,22 @@ int SaveList(int brd, double ts, uint64_t trgid, void *generic_ev, int dtq)
 			bin_size += size;
 			fwrite(&size, sizeof(size), 1, of_list_b);
 			fwrite(&b8, sizeof(b8), 1, of_list_b);
-			fwrite(&ts, sizeof(ts), 1, of_list_b);
+			fwrite(&fine_tstamp, sizeof(fine_tstamp), 1, of_list_b);
 			//fwrite(&trgid, sizeof(trgid), 1, of_list_b);
 			fwrite(&ev->nhits, sizeof(ev->nhits), 1, of_list_b);
 			for(i=0; i<ev->nhits; i++) {
-				float tmpToA = float(ev->tstamp[i] * TOA_LSB_ns);
-				float tmpToT = float(ev->ToT[i] * TOA_LSB_ns);
+				float tmpToA = (float)(ev->tstamp[i] * TOA_LSB_ns);
+				float tmpToT = (float)(ev->ToT[i] * TOA_LSB_ns);
 				datatype = mydtype[i];
 				fwrite(&ev->channel[i], 1, sizeof(ev->channel[i]), of_list_b);
 				// Write Datatype as specttiming
 				fwrite(&datatype, 1, sizeof(datatype), of_list_b);
 				if (datatype & 0x10) {
-					if (WDcfg.OutFileUnit) fwrite(&tmpToA, sizeof(float), 1, of_list_b);
+					if (J_cfg.OutFileUnit) fwrite(&tmpToA, sizeof(float), 1, of_list_b);
 					else fwrite(&ev->tstamp[i], sizeof(ev->tstamp[i]), 1, of_list_b);
 				}
 				if (datatype & 0x20) {
-					if (WDcfg.OutFileUnit) fwrite(&tmpToT, sizeof(float), 1, of_list_b);
+					if (J_cfg.OutFileUnit) fwrite(&tmpToT, sizeof(float), 1, of_list_b);
 					else fwrite(&ev->ToT[i], sizeof(ev->ToT[i]), 1, of_list_b);
 				}
 			}
@@ -643,50 +715,84 @@ int SaveList(int brd, double ts, uint64_t trgid, void *generic_ev, int dtq)
 
 		if (of_list_a != NULL) {
 			int evg = 1;
+			char allChVal[MAX_NCH * 512] = "";
+
 			for(i=0; i<ev->nhits; i++) {
-				fprintf(of_list_a, "%3d  %02d ", brd, ev->channel[i]);
+				char line[256] = "";
+				char cat_line[128] = "";
+				sprintf(line, "%3d  %02d ", brd, ev->channel[i]);
+				//fprintf(of_list_a, "%3d  %02d ", brd, ev->channel[i]);
 				if (ev->tstamp[i] > 0) {
-					if (WDcfg.AcquisitionMode == ACQMODE_TIMING_CSTART) {
-						if (WDcfg.OutFileUnit) fprintf(of_list_a, "%8.1f ", 0.5 * ev->tstamp[i]);
-						else fprintf(of_list_a, "%8d ", ev->tstamp[i]);
-					} else if (WDcfg.AcquisitionMode == ACQMODE_TIMING_CSTOP) {
-						if (WDcfg.OutFileUnit) fprintf(of_list_a, "%8.1f ", (WDcfg.TrefWindow - 0.5 * ev->tstamp[i]));
-						else fprintf(of_list_a, "%8d ", (uint32_t)(WDcfg.TrefWindow / (float)CLK_PERIOD) - ev->tstamp[i]);
+					if (J_cfg.AcquisitionMode == ACQMODE_TIMING_CSTART) {
+						if (J_cfg.OutFileUnit) sprintf(cat_line, "%8.1f ", 0.5 * ev->tstamp[i]);  //fprintf(of_list_a, "%8.1f ", 0.5 * ev->tstamp[i]);
+						else sprintf(cat_line, "%8d ", ev->tstamp[i]);  //fprintf(of_list_a, "%8d ", ev->tstamp[i]);
+					} else if (J_cfg.AcquisitionMode == ACQMODE_TIMING_CSTOP) {
+						if (J_cfg.OutFileUnit) sprintf(cat_line, "%8.1f ", (TrefWindow - 0.5 * ev->tstamp[i]));  //fprintf(of_list_a, "%8.1f ", (TrefWindow - 0.5 * ev->tstamp[i]));
+						else sprintf(cat_line, "%8d ", (uint32_t)(TrefWindow / (float)CLK_PERIOD_5202) - ev->tstamp[i]);   //fprintf(of_list_a, "%8d ", (uint32_t)(TrefWindow / (float)CLK_PERIOD_5202) - ev->tstamp[i]);
 					}
+				} else sprintf(cat_line, "       - ");  //fprintf(of_list_a, "       - ");
+				strcat(line, cat_line);
+
+				if (J_cfg.EnableToT && (ev->ToT[i] > 0)) {
+					if (J_cfg.OutFileUnit) sprintf(cat_line, "%8.1f ", 0.5 * ev->ToT[i]);  //fprintf(of_list_a, "%8.1f ", 0.5 * ev->ToT[i]);
+					else sprintf(cat_line, "%8d ", ev->ToT[i]); //fprintf(of_list_a, "%8d ", ev->ToT[i]);
+				} else sprintf(cat_line, "       - ");  //fprintf(of_list_a, "       - ");
+				strcat(line, cat_line);
+
+				if (evg) {
+					sprintf(cat_line, "%16.4lf\t\t%" PRIu16, fine_tstamp, ev->nhits);  //fprintf(of_list_a, "%16.4lf\t\t%" PRIu16, fine_tstamp, ev->nhits);  
+					strcat(line, cat_line);
 				}
-				else fprintf(of_list_a, "       - ");
-				if (WDcfg.EnableToT && (ev->ToT[i] > 0)) {
-					if (WDcfg.OutFileUnit) fprintf(of_list_a, "%8.1f ", 0.5 * ev->ToT[i]);
-					else fprintf(of_list_a, "%8d ", ev->ToT[i]);
-				}
-				else fprintf(of_list_a, "       - ");
-				if (evg) fprintf(of_list_a, "%16.3lf\t\t%" PRIu16, ts, ev->nhits);  
 				evg = 0;
-				fprintf(of_list_a, "\n");
+				sprintf(line, "%s\n", line);
+//				fprintf(of_list_a, "\n");
+				strcat(allChVal, line);
+				if (strlen(allChVal) > sizeof(allChVal) - 256) {
+					fprintf(of_list_a, "%s", allChVal);
+					allChVal[0] = '\0'; // Svuota il buffer
+				}
 			}
+			fprintf(of_list_a, "%s", allChVal);
+			fflush(of_list_a);
 			ascii_size = ftell(of_list_a);
 		}
 		if (of_list_c != NULL) {
+			char allChVal[MAX_NCH * 512] = "";
 			for (int chit = 0; chit < ev->nhits; ++chit) {
+				char line[256] = "";
+				char cat_line[128] = "";
 				datatype = 0x0;
-				if (ev->tstamp[chit] > 0)					datatype = datatype | 0x10;
-				if (ev->ToT[chit] > 0 && WDcfg.EnableToT)	datatype = datatype | 0x20;
-				fprintf(of_list_c, "%lf,%d,%" PRIu16 ",%" PRIu32 ",0x%" PRIx8 ",", ts, brd, ev->nhits, ev->channel[chit], datatype);
-				if (datatype == 0x10) {
-					if (WDcfg.AcquisitionMode == ACQMODE_TIMING_CSTART) {
-						if (WDcfg.OutFileUnit) fprintf(of_list_c, "%f", 0.5 * ev->tstamp[chit]);
-						else fprintf(of_list_c, "%" PRIu32, ev->tstamp[chit]);
-					} else if (WDcfg.AcquisitionMode == ACQMODE_TIMING_CSTOP) {
-						if (WDcfg.OutFileUnit) fprintf(of_list_c, "%f", (WDcfg.TrefWindow - 0.5 * ev->tstamp[chit]));
-						else fprintf(of_list_c, "%" PRIu32, (uint32_t)(WDcfg.TrefWindow / (float)CLK_PERIOD) - ev->tstamp[chit]);
+				if (ev->tstamp[chit] > 0) datatype = datatype | 0x10;
+				if (ev->ToT[chit] > 0 && EnableToT)	datatype = datatype | 0x20;
+				sprintf(line, "%.4lf,%d,%" PRIu16 ",%" PRIu32 ",0x%" PRIx8 ",", fine_tstamp, brd, ev->nhits, ev->channel[chit], datatype);
+				//fprintf(of_list_c, "%.4lf,%d,%" PRIu16 ",%" PRIu32 ",0x%" PRIx8 ",", fine_tstamp, brd, ev->nhits, ev->channel[chit], datatype);
+				if (datatype & 0x10) {
+					if (J_cfg.AcquisitionMode == ACQMODE_TIMING_CSTART) {
+						if (J_cfg.OutFileUnit) sprintf(cat_line, "%f", 0.5 * ev->tstamp[chit]);  //fprintf(of_list_c, "%f", 0.5 * ev->tstamp[chit]);
+						else sprintf(cat_line, "%" PRIu32, ev->tstamp[chit]);  //fprintf(of_list_c, "%" PRIu32, ev->tstamp[chit]);
+					} else if (J_cfg.AcquisitionMode == ACQMODE_TIMING_CSTOP) {
+						if (J_cfg.OutFileUnit) sprintf(cat_line, "%f", (TrefWindow - 0.5 * ev->tstamp[chit]));  //fprintf(of_list_c, "%f", (TrefWindow - 0.5 * ev->tstamp[chit]));
+						else sprintf(cat_line, "%" PRIu32, (uint32_t)(TrefWindow / (float)CLK_PERIOD_5202) - ev->tstamp[chit]);  //fprintf(of_list_c, "%" PRIu32, (uint32_t)(TrefWindow / (float)CLK_PERIOD_5202) - ev->tstamp[chit]);
 					}
-				} else fprintf(of_list_c, "-1");
-				if (datatype == 0x20) {
-					if (WDcfg.OutFileUnit) fprintf(of_list_c, ",%f", 0.5 * ev->ToT[chit]);
-					else fprintf(of_list_c, ",%" PRIu16, ev->ToT[chit]);
-				} else fprintf(of_list_c, ",-1");
-				fprintf(of_list_c, "\n");
+				} else sprintf(cat_line, ",-1");  //fprintf(of_list_c, "-1");
+				strcat(line, cat_line);
+
+				if (datatype & 0x20) {
+					if (J_cfg.OutFileUnit) sprintf(cat_line, ",%f", 0.5 * ev->ToT[chit]);  //fprintf(of_list_c, ",%f", 0.5 * ev->ToT[chit]);
+					else sprintf(cat_line, ",%" PRIu16, ev->ToT[chit]);  //fprintf(of_list_c, ",%" PRIu16, ev->ToT[chit]);
+				} else sprintf(cat_line, ",-1");  //fprintf(of_list_c, ",-1");
+				strcat(line, cat_line);
+	
+				strcat(line, "\n");  //fprintf(of_list_c, "\n");
+				strcat(allChVal, line);
+				if (strlen(allChVal) > sizeof(allChVal) - 256) {
+					fprintf(of_list_c, "%s", allChVal);
+					fflush(of_list_c);
+					allChVal[0] = '\0'; // Svuota il buffer
+				}
 			}
+			fprintf(of_list_c, "%s", allChVal);
+			fflush(of_list_c);
 			csv_size = ftell(of_list_c);
 		}
 	}
@@ -701,13 +807,13 @@ int SaveList(int brd, double ts, uint64_t trgid, void *generic_ev, int dtq)
 // ****************************************************
 // Save Run Temp HV list
 // ****************************************************
-int WriteTempHV(ServEvent_t sev[FERSLIB_MAX_NBRD]) {
+int WriteTempHV(uint64_t pc_tstamp, ServEvent_t sev[MAX_NBRD]) {
 	if (of_servInfo == NULL) return 0;
-	fprintf(of_servInfo, "[%" PRIu64 "]", sev[0].update_time);
-	for (int i = 0; i < WDcfg.NumBrd; ++i) {
+	fprintf(of_servInfo, "%" PRIu64 "", pc_tstamp);
+	for (int i = 0; i < J_cfg.NumBrd; ++i) {
 		int hv_status = sev[i].hv_status_on | sev[i].hv_status_ovc << 1 | sev[i].hv_status_ovv << 1;
-		fprintf(of_servInfo, "\t%d\t\t%2.2f\t\t\t%2.2f\t\t%2.2f\t\t%2.2f\t\t%3.2f\t\t%3.2f\t\t%d",i, 
-			sev[i].tempBoard, sev[i].tempDetector, sev[i].tempFPGA, sev[i].tempHV, sev[i].hv_Vmon, sev[i].hv_Imon, hv_status);
+		fprintf(of_servInfo, "\t%02d\t\t%" PRIu64 "\t\t%2.1f\t\t%2.1f\t\t%2.1f\t\t%2.1f\t\t%3.3f\t%3.3f\t%d\t\t\t0x%X\t\t\t", i, sev[i].update_time,
+			sev[i].tempBoard, sev[i].tempDetector, sev[i].tempFPGA, sev[i].tempHV, sev[i].hv_Vmon, sev[i].hv_Imon, hv_status, sev[i].Status);
 	}
 	fprintf(of_servInfo, "\n");
 	return 0;
@@ -720,22 +826,22 @@ int WriteTempHV(ServEvent_t sev[FERSLIB_MAX_NBRD]) {
 int SaveHistos()
 {
 	int ch, b, i;
-	char fname[500];
+	char fname[600];
 	FILE *hf;
-	for(b=0; b<WDcfg.NumBrd; b++) {
-		for(ch=0; ch<WDcfg.NumCh; ch++) {
-			if (WDcfg.OutFileEnableMask & OUTFILE_SPECT_HISTO) {
+	for(b=0; b<J_cfg.NumBrd; b++) {
+		for(ch=0; ch<J_cfg.NumCh; ch++) {
+			if (J_cfg.OutFileEnableMask & OUTFILE_SPECT_HISTO) {
 				if (Stats.H1_PHA_LG[b][ch].H_cnt > 0) {
-					sprintf(fname, "%sRun%d_PHA_LG_%d_%d.txt", WDcfg.DataFilePath, RunVars.RunNumber, b, ch);
+					sprintf(fname, "%sRun%d_PHA_LG_%d_%d.txt", J_cfg.DataFilePath, RunVars.RunNumber, b, ch);
 					hf = fopen(fname, "w");
 					if (hf != NULL) {
-						for (i=0; i<(int)Stats.H1_PHA_LG[b][ch].Nbin; i++)	// equivalent maybe better WDcfg.EHistoNbin
+						for (i=0; i<(int)Stats.H1_PHA_LG[b][ch].Nbin; i++)	// equivalent maybe better J_cfg.EHistoNbin
 							fprintf(hf, "%d\n", Stats.H1_PHA_LG[b][ch].H_data[i]);
 						fclose(hf);
 					}
 				}
 				if (Stats.H1_PHA_HG[b][ch].H_cnt > 0) {
-					sprintf(fname, "%sRun%d_PHA_HG_%d_%d.txt", WDcfg.DataFilePath, RunVars.RunNumber, b, ch);
+					sprintf(fname, "%sRun%d_PHA_HG_%d_%d.txt", J_cfg.DataFilePath, RunVars.RunNumber, b, ch);
 					hf = fopen(fname, "w");
 					if (hf != NULL) {
 						for (i=0; i<(int)Stats.H1_PHA_HG[b][ch].Nbin; i++)
@@ -744,20 +850,20 @@ int SaveHistos()
 					}
 				}
 			}
-			if (WDcfg.OutFileEnableMask & OUTFILE_ToA_HISTO) {
+			if (J_cfg.OutFileEnableMask & OUTFILE_ToA_HISTO) {
 				if (Stats.H1_ToA[b][ch].H_cnt > 0) {
-					sprintf(fname, "%sRun%d_ToA_%d_%d.txt", WDcfg.DataFilePath, RunVars.RunNumber, b, ch);
+					sprintf(fname, "%sRun%d_ToA_%d_%d.txt", J_cfg.DataFilePath, RunVars.RunNumber, b, ch);
 					hf = fopen(fname, "w");
 					if (hf != NULL) {
-						for (i=0; i<(int)Stats.H1_ToA[b][ch].Nbin; i++)	// WDcfg.ToTHistoNbin
+						for (i=0; i<(int)Stats.H1_ToA[b][ch].Nbin; i++)	// J_cfg.ToTHistoNbin
 							fprintf(hf, "%" PRId32 "\n", Stats.H1_ToA[b][ch].H_data[i]);
 						fclose(hf);
 					}
 				}
 			}
-			if (WDcfg.OutFileEnableMask & OUTFILE_TOT_HISTO) {
+			if (J_cfg.OutFileEnableMask & OUTFILE_TOT_HISTO) {
 				if (Stats.H1_ToT[b][ch].H_cnt > 0) {
-					sprintf(fname, "%sRun%d_ToT_%d_%d.txt", WDcfg.DataFilePath, RunVars.RunNumber, b, ch);
+					sprintf(fname, "%sRun%d_ToT_%d_%d.txt", J_cfg.DataFilePath, RunVars.RunNumber, b, ch);
 					hf = fopen(fname, "w");
 					if (hf != NULL) {
 						for (i=0; i<(int)Stats.H1_ToT[b][ch].Nbin; i++)
@@ -766,23 +872,23 @@ int SaveHistos()
 					}
 				}
 			}
-			if ((WDcfg.OutFileEnableMask & OUTFILE_MCS_HISTO) ) { // && (WDcfg.AcquisitionMode == ACQMODE_COUNT)) {
-				sprintf(fname, "%sRun%d_MCS_%d_%d.txt", WDcfg.DataFilePath, RunVars.RunNumber, b, ch);
+			if ((J_cfg.OutFileEnableMask & OUTFILE_MCS_HISTO) ) { // && (J_cfg.AcquisitionMode == ACQMODE_COUNT)) {
+				sprintf(fname, "%sRun%d_MCS_%d_%d.txt", J_cfg.DataFilePath, RunVars.RunNumber, b, ch);
 				hf = fopen(fname, "w");
 				if (hf != NULL) {
 					for (i = 0; i < (int)Stats.H1_MCS[b][ch].Nbin; ++i) {
-						const int ind = (i + Stats.H1_MCS[b][ch].Bin_set) % (WDcfg.MCSHistoNbin);
+						const int ind = (i + Stats.H1_MCS[b][ch].Bin_set) % (J_cfg.MCSHistoNbin);
 						fprintf(hf, "%" PRId32 "\n", Stats.H1_MCS[b][ch].H_data[ind]);
 					}
 					fclose(hf);
 				}
 			}
-			if ((WDcfg.OutFileEnableMask & OUTFILE_STAIRCASE) && (RunVars.StaircaseCfg[SCPARAM_STEP] > 0)) {
+			if ((J_cfg.OutFileEnableMask & OUTFILE_STAIRCASE) && (RunVars.StaircaseCfg[SCPARAM_STEP] > 0)) {
 				int nstep = (RunVars.StaircaseCfg[SCPARAM_MAX] - RunVars.StaircaseCfg[SCPARAM_MIN])/RunVars.StaircaseCfg[SCPARAM_STEP] + 1;
 				for(i = 0; i < nstep; i++) 
 					if (Stats.Staircase[b][ch][i] > 0) break; // check if the staircase is empty (all zeroes)
 				if (i < nstep) { // not empty
-					sprintf(fname, "%sRun%d_Staircase_%d_%d.txt", WDcfg.DataFilePath, RunVars.RunNumber, b, ch);
+					sprintf(fname, "%sRun%d_Staircase_%d_%d.txt", J_cfg.DataFilePath, RunVars.RunNumber, b, ch);
 					hf = fopen(fname, "w");
 					if (hf != NULL) {
 						for(i = 0; i < nstep; i++) 
@@ -809,16 +915,15 @@ int cnc_write(char* path, char cncp[MAX_NCNC][200])
 int SaveRunInfo()
 {
 	char str[200];
-	char fname[500];
+	char fname[600];
 	char read_cnc[MAX_NCNC][200];
 	struct tm* t;
 	time_t tt;
 	int b;
 	FILE* cfg;
 	FILE* iof;
-	uint32_t FPGArev=0, MICrev=0, pid=0;
 
-	sprintf(fname, "%sRun%d_Info.txt", WDcfg.DataFilePath, RunVars.RunNumber);
+	sprintf(fname, "%sRun%d_Info.txt", J_cfg.DataFilePath, RunVars.RunNumber);
 	iof = fopen(fname, "w");
 
 	uint8_t rr;
@@ -827,11 +932,11 @@ int SaveRunInfo()
 	fprintf(iof, "Run n. %d\n\n", RunVars.RunNumber);
 	tt = (time_t)(Stats.start_time / 1000); //   RO_Stats.StartTime_ms / 1000);
 	t = localtime(&tt);
-	strftime(str, sizeof(str) - 1, "%d/%m/%Y %H:%M", t);
+	strftime(str, sizeof(str) - 1, "%d/%m/%Y %H:%M:%S", t);
 	fprintf(iof, "Start Time: %s\n", str);
 	tt = (time_t)(Stats.stop_time / 1000); //   RO_Stats.StopTime_ms / 1000);
 	t = localtime(&tt);
-	strftime(str, sizeof(str) - 1, "%d/%m/%Y %H:%M", t);
+	strftime(str, sizeof(str) - 1, "%d/%m/%Y %H:%M:%S", t);
 	fprintf(iof, "Stop Time:  %s\n", str);
 	fprintf(iof, "Elapsed time = %.3f s\n", Stats.current_tstamp_us[0] / 1e6); //     RO_Stats.CurrentTimeStamp_us / 1e6);
 	fprintf(iof, "********************************************************************* \n");
@@ -844,12 +949,12 @@ int SaveRunInfo()
 	FERS_CncInfo_t CncInfo;
 	int cnc = 0;
 
-	for (b = 0; b < WDcfg.NumBrd; b++) {
+	for (b = 0; b < J_cfg.NumBrd; b++) {
 		char* cc, cpath[100];
-		if (((cc = strstr(WDcfg.ConnPath[b], "tdl")) != NULL)) {  // TDlink used => Open connection to concentrator (this is not mandatory, it is done for reading information about the concentrator)
-			FERS_Get_CncPath(WDcfg.ConnPath[b], cpath);
+		if (((cc = strstr(J_cfg.ConnPath[b], "tdl")) != NULL)) {  // TDlink used => Open connection to concentrator (this is not mandatory, it is done for reading information about the concentrator)
+			FERS_Get_CncPath(J_cfg.ConnPath[b], cpath);
 			if (!cnc_write(cpath, read_cnc)) {
-				rr = FERS_ReadConcentratorInfo(cnc_handle[cnc], &CncInfo);
+				rr = FERS_GetCncInfo(cnc_handle[cnc], &CncInfo);
 				sprintf(read_cnc[cnc], "%s", cpath);
 				if (rr == 0) {
 					fprintf(iof, "Concentrator %d:\n", cnc);
@@ -872,7 +977,7 @@ int SaveRunInfo()
 			}
 		}
 
-		rr = FERS_ReadBoardInfo(handle[b], &BoardInfo); // Read Board Info
+		rr = FERS_GetBoardInfo(handle[b], &BoardInfo); // Read Board Info
 		if (rr != 0)
 			return -1;
 		char fver[100];
@@ -891,13 +996,13 @@ int SaveRunInfo()
 	fprintf(iof, "Statistics:\n");
 	fprintf(iof, "********************************************************************* \n");
 	fprintf(iof, "Total Acquired Events: %lld (Rate = %.3f Kcps)\n", (long long)RO_Stats.EventCnt, (float)RO_Stats.EventCnt/(RO_Stats.CurrentTimeStamp_us/1000));
-	for (b = 0; b < WDcfg.NumBrd; b++) {
+	for (b = 0; b < J_cfg.NumBrd; b++) {
 		fprintf(iof, "\nBoard %d (s.n. %d)\n", b, DGTZ_SerialNumber(handle[b]));
 		fprintf(iof, "Lost Events: %lld (%.3f %%)\n", (long long)RO_Stats.LostEventCnt[b], PERCENT(RO_Stats.LostEventCnt[b], RO_Stats.LostEventCnt[b] + RO_Stats.EventCnt));
 	}
 	*/
-	if (WDcfg.EnableJobs) {
-		sprintf(fname, "%sJanus_Config_Run%d.txt", WDcfg.DataFilePath, RunVars.RunNumber);
+	if (J_cfg.EnableJobs) {
+		sprintf(fname, "%sJanus_Config_Run%d.txt", J_cfg.DataFilePath, RunVars.RunNumber);
 		cfg = fopen(fname, "r");
 		if (cfg == NULL) 
 			sprintf(fname, CONFIG_FILENAME);

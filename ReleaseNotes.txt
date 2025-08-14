@@ -5,6 +5,73 @@
 *************************************************************************************************************************
 
 -------------------------------------------------------------------------------------------------------------------------
+Release 4.2.0 - 06/06/2025
+-------------------------------------------------------------------------------------------------------------------------
+- Improved Janus installation instruction on linux
+- Improved stability with USB connections
+- Ensured compliance with the C++17 standard
+- Fixed memory leakage issue when using TDL connection with multiple FERs modules connected
+- Parameter EnLiveParamChange forced to 0 fir USB connections
+- Disabled raw data saving for Hold Scan and Staircase run
+- Bug fix in OpenDevice when boards are open in offline mode
+- Bug fix in opening USB connection as usb:PID
+- Bug fix saving configuration file for different run from GUI
+
+-------------------------------------------------------------------------------------------------------------------------
+Release 4.1.2 - 15/04/2025
+-------------------------------------------------------------------------------------------------------------------------
+- Improved Janus installation details in README and Janus_Install.bash for linux OS
+- Bug fix in FW upgrade from GUI and cmd line when a board is not running a valid firmware
+- Bug fix in reading fpga temperature
+
+-------------------------------------------------------------------------------------------------------------------------
+Release 4.1.1 - 02/04/2025
+-------------------------------------------------------------------------------------------------------------------------
+- Increased the number of boards supported by Janus in console mode to 128
+- Added information on FPGA firmware upgrade in the FERSlib log file
+- Bug fix in FW upgrade procedure in console mode
+- Bug fix in compiling Janus by removing the dependece of LD_LIBRARY_PATH
+- Bug fix in board selection for Staircase and Hold Scan delay run
+- Bug fix in propagation delay between nodes in DT5215
+
+-------------------------------------------------------------------------------------------------------------------------
+Release 4.1.0 - 28/02/2025
+-------------------------------------------------------------------------------------------------------------------------
+- Added Macro 'Dump_LibAndConfig.txt' to enable the dump of board configuration and ferslib parameters
+- In ASCII and binary list file: if ZS is active, the event is totally skipped and the event header is not saved
+- Removed the dependence of ferslib in LD_LIBRARY_PATH for JanusC and update the install instructions in linux distribution
+- Bug fix for HV value set when DAC dynamic range is DISABLED
+- Bug fix on DAC Dynamic range 2.5 
+- Bug fix on GUI mode visualization option 
+- Fixed memory leakage when Statistics is deallocated
+
+-------------------------------------------------------------------------------------------------------------------------
+Release 4.0.0 - 31/01/25
+-------------------------------------------------------------------------------------------------------------------------
+- First Janus version with FERSlib detached 
+- Simplified and improved Raw data processing procedure on GUI
+- Added Multiboard firmware upgrade
+- Added protection in GUI on 'Statistics' tab Brd spinbox and verbose service event to prevent unexpected freezing
+- Added board selection for Staircase and Hold Scan Delay run
+- Added x calibration to MCS histogram when internal pulser is selected as trigger
+- Added Tref timestamp at 0.5 ns resolution in Timing mode in output list files
+- Improved Firmware Upgrade stability with TDL connection with > 1 board connected
+- Improved ServiceInfo file format
+- Improved FERSlibLog and MsgLog files format
+- Improved the robustness and verbosing in OpenDevice function
+- Improved the monitor of HV ramp-up/down
+- Bug fix on board sync reset when chains are scanned from web interface
+- Bug fix on CSV file created by Janus on timing mode
+- Bug fix on Event Building
+- Bug fix on HV individual maximum range, can be set to 2.5 V
+- Bug fix on OpenDevice in Linux with tdl connection
+- Bug fix on output list file ascii in counting mode
+- Bug fix on HV individual adjust configuration
+- Bug fix on turining HV off when Janus GUI closes connection
+- Bug fix on gnuplot live histogram in linux distribution with wayland
+- Minor bug fix on tooltips description
+
+-------------------------------------------------------------------------------------------------------------------------
 Release 3.6.0 - 14/05/24
 -------------------------------------------------------------------------------------------------------------------------
 - Added GUI executable bin/JanusPy.exe to be launched without python installed

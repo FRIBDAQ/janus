@@ -74,7 +74,7 @@ private:
     uint8_t                             t_force_ns;
     uint16_t                            t_en_bin;
     uint8_t                             t_time_unit;    // ToA or ToT written as int (LSB) or float (ns)
-    float                               t_LSB_ns;
+    double                              t_LSB_ns;
     uint8_t                             t_data_format;  // Version of Data format
     uint8_t                             t_acq_mode;
     uint16_t                            t_run_num;      // Run number of the binary file

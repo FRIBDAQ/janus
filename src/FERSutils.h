@@ -22,6 +22,13 @@
 #define SCAN_THR_FILENAME	"ScanThr.txt"
 #define SCAN_HDLY_FILENAME	"ScanHoldDelay.txt"
 
+// simplified version of the GetParam
+int FERS_GetParam_int(int handle, char *param_name);
+uint32_t FERS_GetParam_uint32(int handle, char* param_name);
+uint64_t FERS_GetParam_uint64(int handle, char* param_name);
+uint32_t FERS_GetParam_hex(int handle, char* param_name);
+uint64_t FERS_GetParam_hex64(int handle, char* param_name);
+float FERS_GetParam_float(int handle, char *param_name);
 
 // Channel to Pixel Remapping
 int Read_ch2xy_Map (char *filename);
@@ -31,9 +38,10 @@ int xy2ch(int x, int y);
 void PrintMap();
 
 // Manual Control Panels
-void HVControlPanel(int handle);
-void CitirocControlPanel(int handle);
-void ManualController(int handle);
+void HVControlPanel(int b_handle);
+void CitirocControlPanel(int b_handle);
+void ManualController(int b_handle);
+void RegAccessTest(int *handle, int nbrd);
 
 // Special runs
 int AcquirePedestals(int handle, uint16_t *pedestalLG, uint16_t *pedestalHG);

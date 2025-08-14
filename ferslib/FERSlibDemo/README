@@ -1,0 +1,27 @@
+------------------------------------------------------------------------------
+  CAEN SpA
+  Via Vetraia, 11 - 55049 - Viareggio ITALY
+  +390594388398 - www.caen.it
+------------------------------------------------------------------------------
+
+------------------------------------------------------------------------------
+		FERSLIB demo
+------------------------------------------------------------------------------
+
+
+. INSTALLATION AND RUNNING
+---------------------------
+
+Windows:
+	- run the .exe from bin folder
+
+Linux:
+	- if the ferslib is installed in /usr/local/bin, run the installer_demo_systemlib.sh script
+	- if the ferslib is installed by running Janus installation, in ~/PATH_TO_JANUS/ferslib/local/lib, 
+	  run the installer_demo_locallib.sh script
+	- if the ferslib is installed in a different folder:
+		. set LD_LIBRARY_PATH to the .so file of ferslib library and modify the INCLUDE variable 
+		  in the Makefile after running the installer_demo_systemlib.sh script
+		. modify the INCLUDE variable with the path to the .so file after runnig the
+		  installer_demo_locallib.sh script
+	- the executable file will be located into the bin folder

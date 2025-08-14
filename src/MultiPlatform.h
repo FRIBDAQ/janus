@@ -96,7 +96,7 @@ typedef int							ssize_t;			//!< Used on Linux as return type of send() an recv
 	#define thread_create(f, p, id)	_beginthreadex(NULL, 0, (unsigned int(__stdcall *)(void*))f, p, 0, (unsigned int *)id);
 	#define thread_join(id, r)		WaitForSingleObject((HANDLE *)id, INFINITE);
 
-	uint64_t get_time();
+	uint64_t j_get_time();
 
 #endif
 
@@ -117,7 +117,7 @@ typedef int							ssize_t;			//!< Used on Linux as return type of send() an recv
 
 	#define Sleep(ms)				usleep((ms)*1000) // DNIN : usleep is already in ms?? seems no
 
-	uint64_t get_time();
+	uint64_t j_get_time();
 
 #endif
 

@@ -1,1 +1,1 @@
-DebugLogMsg			0x01
+DebugLogMask			0x01

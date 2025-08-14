@@ -69,10 +69,68 @@ else
 	echo -e "${Green}libusb-1.0 found!!${Clear}"
 fi
 
+
+# Search for pkg_config
+echo "*************************************************"
+echo "*************************************************"
+echo "*************************************************"
+echo "Searching for pkgconf ..."
+if command -v pkgconf &> /dev/null || command -v pkg-config &> /dev/null; then
+    echo -e "${Green}pkgconf/pkg-config is installed!!${Clear}"
+else
+	if [ $isroot -ne 0 ]; then
+		echo -e "${Red}ERROR: pkgconf/pkg-config is missing!!!"
+		echo -e "Please, install pkgconf/pkg-config with 'yum install pkg-config' or run this installer as root"
+		echo -e "Exiting ...${Clear}"
+		exit -1
+	elif [ $isroot -eq 0 ]; then
+		sudo yum install pkg-config
+		res=$?
+		if [ $res -ne 0 ]; then
+			echo -e "${Red}ERROR during pkgconf/pkg-config installation through 'apt-get install pkg-config'"
+			echo -e "Exiting ...${Clear}"
+			exit -1
+		else
+			echo -e "${Green}pkgconf/pkg-config installed${Clear}"
+		fi
+	fi
+fi
+
+
+echo "*************************************************"
+echo "*************************************************"
+echo "*************************************************"
+echo "Compiling CAEN FERSlib ..."
+cd ferslib
+libpath=`pwd`/local
+gxxV=$(g++ -dumpversion)
+./configure --prefix=$libpath CXX=g++-$gxxV
+res0=$?
+make
+res1=$?
+make install
+res2=$?
+
+if [ $res0 -ne 0 ] || [ $res1 -ne 0 ] || [ $res2 -ne 0 ]; then
+	echo -e "${Red}ERROR: cannot compile FERSlib!!!"
+	echo -e "Exiting ...${Clear}"
+	exit -1
+else
+	echo -e "${Green}CAEN FERSlib installed${Clear}"
+fi
+
+cd ..
+
+
 echo "*************************************************"
 echo "*************************************************"
 echo "*************************************************"
 echo "Compiling JanusC ..."
+
+# Change path from relative to absolute
+absPath="$(pwd)/ferslib/"
+relPath="ferslib/"
+sed "s|$relPath|$absPath|g" Makefile.tmp > Makefile
 
 #Compile JanusC
 make all
@@ -130,8 +188,26 @@ else
 fi
 
 echo
-echo "PLEASE, check if gnuplot support terminal 'wxt' "
-echo "by typing on gnuplot shell 'set terminal' command"
+echo "Check for wxt terminal in gnuplot ..."
+available_terminals=`gnuplot -e "set print '-'; print GPVAL_TERMINALS"`
+if echo $available_terminals | grep -q "wxt"; then
+	echo -e "${Green}wxt terminal is supported ${Exit}"
+else
+	echo -e "${Red}wxt terminal is not supported. "
+	echo "Please, try to install gnuplot from source:"
+	echo -e "${Yellow} sudo yum install wxGTK3-devel"
+	echo ' sudo yum groupinstall "Development Tools"'
+	echo " sudo yum install cairo-devel pango-devel libX11-devel"
+	echo " sudo apt install libwxgtk3.0-gtk3-dev build-essential"
+	echo " wget https://sourceforge.net/projects/gnuplot/files/latest/download -O gnuplot.tar.gz"
+	echo " tar -xvf gnuplot .tar.gz"
+	echo " ./configure --with-wx"
+	echo " make"
+	echo " sudo make install"
+	echo -e "${Red}Exiting ...${Clear}"
+	echo -e "Exiting ...${Clear}"
+	exit 1
+fi
 echo
 echo "*************************************************"
 echo "*************************************************"
@@ -166,8 +242,9 @@ echo "Searching for tkinter package ..."
 # wpy3=`ls -l /usr/bin/python3 | awk -F "->" '{print $2}'`
 # wpy3=`echo $wpy3 | sed 's| *$||'`
 # pyPath="/usr/lib/${wpy3}/tkinter"
-python -c "import tkinter" 2>/dev/null
-if [ ! -d ${pyPath} ]; then
+python3 -c "import tkinter" 2>/dev/null
+pres=$?
+if [ $pres -ne 0 ]; then
 	if [ $isroot -ne 0 ]; then
 		echo -e "${Red}ERROR: python3 tkinter is missing!!!"
 		echo "Please, install the package with 'sudo yum install python3-tk' or run this installer as root"
@@ -282,11 +359,30 @@ elif [ $isroot -eq 0 ]; then
 fi
 
 echo
-echo "*************************************************"
-echo "Installation completed"
-#echo
-#echo "N.B.: if you use JanusC from shell please launch it"
-#echo "with the launcher script ./launch_JanusC.sh"
+echo
+echo
+echo "**************************************************"
+completed=1
+echo "**************************************************"
+echo -e "${Yellow}The ferslib linked to JanusC is the one in the folder $(pwd)/ferslib/local/lib${Clear}"
+# echo "**************************************************************************************************"
+# echo "***    ADD FERSLIB PATH TO LD_LIBRARY PATH                                                     ***"
+# echo "**************************************************************************************************"
+# echo -e "${Yellow}In order to use Janus with the stand-alone FERSlib,"
+# echo -e "add the path to the FERSlib .so library" 
+# echo -e "to the LD_LIBRARY_PATH variable by typing the following in the terminal (temporary use)"
+# echo -e "or by adding the following line to your .bashrc:"
+# thisFolder=`pwd`/ferslib/local/lib
+# echo -e "export LD_LIBRARY_PATH=${thisFolder}:\${LD_LIBRARY_PATH}${Clear}"
 echo "*************************************************"
 
+echo
+echo "*************************************************"
+if [ $completed -eq 1 ]; then
+	echo -e "${Green}Installation completed ${Clear}"
+	#echo
+	#echo "N.B.: if you use JanusC from shell please launch it"
+	#echo "with the launcher script ./launch_JanusC.sh"
+	echo "*************************************************"
+fi
 

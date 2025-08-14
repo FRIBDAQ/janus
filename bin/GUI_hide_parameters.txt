@@ -11,8 +11,9 @@ Job Last Run			b
 Run Sleep				b
 Enable Jobs				b
 Data Analysis			b
-Event Building Mode		ab
-Tstamp Coinc Window		ab
+Event Building Mode		b
+Bunch Trigger Source	23
+Tstamp Coinc Window		b
 Trg Time Window         b
 Veto Source				b45
 Validation Source		b2345
