@@ -40,8 +40,8 @@ DataAnalysis					   ALL				   # Data Analysis Enable/disable mask. Options: ALL,
 DataFilePath                       DataFiles           # Destination folder to save the output files
 OF_OutFileUnit                     LSB                 # ToA and ToT unit. Options: LSB, ns
 OF_EnMaxSize                       0                   # Limited Max File List Size
-OF_MaxSize                         1 GB                # Max size of List files (in Bytes), minimum size allowed 1 kB
-OF_ListLL                          DISABLED            # Event List file (FERS_LL). WRITING: FERS_LL is writing the raw data to files. READING: FERS_LL is reading the raw data from files and process the events. Options: DISABLED, WRITING, READING
+OF_MaxSize                         1 GB                # Max size of List files (in Bytes), minimum size allowed 1 MB
+OF_RawData                         0	               # Event List file (Raw Data)
 OF_ListBin                         0                   # Event List file (binary)
 OF_ListAscii                       0                   # Event List file (ASCII)
 OF_ListCSV                         0                   # Event List file (CSV)

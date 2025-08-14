@@ -6,7 +6,7 @@
 
 ------------------------------------------------------------------------------
 
-    Janus README
+    Janus 5202 README
     
 ------------------------------------------------------------------------------
 
@@ -21,37 +21,61 @@ C.  SUPPORT
 A. SYSTEM REQUIREMENTS
 -----------------------
    
-  - Microsoft Windows (>)10 or Linux
+  - **OS**: 64-bit only. Microsoft Windows 10 or higher, Linux
  
-  - On windows, python is needed for developing or debugging purpose. Requirements:
-	. python3 (>3.8)
-	. tkinter
-	. pillow (with tkinter supporting)
+  - **On Windows**:
+    - Python 3.8 or higher (for development or debugging purposes)
+    - Tkinter
+    - Pillow (with Tkinter support)
+    - Visual C++ runtime libraries
 
-  - On linux the needed packages can be installed through Janus_Install.bash 
-    for debian like and fedora/redhat linux distributions. Requirements:
-	. g++ (suggested version <= 11)
-	. gnuplot
-    . python 3 (>3.8) 
-	. tkinter
-	. pillow (with tkinter supporting)
-	
-	
+  - **On Linux**:
+    - g++
+	- make
+	- libusb-1.0
+	- pkg-config
+    - gnuplot (with wxt terminal support)
+    - Python 3.8 or higher
+    - Tkinter
+    - Pillow (with Tkinter support)
+    - Superuser permissions to run `sudo`
+
 
 B. INSTALLATION
 ----------------
 
-Windows:
-	- run bin/JanusPy.exe for GUI mode or bin/JanusC.exe for console mode
+### Windows:
+ 1. **Run**:
+    - **For GUI mode**:
+        cd bin
+        Run `JanusPy.exe`
+    - **For console mode**:
+        cd bin
+        Run `JanusC.exe`
 
-Linux:
-	- cd in Janus directory
-	- run sudo bash Janus_Install.bash and check if any required package is missing
-	  or install the packages manually if the linux distribution is not supported by the Janus Installer
-	- run bin/JanusPy.pyw for GUI mode or bin/JanusC for console mode
+### Linux:
+*********************************************************************************************
+**Note**: Janus self-installation is supported only on Debian-based and Fedora distributions.
+However, you can still run `Janus_Install.bash` as root. It provides a short guide on how to 
+install Janus step by step on unsupported distributions and sets the USB rules for USB connections.
+*********************************************************************************************
+
+ 1. **Installation**:
+	sudo bash Janus_Install.bash
+    - Check if any required packages are missing and install them manually if the Linux distribution is not supported by the Janus Installer.
+     
+
+ 2. **Run**:
+    - **For GUI mode**:
+        cd gui
+        python3 JanusPy.pyw
+         
+    - **For console mode**:
+        cd bin
+        ./JanusC
 
 
 C. SUPPORT   
 -----------
         
-For technical support, go to https://www.caen.it/mycaen/support/ (login and MyCAEN+ account required)
+For technical support, visit https://www.caen.it/mycaen/support/ (login and MyCAEN+ account required)

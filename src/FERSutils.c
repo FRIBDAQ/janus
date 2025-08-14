@@ -22,17 +22,105 @@
 #include <Windows.h>
 #endif
 
-#include "FERSlib.h"
+//#include "FERSlib.h"
 #include "FERSutils.h"
 #include "console.h"
 
 #include "JanusC.h"
 #include "Statistics.h"
 
+
+// *********************************************************
+// simplified version of the GetParam
+// *********************************************************
+int FERS_GetParam_int(int handle, char* param_name) {
+	int ret = 0;
+	int cValue = 0;
+	char value[100];
+	char desc_err[1024];
+	ret = FERS_GetParam(handle, param_name, value);
+	if (ret != 0) {
+		FERS_GetLastError(desc_err);
+		Con_printf("LCSe", "%s\n");
+	} else if (sscanf(value, "%d", &cValue) != 1)
+		Con_printf("LCSe", "ERROR: failed to get parameter %s\n", param_name);
+	return cValue;
+}
+
+uint32_t FERS_GetParam_uint32(int handle, char* param_name) {
+	uint32_t ret = 0;
+	uint32_t cValue = 0;;
+	char value[100];
+	char desc_err[1024];
+	ret = FERS_GetParam(handle, param_name, value);
+	if (ret != 0) {
+		FERS_GetLastError(desc_err);
+		Con_printf("LCSe", "%s\n");
+	} else if (sscanf(value, "%" SCNd32, &cValue) != 1)
+		Con_printf("LCSe", "ERROR: failed to get parameter %s\n", param_name);
+	return cValue;
+}
+
+uint32_t FERS_GetParam_hex(int handle, char* param_name) {
+	uint32_t ret = 0;
+	uint32_t cValue = 0;;
+	char value[100];
+	char desc_err[1024];
+	ret = FERS_GetParam(handle, param_name, value);
+	if (ret != 0) {
+		FERS_GetLastError(desc_err);
+		Con_printf("LCSe", "%s\n");
+	} else if (sscanf(value, "%" SCNx32, &cValue) != 1)
+		Con_printf("LCSe", "ERROR: failed to get parameter %s\n", param_name);
+	return cValue;
+}
+
+uint64_t FERS_GetParam_uint64(int handle, char* param_name) {
+	uint32_t ret = 0;
+	uint64_t cValue = 0;;
+	char value[100];
+	char desc_err[1024];
+	ret = FERS_GetParam(handle, param_name, value);
+	if (ret != 0) {
+		FERS_GetLastError(desc_err);
+		Con_printf("LCSe", "%s\n");
+	} else if (sscanf(value, "%" SCNd64, &cValue) != 1)
+		Con_printf("LCSe", "ERROR: failed to get parameter %s\n", param_name);
+	return cValue;
+}
+
+uint64_t FERS_GetParam_hex64(int handle, char* param_name) {
+	uint64_t ret = 0;
+	uint64_t cValue = 0;
+	char value[100];
+	char desc_err[1024];
+	ret = FERS_GetParam(handle, param_name, value);
+	if (ret != 0) {
+		FERS_GetLastError(desc_err);
+		Con_printf("LCSe", "%s\n");
+	} else if (sscanf(value, "%" SCNx64, &cValue) != 1)
+		Con_printf("LCSe", "ERROR: failed to get parameter %s\n", param_name);
+	return cValue;
+}
+
+float FERS_GetParam_float(int handle, char* param_name) {
+	float ret = 0;
+	float cValue = 0;
+	char value[100];
+	char desc_err[1024];
+	ret = FERS_GetParam(handle, param_name, value);
+	if (ret != 0) {
+		FERS_GetLastError(desc_err);
+		Con_printf("LCSe", "%s\n");
+	} else if (sscanf(value, "%f", &cValue) != 1)
+		Con_printf("LCSe", "ERROR: failed to get parameter %s\n", param_name);
+	return cValue;
+}
+
 // *********************************************************
 // Pixel Map
 // *********************************************************
-int map_ch2x[FERSLIB_MAX_NCH], map_ch2y[FERSLIB_MAX_NCH], map_xy2ch[8][8];
+int map_ch2x[FERSLIB_MAX_NCH_5202], map_ch2y[FERSLIB_MAX_NCH_5202], map_xy2ch[8][8];
 int MapInit = 0;
 
 int Read_ch2xy_Map (char *filename)
@@ -42,7 +130,7 @@ int Read_ch2xy_Map (char *filename)
 	FILE *map;
 
 	// Set default mapping (totally arbitrary)
-	for(i=0; i<FERSLIB_MAX_NCH; i++) {
+	for(i=0; i<FERSLIB_MAX_NCH_5202; i++) {
 		map_ch2x[i] = i%8;
 		map_ch2y[i] = i/8;
 	}
@@ -50,11 +138,11 @@ int Read_ch2xy_Map (char *filename)
 
 	map = fopen(filename, "r");
 	if (map == NULL) return -1;
-	for(i=0; i<FERSLIB_MAX_NCH; i++) {
+	for(i=0; i<FERSLIB_MAX_NCH_5202; i++) {
 		if (feof(map)) break;
 		fscanf(map, "%d", &ch);
 		fscanf(map, "%s", spix);
-		if ((ch >= 0) && (ch < FERSLIB_MAX_NCH)) {
+		if ((ch >= 0) && (ch < FERSLIB_MAX_NCH_5202)) {
 			x = toupper(spix[0]) - 'A';
 			y = spix[1] - '1';
 			map_ch2x[ch] = x;
@@ -112,13 +200,14 @@ void PrintMap()
 	ClearScreen();
 }
 
-#ifdef FERS_5202
+#if defined FERS_5202 | FERS_5204
 // ****************************************************
 // HV Control Panel
 // ****************************************************
-void HVControlPanel(int handle) 
+void HVControlPanel(int b_handle) 
 {
-	int c=0;
+	int handle = b_handle;
+	int brd, c=0;
 	int HV_onoff, Ramp, OvC, OvV;
 	uint64_t ct=0, pt=0;
 	uint32_t RegAddr=0, DataType=1, Rdata=0, Wdata=0;
@@ -127,15 +216,16 @@ void HVControlPanel(int handle)
 
 	ClearScreen();
 	while(1) {
-		ct = get_time();
+		ct = j_get_time();
 		if ((pt == 0) || ((ct-pt) > 1000)) {
-			HV_Get_Vmon(handle, &vmon);
-			HV_Get_Imon(handle, &imon);
-			HV_Get_Vbias(handle, &vbias);
-			HV_Get_Imax(handle, &imax);
-			HV_Get_Status(handle, &HV_onoff, &Ramp, &OvC, &OvV);
-			HV_Get_DetectorTemp(handle, &temp);
+			FERS_HV_Get_Vmon(handle, &vmon);
+			FERS_HV_Get_Imon(handle, &imon);
+			FERS_HV_Get_Vbias(handle, &vbias);
+			FERS_HV_Get_Imax(handle, &imax);
+			FERS_HV_Get_Status(handle, &HV_onoff, &Ramp, &OvC, &OvV);
+			FERS_HV_Get_DetectorTemp(handle, &temp);
 			gotoxy(1, 2);
+			printf("[b] Board        %d              \n", FERS_INDEX(handle));
 			printf("[v] Vset         %.3f V          \n", vbias);
 			printf("[i] Imax         %.3f mA         \n", imax);
 			printf("[H] ON/OFF       %s              \n", onoff_string[HV_onoff]);
@@ -154,19 +244,26 @@ void HVControlPanel(int handle)
 
 		if (kbhit()) { // DNIN: Con_kbhit ??
 			c = Con_getch();
+			if (c == 'b') {
+				printf("Board = ");
+				scanf("%d", &brd);
+				if ((brd >= 0) && (brd < FERS_GetNumBrdConnected())) {
+					handle = (handle & 0xFFFFFF00) + brd;
+				}
+			}
 			if (c == 'v') {
 				float newvset;
 				printf("Set HV (V) = ");
 				scanf("%f", &newvset);
-				HV_Set_Vbias(handle, newvset);
-				HV_Get_Vbias(handle, &vbias);
+				FERS_HV_Set_Vbias(handle, newvset);
+				FERS_HV_Get_Vbias(handle, &vbias);
 			}
 			if (c == 'i') {
 				float newimax;
 				printf("Set Imax (mA) = ");
 				scanf("%f", &newimax);
-				HV_Set_Imax(handle, newimax);
-				HV_Get_Imax(handle, &imax);
+				FERS_HV_Set_Imax(handle, newimax);
+				FERS_HV_Get_Imax(handle, &imax);
 			}
 			if (c == 'a') {
 				printf("Reg Addr = ");
@@ -177,7 +274,7 @@ void HVControlPanel(int handle)
 				scanf("%d", (int*)&DataType);
 			}
 			if (c == 'r') {
-				HV_ReadReg(handle, RegAddr, DataType, &Rdata);
+				FERS_HV_ReadReg(handle, RegAddr, DataType, &Rdata);
 			}
 			if (c == 'w') {
 				char str[100];
@@ -185,11 +282,11 @@ void HVControlPanel(int handle)
 				scanf("%s", str);
 				if (str[1] == 'x') sscanf(str + 2, "%x", &Wdata);
 				else sscanf(str, "%d", &Wdata);
-				HV_WriteReg(handle, RegAddr, DataType, Wdata);
+				FERS_HV_WriteReg(handle, RegAddr, DataType, Wdata);
 			}
 			if (c == 'H') {
 				HV_onoff ^= 1;
-				HV_Set_OnOff(handle, HV_onoff);
+				FERS_HV_Set_OnOff(handle, HV_onoff);
 			}
 			if (c == 'q') break;
 			ClearScreen();
@@ -197,13 +294,16 @@ void HVControlPanel(int handle)
 	}
 	ClearScreen();
 }
+#endif
 
+#if defined FERS_5202 
 // ****************************************************
 // Citiroc Control Panel
 // ****************************************************
-void CitirocControlPanel(int handle) 
+void CitirocControlPanel(int b_handle) 
 {
-	int c=0, print_menu=1, reload_cfg=0;
+	int handle = b_handle;
+	int brd, c=0, print_menu=1, reload_cfg=0;
 	uint32_t tthr, qthr, lgg, hgg, lgst, hgst;
 
 	FERS_ReadRegister(handle, a_qd_coarse_thr, &qthr);	// Threshold for Q-discr
@@ -216,6 +316,13 @@ void CitirocControlPanel(int handle)
 	while(c != 'q') {
 		if (Con_kbhit()) {	
 			c = Con_getch();
+			if (c == 'b') {
+				printf("Board = ");
+				scanf("%d", &brd);
+				if ((brd >= 0) && (brd < FERS_GetNumBrdConnected())) {
+					handle = (handle & 0xFFFFFF00) + brd;
+				}
+			}
 			if (c=='s') {
 				printf("Shaping Time LG = ");
 				scanf("%d", &lgst);
@@ -264,6 +371,7 @@ void CitirocControlPanel(int handle)
 		}
 		if (print_menu) {
 			printf("\n");
+			printf("[b] Board             %d\n", FERS_INDEX(handle));
 			printf("[s] set LG sh. time   %6d\n", lgst);
 			printf("[S] set HG sh. time   %6d\n", hgst);
 			printf("[g] set LG gain       %6d\n", lgg);
@@ -281,30 +389,50 @@ void CitirocControlPanel(int handle)
 // ****************************************************
 // Manual Controller for register R/W access
 // ****************************************************
-void ManualController(int handle) 
+void ManualController(int b_handle) 
 {
-	int c=0, i, print_menu=1, pagenum;
+	int handle = b_handle;
+	int brd, c=0, i, print_menu=1, pagenum;
 	static uint32_t base=0x0100, ch=0, offs=0, addr, rdata=0, wdata=0, cmd=0;
 	static uint32_t i2c_reg_addr=0, i2c_reg_rdata=0, i2c_reg_wdata=0, i2c_dev_index=0;
 	uint8_t fpage[FLASH_PAGE_SIZE];
 	uint32_t *buff = NULL;
 	char fname[100];
+#if defined FERS_5202
+	char i2c_dev_name[5][20] = {"PLL"};
+	uint32_t i2c_dev_addr[5] = {I2C_ADDR_PLL0};
+	int num_i2c_dev = 1;
+#elif defined FERS_5203
 	char i2c_dev_name[4][20] = {"TDC0", "TDC1", "PLL0", "PLL1"};
 	uint32_t i2c_dev_addr[4] = {I2C_ADDR_TDC(0), I2C_ADDR_TDC(1), I2C_ADDR_PLL0, I2C_ADDR_PLL1};
+	int num_i2c_dev = 4;
+#elif defined FERS_5204
+	char i2c_dev_name[3][20] = {"XROC", "TDC", "PLL"};
+	uint32_t i2c_dev_addr[3] = {I2C_ADDR_XR, I2C_ADDR_TDC(0), I2C_ADDR_PLL0};
+	int num_i2c_dev = 3;
+#endif
+
 	FILE *fp;
 
 	while(c != 'q') {
 		if (Con_kbhit()) {
 			c = Con_getch();
-			if (c=='b') {
-				if      (base == 0x0100) base = 0x0200;
-				else if (base == 0x0200) base = 0x0300;
-				else if (base == 0x0300) base = 0x0100;
+			if (c == 'b') {
+				printf("Board = ");
+				scanf("%d", &brd);
+				if ((brd >= 0) && (brd < FERS_GetNumBrdConnected())) {
+					handle = (handle & 0xFFFFFF00) + brd;
+				}
 			}
 			if (c=='c') {
 				printf("Channel = ");
 				scanf("%d", &ch);
 				ch &= 0x3F;
+			}
+			if (c == 'B') {
+				if (base == 0x0100) base = 0x0200;
+				else if (base == 0x0200) base = 0x0300;
+				else if (base == 0x0300) base = 0x0100;
 			}
 			if (c=='+') {
 				if (ch < 64) ch++;
@@ -331,17 +459,21 @@ void ManualController(int handle)
 				FERS_ReadRegister(handle, addr, &rdata);
 			}
 			if (c=='i') {
+				int last_cyc = 0;
+				c = 0;
 				while(1) {
 					ClearScreen();
 					printf("[d] I2C Dev Addr  : %s\n", i2c_dev_name[i2c_dev_index]);
 					printf("[a] I2C Reg Addr  : %04X\n", i2c_reg_addr);
 					printf("[r] Read Cycle    : %08X\n", i2c_reg_rdata);
 					printf("[w] Write Cycle   : %08X\n", i2c_reg_wdata);
+					printf("[c] Repeat Cycle\n");
 					/*printf("[0] Configure PLL0\n");
 					printf("[1] Configure PLL1\n");*/
 					printf("[q] Quit I2C\n");
 					c = getch();
-					if (c == 'd') i2c_dev_index = (i2c_dev_index + 1) % 4;
+					if (c == 'd') 
+						i2c_dev_index = (i2c_dev_index + 1) % num_i2c_dev;
 					if (c == 'q') {
 						c = 0;
 						break;
@@ -350,14 +482,17 @@ void ManualController(int handle)
 						printf("Enter Reg Addr (Hex): ");
 						scanf("%x", &i2c_reg_addr);
 					}
-					if (c == 'w') {
-						printf("Enter Reg Data (Hex): ");
-						scanf("%x", &i2c_reg_wdata);
+					if ((c == 'w') || ((c == 'c') && (last_cyc == 'w'))) {
+						if (c == 'w') {
+							printf("Enter Reg Data (Hex): ");
+							scanf("%x", &i2c_reg_wdata);
+						}
 						FERS_I2C_WriteRegister(handle, i2c_dev_addr[i2c_dev_index], i2c_reg_addr, i2c_reg_wdata);
+						last_cyc = 'w';
 					}
-					if (c == 'r') {
-
+					if ((c == 'r') || ((c == 'c') && (last_cyc == 'r'))) {
 						FERS_I2C_ReadRegister(handle, i2c_dev_addr[i2c_dev_index], i2c_reg_addr, &i2c_reg_rdata);
+						last_cyc = 'r';
 					}
 					if (c == 'l') {
 						char line[500];
@@ -391,8 +526,7 @@ void ManualController(int handle)
 
 					if (c == 'p') {
 						char line[500];
-						int s = 0;
-						int PLLindex = 1, ret = 0;
+						int PLLindex = 1;
 						int cnt_r = 0;
 						char fname[200] = "D:\\work\\a5203\\PLL\\Si5394_Reg.txt";
 						uint32_t addr, data, devaddr;
@@ -457,7 +591,7 @@ void ManualController(int handle)
 				}
 				FERS_WriteFlashPage(handle, pagenum, FLASH_PAGE_SIZE, fpage);
 			}
-#ifdef FERS_5202
+#if defined FERS_5202 | FERS_5204
 			if (c=='p') {
 				char date[20];
 				uint16_t pedLG[FERSLIB_MAX_NCH], pedHG[FERSLIB_MAX_NCH];
@@ -482,9 +616,9 @@ void ManualController(int handle)
 			addr = (base << 16) | offs;
 		if (print_menu) {
 			ClearScreen();
-			printf("Board n. %d\n", FERS_INDEX(handle));
-			printf("[b] Change base      (%04X)\n", base);
+			printf("[b] Change board     (%02d)\n", FERS_INDEX(handle));
 			printf("[c] Change channel   (%02d)\n", ch);
+			printf("[B] Change base      (%04X)\n", base);
 			printf("[+] Next channel\n");
 			printf("[-] Prev channel\n");
 			printf("[a] Set address      (%08X)\n", addr);
@@ -494,7 +628,7 @@ void ManualController(int handle)
 			printf("[i] I2C R/W reg\n");
 			printf("[R] Read flash page\n");
 			printf("[W] Write flash page\n");
-#ifdef FERS_5202
+#if defined FERS_5202 | FERS_5204
 			printf("[p] read pedestal calibration\n");
 #endif
 			printf("[q] Return\n");
@@ -506,14 +640,70 @@ void ManualController(int handle)
 }
 
 
+// ****************************************************
+// Register access test: infinite loop with register R/W access over the connected boards.
+// Write a random number, read it back. Count communication errors (access fail) and data errors (read data different from write data)
+// ****************************************************
+void RegAccessTest(int* handle, int nbrd) {
+	uint32_t reg_addr = a_channel_mask_1;  // The address may change from new models. 
+	uint32_t wdata, rdata;
+	int b, i, retr, retw;
+	uint64_t t1, t2;
+	int nn = 100; // number of consecutive accesses per board
+	int dat_err[MAX_NBRD] = { 0 };
+	int com_err[MAX_NBRD] = { 0 };
+	int ncyc[MAX_NBRD] = { 0 };
+	uint32_t reg_val[MAX_NBRD];
+
+	// Read current value from regs (for restoring)
+	for (b = 0; b < nbrd; b++)
+		FERS_ReadRegister(handle[b], reg_addr, &reg_val[b]);
+
+	ClearScreen();
+	printf("Register Access Test\n\n");
+	t1 = j_get_time();
+	while (1) {
+		for (b = 0; b < nbrd; b++) {
+			for (i = 0; i < nn; i++) {
+				wdata = rand();
+				retw = FERS_WriteRegister(handle[b], reg_addr, wdata);
+				retr = FERS_ReadRegister(handle[b], reg_addr, &rdata);
+				ncyc[b]++;
+				if (retw || retr) com_err[b]++;
+				if (wdata != rdata)	dat_err[b]++;
+			}
+		}
+		if (Con_kbhit()) {
+			Con_getch();
+			break;
+		}
+		t2 = j_get_time();
+		if ((t2 - t1) > 1000) {
+			printf("Board       Num R/W     COM err     DATA err\n");
+			for (b = 0; b < nbrd; b++) {
+				printf("%-11d %-11d %-11d %-11d\n", b, ncyc[b], com_err[b], dat_err[b]);
+			}
+			printf("\n");
+			t1 = t2;
+		}
+	}
+
+	// Restore reg value 
+	for (b = 0; b < nbrd; b++)
+		FERS_WriteRegister(handle[b], reg_addr, reg_val[b]);
+
+}
+
+
 // *********************************************************
 // Calculate Pedestals
 // *********************************************************
-#ifdef FERS_5202
+#if defined FERS_5202 | FERS_5204
 #define CALIB_NCYC  200
 int AcquirePedestals(int handle, uint16_t *pedestalLG, uint16_t *pedestalHG)
 {
 	int nb, dtq; 
+	int ret = 0;
 	uint32_t i, nn, rmask;
 	uint32_t ml[64], mh[64];
 	void *Event;
@@ -532,13 +722,13 @@ int AcquirePedestals(int handle, uint16_t *pedestalLG, uint16_t *pedestalHG)
 	FERS_SendCommand(handle, CMD_CFG_ASIC);  
 	*/
 
-	FERS_ReadRegister(handle, a_run_mask, &rmask);  
-	FERS_WriteRegister(handle, a_run_mask, 1);  // swrun
-	FERS_WriteRegister(handle, a_acq_ctrl, ACQMODE_SPECT);
-	FERS_WriteRegister(handle, a_trg_mask, 0x21);  // SW Trigger + PTRG
-	FERS_WriteRegister(handle, a_dwell_time, (uint32_t)(1e6 / CLK_PERIOD));  // 1 ms
-	FERS_WriteRegisterSlice(handle, a_acq_ctrl, 12, 13, GAIN_SEL_BOTH);  // Set Gain Selection = Both
-	FERS_EnablePedestalCalibration(handle, 0);
+	ret = FERS_ReadRegister(handle, a_run_mask, &rmask);  
+	ret |= FERS_WriteRegister(handle, a_run_mask, 1);  // swrun
+	ret |= FERS_WriteRegister(handle, a_acq_ctrl, ACQMODE_SPECT);
+	ret |= FERS_WriteRegister(handle, a_trg_mask, 0x21);  // SW Trigger + PTRG
+	ret |= FERS_WriteRegister(handle, a_dwell_time, (uint32_t)(1e6 / CLK_PERIOD_5202));  // 1 ms
+	ret |= FERS_WriteRegisterSlice(handle, a_acq_ctrl, 12, 13, GAIN_SEL_BOTH);  // Set Gain Selection = Both
+	ret |= FERS_EnablePedestalCalibration(handle, 0);
 
 	Sleep(100);
 	FERS_SendCommand(handle, CMD_ACQ_STOP);  // Stop Command (in case the board is still running)
@@ -577,7 +767,8 @@ int ScanThreshold(int handle)
 {
 	int i, s, brd;
 	uint32_t thr;
-	uint32_t hitcnt[FERSLIB_MAX_NCH], Tor_cnt, Qor_cnt;
+	uint32_t hitcnt[FERSLIB_MAX_NCH_5202], Tor_cnt, Qor_cnt;
+	uint64_t Tlogic_mask = FERS_GetParam_hex64(handle, "Tlogic_Mask");
 	FILE *st;
 
 	brd = FERS_INDEX(handle);
@@ -586,17 +777,15 @@ int ScanThreshold(int handle)
 	uint16_t nstep = (RunVars.StaircaseCfg[SCPARAM_MAX] - RunVars.StaircaseCfg[SCPARAM_MIN])/RunVars.StaircaseCfg[SCPARAM_STEP] + 1;
 	float dwell_s = (float)RunVars.StaircaseCfg[SCPARAM_DWELL] / 1000;
 
-	Con_printf("CSm", "Scanning thresholds (press 'S' to stop):\n");
+	Con_printf("CSm", "Scanning thresholds for Board %d (press 'S' to stop):\n", brd);
 	Con_printf("Sa", "%02dRunning Staircase (0 %%)", ACQSTATUS_STAIRCASE);
 
 	st = fopen(SCAN_THR_FILENAME, "w");
 	FERS_WriteRegister(handle, a_acq_ctrl, ACQMODE_COUNT);
 	FERS_WriteRegisterSlice(handle, a_acq_ctrl, 27, 29, 0);  // Set counting mode = singles
-	FERS_WriteRegister(handle, a_dwell_time, (uint32_t)(dwell_s * 1e9 / CLK_PERIOD)); 
-	FERS_WriteRegister(handle, a_qdiscr_mask_0, WDcfg.Q_DiscrMask0[brd]); 
-	FERS_WriteRegister(handle, a_qdiscr_mask_1, WDcfg.Q_DiscrMask1[brd]);  
-	FERS_WriteRegister(handle, a_tdiscr_mask_0, WDcfg.Tlogic_Mask0[brd]);  
-	FERS_WriteRegister(handle, a_tdiscr_mask_1, WDcfg.Tlogic_Mask1[brd]);  
+	FERS_WriteRegister(handle, a_dwell_time, (uint32_t)(dwell_s * 1e9 / CLK_PERIOD_5202)); 
+	FERS_WriteRegister(handle, a_tdiscr_mask_0, (uint32_t)(Tlogic_mask & 0xFFFFFFFF));
+	FERS_WriteRegister(handle, a_tdiscr_mask_1, (uint32_t)((Tlogic_mask >> 32) & 0xFFFFFFFF));
 	FERS_WriteRegister(handle, a_citiroc_cfg, 0x00070f20); // Q-discr direct (not latched)
 	FERS_WriteRegister(handle, a_lg_sh_time, SHAPING_TIME_25NS); // Shaping Time LG
 	FERS_WriteRegister(handle, a_hg_sh_time, SHAPING_TIME_25NS); // Shaping Time HG
@@ -620,19 +809,19 @@ int ScanThreshold(int handle)
 		Sleep(20);
 		FERS_WriteRegister(handle, a_trg_mask, 0x20); // enable periodic trigger
 		FERS_SendCommand(handle, CMD_RES_PTRG);  // Reset period trigger counter and count for dwell time
-		Sleep((int)(dwell_s/1000 + 200));  // wait for a complete dwell time (+ margin), then read counters
+		Sleep((int)(dwell_s*1000 + 200));  // wait for a complete dwell time (+ margin), then read counters
 		FERS_ReadRegister(handle, a_t_or_cnt, &Tor_cnt);
 		FERS_ReadRegister(handle, a_q_or_cnt, &Qor_cnt);
 		if (s < nstep) {  // skip 1st pass 
 			uint64_t chmean = 0;
 			fprintf(st, "%5d ", thr);
-			for(i=0; i<FERSLIB_MAX_NCH; i++) {
+			for(i=0; i<FERSLIB_MAX_NCH_5202; i++) {
 				FERS_ReadRegister(handle, a_hitcnt + (i << 16), &hitcnt[i]);
 				chmean += (uint64_t)hitcnt[i];
 				fprintf(st, "%8.3e ", hitcnt[i]/dwell_s);
 				Stats.Staircase[FERS_INDEX(handle)][i][s] = hitcnt[i]/dwell_s; 
 			}
-			chmean /= FERSLIB_MAX_NCH;
+			chmean /= FERSLIB_MAX_NCH_5202;
 			int perc = (100 * (nstep-s)) / nstep;
 			if (perc > 100) perc = 100;
 			Con_printf("CSm", "%3d%%%5d  %8.3e  %8.3e  %8.3e\n", perc, thr, chmean/dwell_s, Tor_cnt/dwell_s, Qor_cnt/dwell_s);
@@ -671,7 +860,7 @@ int ScanHoldDelay(int handle)
 	uint16_t nstep = (stop - start) / step + 1;
 	if (nstep > MAX_SH_NSTEP) nstep = MAX_SH_NSTEP;
 
-	if (!(WDcfg.AcquisitionMode & ACQMODE_SPECT)) {
+	if (!(FERS_GetParam_int(handle, "AcquisitionMode") & ACQMODE_SPECT)) {
 		Con_printf("CSw", "WARNING: Scan: Need Spectroscopy mode for Hold Scan\n");
 		return 1;
 	}
@@ -681,20 +870,20 @@ int ScanHoldDelay(int handle)
 		Stats.Hold_PHA_2Dmap[b][ch] = (uint32_t *)calloc(512 * nstep * 2, sizeof(uint32_t)); // DNIN: this works but the problem need to be further investigated(double the memory allocation)
 	}
 
-	Con_printf("CSm", "Scanning Hold Delay (press 'S' to stop)\n");
+	Con_printf("CSm", "Scanning Hold Delay for Board %d (press 'S' to stop)\n", b);
 	Con_printf("Sa", "%02dRunning Hold-Scan (0 %%)", ACQSTATUS_HOLD_SCAN);
 
-	FERS_StopAcquisition(&hh, 1, STARTRUN_ASYNC);
+	FERS_StopAcquisition(&hh, 1, STARTRUN_ASYNC, -100);
 	FERS_WriteRegisterSlice(handle, a_acq_ctrl, 0, 3, ACQMODE_SPECT);
 	FERS_WriteRegisterSlice(handle, a_acq_ctrl, 12, 13, 3); // 0=auto, 1=high gain, 2=low gain, 3=both
-	FERS_WriteRegister(handle, a_trg_mask, WDcfg.TriggerMask);  
+	FERS_WriteRegister(handle, a_trg_mask, FERS_GetParam_hex(handle, "TriggerMask"));
 	FERS_WriteRegister(handle, a_run_mask, 0x01); 
-	FERS_SetCommonPedestal(handle, WDcfg.Pedestal);
+	FERS_SetCommonPedestal(handle, FERS_GetParam_hex(handle, "Pedestal"));
 
 	for(si = 0; si < nstep; si++) {
 		delay = start + step * si;
-		FERS_WriteRegister(handle, a_hold_delay, delay / CLK_PERIOD);	// Hold delay (step = 8 ns)
-		FERS_StartAcquisition(&hh, 1, STARTRUN_ASYNC);
+		FERS_WriteRegister(handle, a_hold_delay, delay / CLK_PERIOD_5202);	// Hold delay (step = 8 ns)
+		FERS_StartAcquisition(&hh, 1, STARTRUN_ASYNC, -100);
 		Sleep(10);
 		ns = 0;
 
@@ -711,7 +900,7 @@ int ScanHoldDelay(int handle)
 				SpectEvent_t *Ev = (SpectEvent_t *)Event;
 				x = si;
 				for(ch=0; ch<MAX_NCH; ch++) {
-					if (WDcfg.Range_14bit) y = Ev->energyHG[ch] >> 5;
+					if (FERS_GetParam_int(handle, "Range_14bit")) y = Ev->energyHG[ch] >> 5;
 					else y = Ev->energyHG[ch] >> 4;
 					if (y > 511) y = 511;
 					Stats.Hold_PHA_2Dmap[b][ch][y*nstep + x]++;
@@ -726,7 +915,7 @@ int ScanHoldDelay(int handle)
 		}
 		Con_printf("CSm", "Hold-Delay = %3d ns (%2d %%)\n", delay, 100*(delay-start)/(stop-start));
 		Con_printf("Sa", "%02dRunning Hold-Scan (%d %%)", ACQSTATUS_HOLD_SCAN, 100*(delay-start)/(stop-start));
-		FERS_StopAcquisition(&hh, 1, STARTRUN_ASYNC);
+		FERS_StopAcquisition(&hh, 1, STARTRUN_ASYNC, -100);
 		Sleep(100);
 		FERS_FlushData(handle);
 		if (Con_kbhit()) {

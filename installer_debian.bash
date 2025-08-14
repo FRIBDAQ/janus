@@ -28,7 +28,7 @@ White='\033[0;37m'        # White
 # Searching for library needed to compile JanusC
 echo "Searching for libusb.h ..."
 # usblib="/usr/include/libusb-1.0/libusb.h"
-usblib="/usr/lib/-96_64-linux-gnu/libusb-1.0.so"
+usblib="/usr/lib/x86_64-linux-gnu/libusb-1.0.so"
 # Check for usblib
 # usblib=`locate libusb-1.0.so | awk -F " " '{printf $1}'`
 # link=`file $usblib`
@@ -69,10 +69,67 @@ else
 	echo -e "${Green}libusb-1.0 found!!${Clear}"
 fi
 
+
+# Search for pkg_config
+echo "*************************************************"
+echo "*************************************************"
+echo "*************************************************"
+echo "Searching for pkgconf ..."
+if command -v pkgconf &> /dev/null || command -v pkg-config &> /dev/null; then
+    echo -e "${Green}pkgconf/pkg-config is installed!!${Clear}"
+else
+	if [ $isroot -ne 0 ]; then
+		echo -e "${Red}ERROR: pkgconf/pkg-config is missing!!!"
+		echo -e "Please, install pkgconf/pkg-config with 'sudo apt-get install pkg-config' or run this installer as root"
+		echo -e "Exiting ...${Clear}"
+		exit -1
+	elif [ $isroot -eq 0 ]; then
+		sudo apt-get install pkg-config
+		res=$?
+		if [ $res -ne 0 ]; then
+			echo -e "${Red}ERROR during pkgconf/pkg-config installation through 'apt-get install pkg-config'"
+			echo -e "Exiting ...${Clear}"
+			exit -1
+		else
+			echo -e "${Green}pkgconf/pkg-config installed${Clear}"
+		fi
+	fi
+fi
+
+
+echo "*************************************************"
+echo "*************************************************"
+echo "*************************************************"
+echo "Compiling CAEN FERSlib ..."
+cd ferslib
+libpath=$(pwd)/local
+gxxV=$(g++ -dumpversion)
+./configure --prefix=$libpath CXX=g++-$gxxV
+res0=$?
+make
+res1=$?
+make install
+res2=$?
+
+if [ $res0 -ne 0 ] || [ $res1 -ne 0 ] || [ $res2 -ne 0 ]; then
+	echo -e "${Red}ERROR: cannot compile FERSlib!!!"
+	echo -e "Exiting ...${Clear}"
+	exit -1
+else
+	echo -e "${Green}CAEN FERSlib installed${Clear}"
+fi
+
+cd ..
+
 echo "*************************************************"
 echo "*************************************************"
 echo "*************************************************"
 echo "Compiling JanusC ..."
+
+# Change path from relative to absolute
+absPath="$(pwd)/ferslib/"
+relPath="ferslib/"
+sed "s|$relPath|$absPath|g" Makefile.tmp > Makefile 
 
 #Compile JanusC
 make all
@@ -120,7 +177,7 @@ if [ $res -ne 0 ]; then
 		if [ $res -ne 0 ]; then
 			echo -e "${Red}ERROR during gnuplot installation through 'apt-get install gnuplot'"
 			echo -e "Exiting ...${Clear}"
-			exit 1
+			exit -1
 		else
 			echo -e "${Green}gnuplot installed${Clear}"
 		fi
@@ -130,8 +187,23 @@ else
 fi
 
 echo
-echo "PLEASE, check if gnuplot support terminal 'wxt' "
-echo "by typing on gnuplot shell 'set terminal' command"
+echo "Check for wxt terminal in gnuplot ..."
+available_terminals=$(gnuplot -e "set print '-'; print GPVAL_TERMINALS")
+if echo $available_terminals | grep -q "wxt"; then
+	echo -e "${Green}wxt terminal is supported ${Exit}"
+else
+	echo -e "${Red}wxt terminal is not supported. "
+	echo "Please, try to install gnuplot from source:"
+	echo -e "${Yellow} sudo apt update"
+	echo " sudo apt install libwxgtk3.0-gtk3-dev build-essential"
+	echo " wget https://sourceforge.net/projects/gnuplot/files/latest/download -O gnuplot.tar.gz"
+	echo " tar -xvf gnuplot .tar.gz"
+	echo " ./configure --with-wx"
+	echo " make"
+	echo " sudo make install"
+	echo -e "${Red}Exiting ...${Clear}"
+	exit 1
+fi
 echo
 echo "*************************************************"
 echo "*************************************************"
@@ -153,7 +225,7 @@ if [ $res -ne 0 ]; then
 		if [ $res -ne 0 ]; then
 			echo -e "${Red}ERROR during python3 installation through 'apt-get install python3'"
 			echo -e "Exiting ...${Clear}"
-			exit 1
+			exit -1
 		else
 			echo -e "${Green}python3 installed${Clear}"
 		fi
@@ -166,8 +238,9 @@ echo "Searching for tkinter package ..."
 # wpy3=`ls -l /usr/bin/python3 | awk -F "->" '{print $2}'`
 # wpy3=`echo $wpy3 | sed 's| *$||'`
 # pyPath="/usr/lib/${wpy3}/tkinter"
-python -c "import tkinter" 2>/dev/null
-if [ ! -d ${pyPath} ]; then
+python3 -c "import tkinter" 2>/dev/null
+pres=$?
+if [ $pres -ne 0 ]; then
 	if [ $isroot -ne 0 ]; then
 		echo -e "${Red}ERROR: python3 tkinter is missing!!!"
 		echo "Please, install the package with 'sudo apt-get install python3-tk' or run this installer as root"
@@ -179,7 +252,7 @@ if [ ! -d ${pyPath} ]; then
 		if [ $res -ne 0 ]; then
 			echo -e "${Red}ERROR during python3-tk installation through 'apt-get install python3-tk'"
 			echo -e "Exiting ...${Clear}"
-			exit 1
+			exit -1
 		else
 			echo -e "${Green}python3 tkinter installed${Clear}"
 		fi		
@@ -209,7 +282,7 @@ if [ $res -ne 0 ] || [ $res1 -ne 0 ]; then
 		if [ $res -ne 0 ] || [ $res1 -ne 0 ]; then
 			echo -e "${Red}ERROR during python3-pillow installation through 'apt-get install python3-pil' and 'apt-get install python3-pil.imagetk'"
 			echo -e "Exiting ...${Clear}"
-			exit 1
+			exit -1
 		else
 			echo -e "${Green}python3 pillow installed${Clear}"
 		fi
@@ -243,14 +316,14 @@ if [ $isroot -ne 0 ]; then     # from https://www.xmodulo.com/change-usb-device-
 	echo -e "this installer as root with USB plugged in to create the permission rule for connecting via USB.${Clear}"
 elif [ $isroot -eq 0 ]; then
 	# Check idVendor and idProduct of WinUSB. It should be always the same
-	usblist=`lsusb | grep 'Microchip Technology'`
+	usblist=$(lsusb | grep 'Microchip Technology')
 	if [ "$usblist" != "" ]; then # USB connected
-		bus=`echo $usblist | awk -F " " '{print $2}'`
-		device=`echo $usblist | awk -F " " '{print $4}'`
-		VV=`lsusb -v -s $bus:$device | grep idVendor`
-		PP=`lsusb -v -s $bus:$device | grep idProduct`
-		mVendor=`echo $VV | awk -F " " '{print $2}' | awk -F "x" '{print $2}'`
-		mProduct=`echo $PP | awk -F " " '{print $2}' | awk -F "x" '{print $2}'`
+		bus=$(echo $usblist | awk -F " " '{print $2}')
+		device=$(echo $usblist | awk -F " " '{print $4}')
+		VV=$(lsusb -v -s $bus:$device | grep idVendor)
+		PP=$(lsusb -v -s $bus:$device | grep idProduct)
+		mVendor=$(echo $VV | awk -F " " '{print $2}' | awk -F "x" '{print $2}')
+		mProduct=$(echo $PP | awk -F " " '{print $2}' | awk -F "x" '{print $2}')
 	else # USB not connected
 		mVendor=04d8
 		mProduct=0053
@@ -281,12 +354,31 @@ elif [ $isroot -eq 0 ]; then
 	echo "reboot and execute 'sudo udevadm control --reload' and 'sudo udevadm trigger'"
 fi
 
+
 echo
-echo "*************************************************"
-echo "Installation completed"
-#echo
-#echo "N.B.: if you use JanusC from shell please launch it"
-#echo "with the launcher script ./launch_JanusC.sh"
+echo
+echo "**************************************************"
+completed=1
+echo "**************************************************"
+echo -e "${Yellow}The ferslib linked to JanusC is the one in the folder $(pwd)/ferslib/local/lib${Clear}"
+# echo "**************************************************************************************************"
+# echo "***    ADD FERSLIB PATH TO LD_LIBRARY PATH                                                     ***"
+# echo "**************************************************************************************************"
+# echo -e "${Yellow}In order to use Janus with the stand-alone FERSlib,"
+# echo -e "add the path to the FERSlib .so library" 
+# echo -e "to the LD_LIBRARY_PATH variable by typing the following in the terminal (temporary use)"
+# echo -e "or by adding the following line to your .bashrc:"
+# thisFolder=`pwd`/ferslib/local/lib
+# echo -e "export LD_LIBRARY_PATH=${thisFolder}:\${LD_LIBRARY_PATH}${Clear}"
 echo "*************************************************"
 
+echo
+echo "*************************************************"
+if [ $completed -eq 1 ]; then
+	echo -e "${Green}Installation completed ${Clear}"
+	#echo
+	#echo "N.B.: if you use JanusC from shell please launch it"
+	#echo "with the launcher script ./launch_JanusC.sh"
+	echo "*************************************************"
+fi
 

@@ -1,7 +1,7 @@
 StartRunMode = Start Run Mode
 StopRunMode = Stop Run Mode
 OF_OutFileUnit = ToA/ToT Unit
-OF_ListLL = Event List (Raw)
+OF_RawData = Event List (Raw)
 OF_ListBin = Event List (Binary)
 OF_ListAscii = Event List (ASCII)
 OF_ListCSV = Event List (CSV)

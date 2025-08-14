@@ -47,9 +47,9 @@ class t_BinaryData_5203
         std::array<std::string, 2>          t_unit_tstamp;    // = { "LSB", "us" };  // time unit in the csv file header for timestamp
         uint8_t                             t_force_ns;     // force the conversion of time in ns (if is in LSB)
         uint8_t                             t_time_unit;    // ToA or ToT written as int (LSB) or float (ns). 0: LSB, 1: ns
-        float                               t_ToA_LSB_ns;   // ToA LSB value in ns
-        float                               t_ToT_LSB_ns;   // ToT LSB value in ns
-        float                               t_Tstamp_LSB_ns;    // Tstamp LSB value in ns
+        double                              t_ToA_LSB_ns;   // ToA LSB value in ns
+        double                              t_ToT_LSB_ns;   // ToT LSB value in ns
+        double                              t_Tstamp_LSB_ns;    // Tstamp LSB value in ns
         uint8_t                             t_data_format;      // Version of Data format
         std::string                         t_s_data_version;   // Version of Data format as string
         std::string                         t_s_sw_version;     // Version of Janus Release
