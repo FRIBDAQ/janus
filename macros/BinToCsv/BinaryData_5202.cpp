@@ -314,8 +314,14 @@ void t_BinaryData::WriteTmpEvt(std::ofstream& csvfile) {
         time_factor = t_LSB_ns;
 
     //std::string evt_header = std::to_string(t_brd) + "," + std::to_string(t_tstamp);
-    std::string evt_header = std::to_string(t_tstamp);
-    if ((t_acq_mode & 0XF0) == DTQ_RTSTAMP) evt_header += "," + std::to_string(t_rel_tstamp);
+    char tmp[50];
+    my_sprintf(tmp, "%.3f", t_tstamp);
+    std::string evt_header = tmp;
+    if ((t_acq_mode & 0XF0) == DTQ_RTSTAMP) {
+        my_sprintf(tmp, "%.3f", t_rel_tstamp);
+        evt_header += ",";
+        evt_header += tmp;
+    }
     if (t_acq_mode != ACQMODE_TIMING) {
         evt_header += "," + std::to_string(t_trigger_ID) + "," + std::to_string(t_brd) + "," + std::to_string(t_num_of_hit) + ","; // +std::to_string(ch_mask);
         char tmp[50]; // print mask
@@ -329,34 +335,36 @@ void t_BinaryData::WriteTmpEvt(std::ofstream& csvfile) {
         //if (!((ch_mask >> i) & 0x1)) 
         //    continue;
         std::string s_data;
-        char tmp[50];
-        if (t_acq_mode & ACQMODE_TSPECT) { // Spect (b01) Or Time (b10)
+        tmp[50];
+        if (t_acq_mode & ACQMODE_TSPECT) { // Spect (b01) Or Time (b10). This part is common for both ACQ mode
             my_sprintf(tmp, "0x%" PRIx8, t_data_type.at(i));
             s_data = "," + std::to_string(t_ch_id.at(i)) + "," + tmp;
+        }
+        if (t_acq_mode & ACQMODE_SPECT) {
             if (t_data_type.at(i) & LG)
                 s_data += "," + std::to_string(t_PHA_LG.at(i));
             else s_data += ",-1";
             if (t_data_type.at(i) & HG)
                 s_data += "," + std::to_string(t_PHA_HG.at(i));
             else s_data += ",-1";
-            if (t_acq_mode & ACQMODE_TIMING) {
-                if (t_data_type.at(i) & TOA) {
-                    if (t_time_unit)
-                        s_data += "," + std::to_string(t_ToA_f.at(i));
-                    else if (time_factor == 1)
-                        s_data += "," + std::to_string(t_ToA_i.at(i));  // It is not correct to show a float when an integer is expected, despite the decimal part is 0
-                    else
-                        s_data += "," + std::to_string(time_factor * t_ToA_i.at(i));
-                } else s_data += ",-1";
-                if (t_data_type.at(i) & TOT) {
-                    if (t_time_unit)
-                        s_data += "," + std::to_string(t_ToT_f.at(i));
-                    else if (time_factor == 1)
-                        s_data += "," + std::to_string(t_ToT_i.at(i));
-                    else
-                        s_data += "," + std::to_string(time_factor * t_ToT_i.at(i));
-                } else s_data += ",-1";
-            }
+        }
+        if (t_acq_mode & ACQMODE_TIMING) {
+            if (t_data_type.at(i) & TOA) {
+                if (t_time_unit)
+                    s_data += "," + std::to_string(t_ToA_f.at(i));
+                else if (time_factor == 1)
+                    s_data += "," + std::to_string(t_ToA_i.at(i));  // It is not correct to show a float when an integer is expected, despite the decimal part is 0
+                else
+                    s_data += "," + std::to_string(time_factor * t_ToA_i.at(i));
+            } else s_data += ",-1";
+            if (t_data_type.at(i) & TOT) {
+                if (t_time_unit)
+                    s_data += "," + std::to_string(t_ToT_f.at(i));
+                else if (time_factor == 1)
+                    s_data += "," + std::to_string(t_ToT_i.at(i));
+                else
+                    s_data += "," + std::to_string(time_factor * t_ToT_i.at(i));
+            } else s_data += ",-1";
         }
         if (t_acq_mode == ACQMODE_COUNT)  // Count mode
             s_data += "," + std::to_string((int)t_ch_id.at(i)) + "," + std::to_string((int)t_counts.at(i));

@@ -18,9 +18,9 @@
 #include <stdlib.h>
 #include "JanusC.h"
 #include "Statistics.h"
-#include "FERSlib.h"
+//#include "FERSlib.h"
 #include "console.h"
-#include "MultiPlatform.h"
+//#include "MultiPlatform.h"
 
 // ****************************************************************************************
 // Global Variables
@@ -28,6 +28,7 @@
 Stats_t Stats;			// Statistics (histograms and counters)
 
 //int HistoCreated[STATS_MAX_NBRD][STATS_MAX_NCH] = { 0 };
+int StcCreated[STATS_MAX_NBRD][STATS_MAX_NCH] = { 0 };
 int HistoCreatedE[STATS_MAX_NBRD][STATS_MAX_NCH] = { 0 };
 int HistoCreatedT[STATS_MAX_NBRD][STATS_MAX_NCH] = { 0 };
 int HistoCreatedM[STATS_MAX_NBRD][STATS_MAX_NCH] = { 0 };
@@ -85,22 +86,30 @@ int CreateStaircase_Offline(Staircase_t *stc) {
 }
 
 int DestroyHistogram2D(Histogram2D_t Histo) {
-	if (Histo.H_data != NULL)
+	if (Histo.H_data != NULL) {
 		free(Histo.H_data);
+		Histo.H_data = NULL;
+	}
 	return 0;
 }
 
 int DestroyHistogram1D(Histogram1D_t Histo) {
-	if (Histo.H_data != NULL)
-		free(Histo.H_data);	// DNIN error in memory access
+	if (Histo.H_data != NULL) {
+		free(Histo.H_data);
+		Histo.H_data = NULL;
+	}	// DNIN error in memory access
 	return 0;
 }
 
 int DestroyStaircase_Offline(Staircase_t stc) {
-	if (stc.threshold != NULL)
+	if (stc.threshold != NULL) {
 		free(stc.threshold);
-	if (stc.counts != NULL)
+		stc.threshold = NULL;
+	}
+	if (stc.counts != NULL) {
 		free(stc.counts);
+		stc.counts = NULL;
+	}
 	return 0;
 }
 
@@ -279,7 +288,7 @@ int H1_File_Fill_FromFile(int num_of_trace, char *type, char* name_of_file)
 	FILE* savedtrace;
 	if (!(savedtrace = fopen(name_of_file, "r")))
 	{
-		// DNIN: send an error message
+		Con_printf("LCSw", "Warning: the histogram file %s does not exists\n", name_of_file);
 		return -1;
 	}
 
@@ -351,17 +360,17 @@ int Histo1D_Offline(int num_of_trace, int num_brd, int num_ch, char *infos, int 
 		sprintf(plot_name, "Staircase");
 	}
 
-	char filename[200];
+	char filename[600] = "";
 	if (infos[0] == 'F') {
 		int num_r;
 		sscanf(infos + 1, "%d", &num_r);
-		sprintf(filename, "%s\\Run%d_%s_%d_%d.txt", WDcfg.DataFilePath, num_r, plot_name, num_brd, num_ch);
+		sprintf(filename, "%s\\Run%d_%s_%d_%d.txt", J_cfg.DataFilePath, num_r, plot_name, num_brd, num_ch);
 	}
 	else if (infos[0] == 'S') {
 		sscanf(infos + 1, "%s", filename);
 	}
 		
-	if (strcmp(plot_name, "Staircase") != 0) {
+	if (strcmp(plot_name, "Staircase") == 0) {
 		if (Stats.offline_bin <= 0) {
 			Stats.offline_bin = GetNumLine(filename);
 			if (Stats.offline_bin <= 0) {// empty or not existing, set the bin content to 0
@@ -369,7 +378,7 @@ int Histo1D_Offline(int num_of_trace, int num_brd, int num_ch, char *infos, int 
 				return -1;
 			}
 		}
-		char h_name[50];
+		char h_name[64];
 		sprintf(h_name, "%s[%d][%d]", plot_name, num_brd, num_ch);
 		DestroyHistogram1D(Stats.H1_File[num_of_trace]);
 		CreateHistogram1D(Stats.offline_bin, plot_name, h_name, xunit_off, yunit_off, &Stats.H1_File[num_of_trace]);
@@ -432,22 +441,23 @@ int CreateStatistics(int nb, int nch, int *AllocatedSize)
 
 	Stats.offline_bin = -1;
 
-	*AllocatedSize = sizeof(Stats_t);
+	//*AllocatedSize = sizeof(Stats_t);
+	*AllocatedSize = 0;
 	for(b=0; b < nb; b++) {
 		for(ch=0; ch < nch; ch++) {
 			char hname[100];
 			
-			if (WDcfg.EHistoNbin > 0) {
+			if (J_cfg.EHistoNbin > 0) {
 				sprintf(hname, "PHA-LG[%d][%d]", b, ch);
-				CreateHistogram1D(WDcfg.EHistoNbin, "PHA-LG", hname, "fC", "Cnt", &Stats.H1_PHA_LG[b][ch]);
-				*AllocatedSize += WDcfg.EHistoNbin * sizeof(uint32_t);
+				CreateHistogram1D(J_cfg.EHistoNbin, "PHA-LG", hname, "fC", "Cnt", &Stats.H1_PHA_LG[b][ch]);
+				*AllocatedSize += J_cfg.EHistoNbin * sizeof(uint32_t);
 				Stats.H1_PHA_LG[b][ch].A[0] = 0;
 				Stats.H1_PHA_LG[b][ch].A[1] = 1;
 				Stats.H1_PHA_LG[b][ch].A[2] = 0;
 				Stats.H1_PHA_LG[b][ch].A[3] = 0;
-			sprintf(hname, "PHA-HG[%d][%d]", b, ch);
-				CreateHistogram1D(WDcfg.EHistoNbin, "PHA-HG", hname, "fC", "Cnt", &Stats.H1_PHA_HG[b][ch]);
-				*AllocatedSize += WDcfg.EHistoNbin * sizeof(uint32_t);
+				sprintf(hname, "PHA-HG[%d][%d]", b, ch);
+				CreateHistogram1D(J_cfg.EHistoNbin, "PHA-HG", hname, "fC", "Cnt", &Stats.H1_PHA_HG[b][ch]);
+				*AllocatedSize += J_cfg.EHistoNbin * sizeof(uint32_t);
 				Stats.H1_PHA_HG[b][ch].A[0] = 0;
 				Stats.H1_PHA_HG[b][ch].A[1] = 1;
 				Stats.H1_PHA_HG[b][ch].A[2] = 0;
@@ -455,35 +465,39 @@ int CreateStatistics(int nb, int nch, int *AllocatedSize)
 				HistoCreatedE[b][ch] = 1;
 			}
 			
-			if (WDcfg.ToAHistoNbin) {
+			if (J_cfg.ToAHistoNbin) {
 				sprintf(hname, "ToA[%d][%d]", b, ch);
-				CreateHistogram1D(WDcfg.ToAHistoNbin, "ToA", hname, "ns", "Cnt", &Stats.H1_ToA[b][ch]);
-				*AllocatedSize += WDcfg.ToAHistoNbin * sizeof(uint32_t);
-				Stats.H1_ToA[b][ch].A[0] = WDcfg.ToAHistoMin;
-				Stats.H1_ToA[b][ch].A[1] = 0.5 * WDcfg.ToARebin; // Conversion from bin to ns
+				CreateHistogram1D(J_cfg.ToAHistoNbin, "ToA", hname, "Time (ns)", "Cnt", &Stats.H1_ToA[b][ch]);
+				*AllocatedSize += J_cfg.ToAHistoNbin * sizeof(uint32_t);
+				Stats.H1_ToA[b][ch].A[0] = J_cfg.ToAHistoMin;
+				Stats.H1_ToA[b][ch].A[1] = 0.5 * J_cfg.ToARebin; // Conversion from bin to ns
 				sprintf(hname, "ToT[%d][%d]", b, ch);
-				CreateHistogram1D(WDcfg.ToTHistoNbin, "ToT", hname, "ns", "Cnt", &Stats.H1_ToT[b][ch]);
-				*AllocatedSize += WDcfg.ToTHistoNbin * sizeof(uint32_t);
+				CreateHistogram1D(J_cfg.ToTHistoNbin, "ToT", hname, "Time (ns)", "Cnt", &Stats.H1_ToT[b][ch]);
+				*AllocatedSize += J_cfg.ToTHistoNbin * sizeof(uint32_t);
 				Stats.H1_ToT[b][ch].A[0] = 0;
-				//Stats.H1_ToT[b][ch].A[1] = 0.5 * ((1 << TOT_NBIT) / WDcfg.ToTHistoNbin);  // conversion from bin to ns
+				//Stats.H1_ToT[b][ch].A[1] = 0.5 * ((1 << TOT_NBIT) / J_cfg.ToTHistoNbin);  // conversion from bin to ns
 				Stats.H1_ToT[b][ch].A[1] = 0.5;
 
 				HistoCreatedT[b][ch] = 1;
 			}
 
-			if (WDcfg.MCSHistoNbin) {
+			if (J_cfg.MCSHistoNbin) {
 				sprintf(hname, "MCS[%d][%d]", b, ch);
-				CreateHistogram1D(WDcfg.MCSHistoNbin, "MCS", hname, "# Trg", "Cnt", &Stats.H1_MCS[b][ch]);
-				*AllocatedSize += WDcfg.MCSHistoNbin * sizeof(uint32_t);
+				CreateHistogram1D(J_cfg.MCSHistoNbin, "MCS", hname, "Time (s)", "Cnt", &Stats.H1_MCS[b][ch]);
+				*AllocatedSize += J_cfg.MCSHistoNbin * sizeof(uint32_t);
 				Stats.H1_MCS[b][ch].A[0] = 0;	// DNIN set the correct values
-				Stats.H1_MCS[b][ch].A[1] = 1;
+				if (J_cfg.TriggerMask == 0x21)
+					Stats.H1_MCS[b][ch].A[1] = J_cfg.PtrgPeriod/1e9;
+				else
+					Stats.H1_MCS[b][ch].A[1] = 1;
 
-				HistoCreatedM [b] [ch] = 1;
+				HistoCreatedM[b][ch] = 1;
 			}
 			// allocate stair case (similar to histogram 1D but threated in a different way)
 			int scsize = STAIRCASE_NBIN * sizeof(float);
 			Stats.Staircase[b][ch] = (float *)malloc(scsize);
 			memset(Stats.Staircase[b][ch], 0, scsize);
+			StcCreated[b][ch] = 1;
 			*AllocatedSize += scsize;
 
 			//HistoCreated[b][ch] = 1;
@@ -493,9 +507,9 @@ int CreateStatistics(int nb, int nch, int *AllocatedSize)
 	for(i=0; i<MAX_NTRACES; i++) {
 		
 		// Allocate histograms form file 
-		int maxnbin = WDcfg.EHistoNbin;
-		maxnbin = max(maxnbin, WDcfg.ToAHistoNbin);
-		maxnbin = max(maxnbin, WDcfg.ToTHistoNbin);
+		int maxnbin = J_cfg.EHistoNbin;
+		maxnbin = max(maxnbin, J_cfg.ToAHistoNbin);
+		maxnbin = max(maxnbin, J_cfg.ToTHistoNbin);
 		CreateHistogram1D(maxnbin, "", "", "", "Cnt", &Stats.H1_File[i]);
 		*AllocatedSize += maxnbin*sizeof(uint32_t);
 		// Allocate stair case from file (similar to histogram 1D but threated in a different way)
@@ -509,13 +523,14 @@ int CreateStatistics(int nb, int nch, int *AllocatedSize)
 	HistoFileCreated = 1;
 	ResetStatistics();	// DNIN: Is it needed here? Too Many Reset Histograms at the begin
 
-	for (i = 0; i < MAX_NTRACES; i++) {
-		char tmpchar[100] = "";
-		int tmp0, tmp1; // , rn;
-		sscanf(RunVars.PlotTraces[i], "%d %d %s", &tmp0, &tmp1, tmpchar);
-		if (tmpchar[0] == 'F' || tmpchar[0] == 'S')
-			Histo1D_Offline(i, tmp0, tmp1, tmpchar, RunVars.PlotType);
-	}
+	// This is related to histogram filling, not histogram creation
+	//for (i = 0; i < MAX_NTRACES; i++) {
+	//	char tmpchar[100] = "";
+	//	int tmp0, tmp1; // , rn;
+	//	sscanf(RunVars.PlotTraces[i], "%d %d %s", &tmp0, &tmp1, tmpchar);
+	//	if (tmpchar[0] == 'F' || tmpchar[0] == 'S')
+	//		Histo1D_Offline(i, tmp0, tmp1, tmpchar, RunVars.PlotType);
+	//}
 	return 0;
 }
 
@@ -526,14 +541,14 @@ int CreateStatistics(int nb, int nch, int *AllocatedSize)
 int DestroyStatistics()
 {
 	int b, ch, i;
-	for(b=0; b<FERSLIB_MAX_NBRD; b++) {
-		for(ch=0; ch<FERSLIB_MAX_NCH; ch++) {
+	for(b=0; b< J_cfg.NumBrd; b++) {
+		for(ch=0; ch<FERSLIB_MAX_NCH_5202; ch++) {
 			if (HistoCreatedE[b][ch]) {
 				DestroyHistogram1D(Stats.H1_PHA_LG[b][ch]);
 				DestroyHistogram1D(Stats.H1_PHA_HG[b][ch]);
 				HistoCreatedE[b][ch] = 0;
 			}
-			if (HistoCreatedE[b][ch]) {
+			if (HistoCreatedT[b][ch]) {
 				DestroyHistogram1D(Stats.H1_ToA[b][ch]);
 				DestroyHistogram1D(Stats.H1_ToT[b][ch]);
 				HistoCreatedT[b][ch] = 0;
@@ -542,9 +557,14 @@ int DestroyStatistics()
 				DestroyHistogram1D(Stats.H1_MCS[b][ch]);
 				HistoCreatedM[b][ch] = 0;
 			}
-			free(Stats.Staircase[b][ch]);
+			if (StcCreated[b][ch]) {
+				free(Stats.Staircase[b][ch]);
+				Stats.Staircase[b][ch] = NULL;
+				StcCreated[b][ch] = 0;
+			}
 		}
 	}
+
 	if (HistoFileCreated) {
 		for (i = 0; i < MAX_NTRACES; i++) {
 			DestroyHistogram1D(Stats.H1_File[i]);
@@ -563,11 +583,11 @@ int ResetStatistics()	// Have H1_File to be reset?
 {
 	int b, ch;
 
-	Stats.start_time = get_time(); 
+	Stats.start_time = j_get_time(); 
 	Stats.current_time = Stats.start_time; 
 	Stats.previous_time = Stats.start_time; 
 	memset(&Stats.BuiltEventCnt, 0, sizeof(Counter_t));
-	for(b=0; b<FERSLIB_MAX_NBRD; b++) {
+	for(b=0; b<J_cfg.NumBrd; b++) {
 		Stats.current_trgid[b] = 0;
 		Stats.previous_trgid[b] = 0;
 		Stats.current_tstamp_us[b] = 0;
@@ -581,7 +601,7 @@ int ResetStatistics()	// Have H1_File to be reset?
 		memset(&Stats.T_OR_Cnt[b], 0, sizeof(Counter_t));
 		memset(&Stats.GlobalTrgCnt[b], 0, sizeof(Counter_t));
 		memset(&Stats.ByteCnt[b], 0, sizeof(Counter_t));
-		for(ch=0; ch<FERSLIB_MAX_NCH; ch++) {
+		for(ch=0; ch<FERSLIB_MAX_NCH_5202; ch++) {
 			if (HistoCreatedE[b][ch]) {
 				ResetHistogram1D(&Stats.H1_PHA_LG[b][ch]);
 				ResetHistogram1D(&Stats.H1_PHA_HG[b][ch]);
@@ -638,13 +658,13 @@ int UpdateStatistics(int RateMode)
 	double pc_elapstime = (RateMode == 1) ? 1e3 * (Stats.current_time - Stats.start_time) : 1e3 * (Stats.current_time - Stats.previous_time);  // us
 	Stats.previous_time = Stats.current_time;
 
-	for(b=0; b<FERSLIB_MAX_NBRD; b++) {
+	for(b=0; b < J_cfg.NumBrd; b++) {
 		double brd_elapstime = (RateMode == 1) ? Stats.current_tstamp_us[b]: Stats.current_tstamp_us[b] - Stats.previous_tstamp_us[b];  // - Stats.start_time 
 		double elapstime = (brd_elapstime > 0) ? brd_elapstime : pc_elapstime;
 		double trgcnt_elapstime = (RateMode == 1) ? Stats.trgcnt_update_us[b] - Stats.start_time*1000: Stats.trgcnt_update_us[b] - Stats.previous_trgcnt_update_us[b];  // - Stats.start_time 
 		Stats.previous_tstamp_us[b] = Stats.current_tstamp_us[b];
 		Stats.previous_trgcnt_update_us[b] = Stats.trgcnt_update_us[b];
-		for(ch=0; ch<FERSLIB_MAX_NCH; ch++) {
+		for(ch=0; ch<FERSLIB_MAX_NCH_5202; ch++) {
 			/*if (HistoCreated[b][ch]) {
 				Stats.H1_PHA_HG[b][ch].mean = MEAN(Stats.H1_PHA_HG[b][ch].mean, Stats.H1_PHA_HG[b][ch].H_cnt);
 				Stats.H1_PHA_LG[b][ch].mean = MEAN(Stats.H1_PHA_LG[b][ch].mean, Stats.H1_PHA_LG[b][ch].H_cnt);

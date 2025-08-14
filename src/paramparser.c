@@ -20,7 +20,7 @@
 #include "paramparser.h"
 #include "JanusC.h"
 #include "console.h"
-#include "FERSlib.h"
+//#include "FERSlib.h"
 
 
 #define SETBIT(r, m, b)  (((r) & ~(m)) | ((m) * (b)))
@@ -46,9 +46,33 @@ int streq(char *str1, char *str2)
 	}
 }
 
+
+// ---------------------------------------------------------------------------------
+// Description: Trim a string left and right
+// Inputs:		string to be trimmed
+// Outputs:		string trimmed
+// Return:		string trimmed
+// ---------------------------------------------------------------------------------
+char* ltrim(char* s) {
+	while (isspace(*s)) s++;
+	return s;
+}
+
+char* rtrim(char* s) {
+	char* back = s + strlen(s) - 1;
+	while (isspace(*back)) --back;
+	*(back + 1) = '\0';
+	return s;
+}
+
+char* trim(char* s) {
+	return rtrim(ltrim(s));
+}
+
+
 // ---------------------------------------------------------------------------------
 // Description: check if the directory exists, if not it is created
-// Inputs:		WDcfg, Cfg file
+// Inputs:		J_cfg, Cfg file
 // Outputs:		-
 // Return:		void
 // ---------------------------------------------------------------------------------
@@ -80,34 +104,32 @@ int f_mkdir(const char* path) {	// taken from CAENMultiplatform.c (https://gitla
 	return ret;
 }
 
-void GetDatapath(FILE* f_ini, Config_t* WDcfg) {
+void GetDatapath(char* value, Janus_Config_t* J_cfg) {
 
-	char mchar[200];
-	fscanf(f_ini, "%s", mchar);
-	if (access(mchar, 0) == 0) { // taken from https://stackoverflow.com/questions/6218325/
+	if (access(value, 0) == 0) { // taken from https://stackoverflow.com/questions/6218325/
 		struct stat status;
-		stat(mchar, &status);
+		stat(value, &status);
 		int myb = status.st_mode & S_IFDIR;
 		if (myb == 0) {
-			Con_printf("LCSw", "WARNING: DataFilePath: %s is not a valid directory. Default .DataFiles folder is used\n", mchar);
-			strcpy(WDcfg->DataFilePath, "DataFiles");
+			Con_printf("LCSw", "WARNING: DataFilePath: %s is not a valid directory. Default .DataFiles folder is used\n", value);
+			strcpy(J_cfg->DataFilePath, "DataFiles");
 		}
 		else
-			strcpy(WDcfg->DataFilePath, mchar);
+			strcpy(J_cfg->DataFilePath, value);
 	}
 	else {
-		int ret = f_mkdir(mchar);
+		int ret = f_mkdir(value);
 		if (ret == 0)
-			strcpy(WDcfg->DataFilePath, mchar);
+			strcpy(J_cfg->DataFilePath, value);
 		else {
-			Con_printf("LCSw", "WARNING: DataFilePath: %s cannot be created, default .DataFiles folder is used\n", mchar);
-			strcpy(WDcfg->DataFilePath, "DataFiles");
+			Con_printf("LCSw", "WARNING: DataFilePath: %s cannot be created, default .DataFiles folder is used\n", value);
+			strcpy(J_cfg->DataFilePath, "DataFiles");
 		}
 	}
 }
 
 void GetTitle(FILE* f_ini, Config_t *WDcfg) {
-	memset(WDcfg->RunTitle, 0, 81);
+	memset(J_cfg->RunTitle, 0, 81);
 
 	while (true) {
 		char str[1000];
@@ -118,7 +140,7 @@ void GetTitle(FILE* f_ini, Config_t *WDcfg) {
 			break;
 		}
 
-		strcat(WDcfg->RunTitle, str);
+		strcat(J_cfg->RunTitle, str);
 	}
 }
 
@@ -128,13 +150,8 @@ void GetTitle(FILE* f_ini, Config_t *WDcfg) {
 // Outputs:		-
 // Return:		integer value read from the file / Set ValidParameterValue=0 if the string is not an integer
 // ---------------------------------------------------------------------------------
-int GetInt(FILE *f_ini)
-{
-	int ret;
-	char val[50];
-	//fscanf(f_ini, "%d", &ret);
-	fscanf(f_ini, "%s", val);
-	//fgets(val, 100, f_ini);
+static uint32_t GetInt(char* val) {
+	uint32_t ret = 0;
 	int num = sscanf(val, "%d", &ret);
 	if (ret < 0 || num < 1) ValidParameterValue = 0;
 	else ValidParameterValue = 1;
@@ -148,24 +165,21 @@ int GetInt(FILE *f_ini)
 // Outputs:		-
 // Return:		integer value read from the file
 // ---------------------------------------------------------------------------------
-int GetNbin(FILE *f_ini)
-{
+static int GetNbin(char* str) {
 	int i;
-	char str[100];
-	fscanf(f_ini, "%s", str);
-	for (i=0; i<(int)strlen(str); i++)
-		str[i] = toupper(str[i]);
-	if		((streq(str, "DISABLED")) || (streq(str, "0")))	return 0;
-	else if  (streq(str, "256"))							return 256;
-	else if  (streq(str, "512"))							return 512;	else if ((streq(str, "1024")  || streq(str, "1K")))		return 1024;
-	else if ((streq(str, "2048")  || streq(str, "2K")))		return 2048;
-	else if ((streq(str, "4096")  || streq(str, "4K")))		return 4096;
-	else if ((streq(str, "8192")  || streq(str, "8K")))		return 8192;
-	else if ((streq(str, "16384") || streq(str, "16K")))	return 16384;
-	else { 												
-		return 1024;  // assign a default value on error
+	for (i = 0; i < (int)strlen(str); ++i)
+		str[i] = (char)toupper(str[i]);
+	if ((streq(str, "DISABLED")) || (streq(str, "0")))	return 0;
+	else if (streq(str, "256"))							return 256;
+	else if (streq(str, "512"))							return 512;
+	else if ((streq(str, "1024") || streq(str, "1K")))	return 1024;
+	else if ((streq(str, "2048") || streq(str, "2K")))	return 2048;
+	else if ((streq(str, "4096") || streq(str, "4K")))	return 4096;
+	else if ((streq(str, "8192") || streq(str, "8K")))	return 8192;
+	else if ((streq(str, "16384") || streq(str, "16K")))return 16384;
+	else {
 		ValidParameterValue = 0;
-		//Con_printf("LCSw", "WARNING: Einvalid Nbin value %s\n", str);
+		return 1024;  // assign a default value on error
 	}
 }
 
@@ -177,12 +191,9 @@ int GetNbin(FILE *f_ini)
 // Outputs:		-
 // Return:		integer value read from the file / Set ValidParameterValue = 0 if the value is not in HEX format
 // ---------------------------------------------------------------------------------
-int GetHex(FILE *f_ini)
-{ 
-	int ret;
-	char str[100];
+static uint32_t GetHex32(char* str) {
+	uint32_t ret;
 	ValidParameterValue = 1;
-	fscanf(f_ini, "%s", str);
 	if ((str[1] == 'x') || (str[1] == 'X')) {
 		sscanf(str + 2, "%x", &ret);
 		if (str[0] != '0') ValidParameterValue = 0;	// Rise a warning for wrong HEX format 0x
@@ -206,20 +217,49 @@ int GetHex(FILE *f_ini)
 }
 
 // ---------------------------------------------------------------------------------
+// Description: Read a 64 bit mask (hexadecimal) from the conig file (not used)
+// Inputs:		f_ini: config file
+// Outputs:		-
+// Return:		mask value read from the file / Set ValidParameterValue = 0 if the value is not in HEX format
+// ---------------------------------------------------------------------------------
+//static uint64_t GetHex64(char* str) {
+//	uint64_t ret;
+//	ValidParameterValue = 1;
+//	if ((str[1] == 'x') || (str[1] == 'X')) {
+//		sscanf(str + 2, "%" SCNx64, &ret);
+//		if (str[0] != '0') ValidParameterValue = 0;	// Rise a warning for wrong HEX format 0x
+//		for (uint8_t i = 2; i < strlen(str); ++i) {
+//			if (!isxdigit(str[i])) {
+//				ValidParameterValue = 0;
+//				break;
+//			}
+//		}
+//	}
+//	else {
+//		sscanf(str, "%" SCNx64, &ret);
+//		for (uint8_t i = 0; i < strlen(str); ++i) {	// Rise a warning for wrong HEX format
+//			if (!isxdigit(str[i])) {
+//				ValidParameterValue = 0;
+//				break;
+//			}
+//		}
+//	}
+//	return ret;
+//}
+
+// ---------------------------------------------------------------------------------
 // Description: Read a float from the conig file
 // Inputs:		f_ini: config file
 // Outputs:		-
 // Return:		float value read from the file / 
 // ---------------------------------------------------------------------------------
-float GetFloat(FILE *f_ini)
+float GetFloat(char* str)
 {
 	float ret;
-	char str[1000];
 	int i;
 	ValidParameterValue = 1;
-	fgets(str, 1000, f_ini);
 	// replaces ',' with '.' (decimal separator)
-	for(i=0; i<(int)strlen(str); i++)
+	for (i = 0; i < (int)strlen(str); i++)
 		if (str[i] == ',') str[i] = '.';
 	sscanf(str, "%f", &ret);
 	return ret;
@@ -234,27 +274,14 @@ float GetFloat(FILE *f_ini)
 // Outputs:		-
 // Return:		time value (in ns) read from the file / Set ValidParamName/Value=0 if the expected format is not matched
 // ---------------------------------------------------------------------------------
-float GetTime(FILE *f_ini, char *tu)
+float GetTime(char* val, char *tu)
 {
 	double timev=-1;
 	double ns;
-	char val[500];
-	long fp;
 	char str[100];
 
-	int element;
+	int element = sscanf(val, "%lf %s", &timev, str);
 
-	//fscanf(f_ini, "%lf", &timev);
-	//fp = ftell(f_ini);
-	fgets(val, 500, f_ini);
-	fp = ftell(f_ini);
-	element = sscanf(val, "%lf %s", &timev, str);
-	//fseek(f_ini, fp, SEEK_SET);
-	/*if (timev < 0) ValidParameterValue = 0;
-	else ValidParameterValue = 1;*/
-	// try to read the unit from the config file (string)
-	//fp = ftell(f_ini);  // save current pointer before "str"
-	//fscanf(f_ini, "%s", str);  // read string "str"
 	ValidUnits = 1;
 	if (streq(str, "ps"))		ns = timev * 1e-3;
 	else if (streq(str, "ns"))	ns = timev;
@@ -264,10 +291,9 @@ float GetTime(FILE *f_ini, char *tu)
 	else if (streq(str, "m"))	ns = timev * 60e9;
 	else if (streq(str, "h"))	ns = timev * 3600e9;
 	else if (streq(str, "d"))	ns = timev * 24 * (3600e9);
-	else if (element == 1 || streq(str, "#")) return (float)timev;
+	else if (element == 1 || streq(str, "#")) return (float)timev;  // No units
 	else {
 		ValidUnits = 0;
-		fseek(f_ini, fp-2, SEEK_SET); // move pointer back to beginning of "str" and use it again for next parsing
 		return (float)timev;  // no time unit specified in the config file; assuming equal to the requested one (ns of default)
 	}
 
@@ -282,82 +308,6 @@ float GetTime(FILE *f_ini, char *tu)
 	else return (float)timev;
 }
 
-// ---------------------------------------------------------------------------------
-// Description: Read a value from the conig file followed by an optional voltage unit (V, mV, uV)
-//              and convert it in a voltage expressed in volts 
-// Inputs:		f_ini: config file
-// Outputs:		-
-// Return:		voltage value expressed in volts
-// ---------------------------------------------------------------------------------
-float GetVoltage(FILE *f_ini)
-{
-	float var;
-	long fp;
-	char str[100];
-
-	int val0 = fscanf(f_ini, "%f", &var);
-	// try to read the unit from the config file (string)
-	fp = ftell(f_ini);  // save current pointer before "str"
-	int val1 = fscanf(f_ini, "%s", str);  // read string "str"
-	ValidUnits = 1;
-	if (streq(str, "uV"))		return var / 1000000;
-	else if (streq(str, "mV"))	return var / 1000;
-	else if (streq(str, "V"))	return var;
-	else if (val1 != 1 || streq(str, "#")) {	// no units, assumed Voltage
-		fseek(f_ini, fp, SEEK_SET); // move pointer back to beginning of "str" and use it again for next parsing
-		return var;
-	}
-	else {	// wrong units, raise warning
-		ValidUnits = 0;
-		fseek(f_ini, fp, SEEK_SET); // move pointer back to beginning of "str" and use it again for next parsing
-		return var;  // no voltage unit specified in the config file; assuming volts
-	}
-}
-
-// ---------------------------------------------------------------------------------
-// Description: Read a value from the conig file followed by an optional current unit (A, mA, uA)
-//              and convert it in a current expressed in mA 
-// Inputs:		f_ini: config file
-// Outputs:		-
-// Return:		current value expressed in mA  / Set ValidParamName/Value=0 if the expected format is not matched
-// ---------------------------------------------------------------------------------
-float GetCurrent(FILE *f_ini)
-{
-	char van[50];
-	float var = 0;
-	char val[500] = "";
-	long fp = 0;
-	char stra[100] = "";
-	int element0 = 0;
-	int element1 = 0;
-
-	//fscanf(f_ini, "%f", &var);
-	fgets(val, 500, f_ini);
-	fp = ftell(f_ini);
-	//fscanf(f_ini, "%s", val);
-	//element0 = sscanf(val, "%f %s", &var, stra);
-	element0 = sscanf(val, "%s %s", van, stra);
-	element1 = sscanf(van, "%f", &var);
-	if (element1 > 0) ValidParameterValue = 1;
-	else ValidParameterValue = 0;
-	
-	// try to read the unit from the config file (string)
-	//fp = ftell(f_ini);  // save current pointer before "str"
-	//fscanf(f_ini, "%s", stra);  // read string "str"
-	ValidUnits = 1;
-	if (streq(stra, "uA"))		return var / 1000;
-	else if (streq(stra, "mA"))	return var;
-	else if (streq(stra, "A"))	return var * 1000;
-	else if (element1*element0 == 1 || streq(stra, "#")) {	// No units, no warning raised
-		fseek(f_ini, fp - 1, SEEK_SET); // move pointer back to beginning of "str" and use it again for next parsing
-		return var;
-	}
-	else {	// Wrong units entered
-		ValidUnits = 0;
-		fseek(f_ini, fp - 1, SEEK_SET); // move pointer back to beginning of "str" and use it again for next parsing
-		return var;  // wrong unit specified in the config file; assuming mA
-	}
-}
 
 // ---------------------------------------------------------------------------------
 // Description: Read a value from the conig file followed by an optional byte unit (B, MB, GB)
@@ -366,851 +316,355 @@ float GetCurrent(FILE *f_ini)
 // Outputs:		-
 // Return:		memory size value expressed in Bytes. Minimum value allowed 1 kB
 // ---------------------------------------------------------------------------------
-float GetBytes(FILE* f_ini)
+static float GetBytes(char* val)
 {
+	char van[50];
 	float var;
-	long fp;
 	char str[100];
 	float minSize = 1e3; // 1 kB
 
-	int val0 = fscanf(f_ini, "%f", &var);
-	if (var == -1) return var; // DISABLED
-	// try to read the unit from the config file (string)
-	fp = ftell(f_ini);  // save current pointer before "str"
-	int val1 = fscanf(f_ini, "%s", str);  // read string "str"
+	int element0 = sscanf(val, "%s %s", van, str);
+	int element1 = sscanf(van, "%f", &var);
+	if (element1 > 0) ValidParameterValue = 1;
+	else ValidParameterValue = 0;
+
 	ValidUnits = 1;
-	if (streq(str, "TB"))		return (float)((var * 1e12 > minSize) ? var * 1e12 : minSize);
-	else if (streq(str, "GB"))	return (float)((var * 1e9 > minSize) ? var * 1e9 : minSize);
-	else if (streq(str, "MB"))	return (float)((var * 1e6 > minSize) ? var * 1e6 : minSize);
-	else if (streq(str, "kB"))	return (float)((var * 1e3 > minSize) ? var * 1e3 : minSize);
-	else if (streq(str, "B"))	return (float)((var > minSize) ? var : minSize);
-	else if (val1 != 1 || streq(str, "#")) {	// no units, assumed Byte
-		fseek(f_ini, fp, SEEK_SET); // move pointer back to beginning of "str" and use it again for next parsing
-		return (var > 1e3) ? var : minSize;
-	} else {	// wrong units, raise warning
+	if (streq(str, "TB"))		return (var * 1e12 > minSize) ? var * (float)1e12 : minSize;
+	else if (streq(str, "GB"))	return (var * 1e9 > minSize) ? var * (float)1e9 : minSize;
+	else if (streq(str, "MB"))	return (var * 1e6 > minSize) ? var * (float)1e6 : minSize;
+	else if (streq(str, "kB"))	return (var * 1e3 > minSize) ? var * (float)1e3 : minSize;
+	else if (streq(str, "B"))	return (var > minSize) ? var : minSize;
+	else if (element1 * element0 == 1 || streq(str, "#")) {	// no units, assumed Byte
+		return (var > 1e6) ? var : minSize;
+	}
+	else {	// wrong units, raise warning
 		ValidUnits = 0;
-		fseek(f_ini, fp, SEEK_SET); // move pointer back to beginning of "str" and use it again for next parsing
 		return (var > minSize) ? var : minSize;  // no units specified in the config file; assuming bytes
 	}
 }
 
-// ---------------------------------------------------------------------------------
-// Description: Set a parameter (individual board or broadcast) to a given integer value 
-// Inputs:		param: array of parameters 
-//				val: value to set
-// Outputs:		-
-// Return:		-
-// ---------------------------------------------------------------------------------
-void SetBoardParam(int param[MAX_NBRD], int val)
-{
-	int b;
-	if (brd == -1)
-		for (b = 0; b < MAX_NBRD; b++)
-			param[b] = val;
-	else
-		param[brd] = val;
-}
 
-// ---------------------------------------------------------------------------------
-// Description: Set a parameter (individual board or broadcast) to a given integer value 
-// Inputs:		param: array of parameters 
-//				val: value to set
-// Outputs:		-
-// Return:		-
-// ---------------------------------------------------------------------------------
-void SetBoardParamFloat(float param[MAX_NBRD], float val)
-{
-	int b;
-	if (brd == -1)
-		for (b = 0; b < MAX_NBRD; b++)
-			param[b] = val;
-	else
-		param[brd] = val;
-}
-
-// ---------------------------------------------------------------------------------
-// Description: Set a parameter (individual channel or broadcast) to a given integer value 
-// Inputs:		param: array of parameters 
-//				val: value to set
-// Outputs:		-
-// Return:		-
-// ---------------------------------------------------------------------------------
-void SetChannelParam(uint16_t param[MAX_NBRD][MAX_NCH], int val)
-{
-	int i, b;
-    if (brd == -1) {
-        for(b=0; b<MAX_NBRD; b++)
-			for(i=0; i<MAX_NCH; i++)
-				param[b][i] = val;
-	} else if (ch == -1) {
-		for(i=0; i<MAX_NCH; i++)
-			param[brd][i] = val;
+static void LoadMacro(char* parval, Janus_Config_t* J_cfg2, int ParsingMode) {
+	FILE* n_cfg;
+	n_cfg = fopen(parval, "r");
+	if (n_cfg != NULL) {
+		Con_printf("LCSm", "Loading Additional config file \"%s\"\n", parval);
+		ParseConfigFile(n_cfg, J_cfg2, ParsingMode & 0xE);
+		fclose(n_cfg);
 	} else {
-        param[brd][ch] = val;
+		Con_printf("LCSw", "WARNING: Loading Macro: Macro file \"%s\" not found\n", parval);
+		ValidParameterValue = 0;
 	}
 }
 
-// ---------------------------------------------------------------------------------
-// Description: Set a parameter (individual channel or broadcast) to a given float value 
-// Inputs:		param: array of parameters 
-//				val: value to set
-// Outputs:		-
-// Return:		-
-// ---------------------------------------------------------------------------------
-void SetChannelParamFloat(float param[MAX_NBRD][MAX_NCH], float val)
-{
-	int i, b;
-    if (brd == -1) {
-        for(b=0; b<MAX_NBRD; b++)
-			for(i=0; i<MAX_NCH; i++)
-				param[b][i] = val;
-	} else if (ch == -1) {
-		for(i=0; i<MAX_NCH; i++)
-			param[brd][i] = val;
-	} else {
-        param[brd][ch] = val;
-	}
-}
 
 // ---------------------------------------------------------------------------------
-// Description: Parse WDcfg with parameter of a new configuration file
-// Inputs:		param: file name, Config_t 
-//				val: value to set
-// Outputs:		-
-// Return:		-
-// ---------------------------------------------------------------------------------
-void LoadExtCfgFile(FILE* f_ini, Config_t* WDcfg) {	// DNIN: The first initialization should not be done, it must be inside and if block [NEED TO BE CHECKED]
-	char nfile[500];
-	int mf = 0;
-	mf = fscanf(f_ini, "%s", nfile);
-	if (mf == 0) ValidParameterValue = 0;	// DNIN: filename missing
-	else {
-		FILE* n_cfg;
-		n_cfg = fopen(nfile, "r");
-		if (n_cfg != NULL) {
-			Con_printf("LCSm", "Overwriting parameters from %s\n", nfile);
-			ParseConfigFile(n_cfg, WDcfg, 0);
-			fclose(n_cfg);
-			ValidParameterValue = 1;
-			ValidParameterName = 1;
-		} else {
-			Con_printf("LCSw", "WARNING: Loading Macro: Macro file \"%s\" not found\n", nfile);
-		}
-	}
-
-}
-
-// ---------------------------------------------------------------------------------
-// Description: Read a config file, parse the parameters and set the relevant fields in the WDcfg structure
+// Description: Read a config file, parse the parameters and set the relevant fields in the J_cfg structure
 // Inputs:		f_ini: config file pinter
-// Outputs:		WDcfg: struct with all parameters
+// Outputs:		J_cfg: struct with all parameters
 // Return:		0=OK, -1=error
 // ---------------------------------------------------------------------------------
-int ParseConfigFile(FILE* f_ini, Config_t* WDcfg, bool fcall)
+int ParseConfigFile(FILE* f_ini, Janus_Config_t* J_cfg, int ParseMode)
 {
-	char str[1000], str1[1000];
-	int i, b, val; // , tr = -1;
-	int brd1, ch1;  // target board/ch defined as ParamName[b][ch]
-	int brd2 = -1, ch2 = -1;  // target board/ch defined as Section ([BOARD b] [CHANNEL ch])
+	int i, b;
+	int brd, ch;  // target board/ch defined as ParamName[b][ch] (-1 = all)
+	int brd_l, brd_h;  // low/high index for multiboard settings
+	char tstr[1000], str1[1000], * parval, * tparval, * parname, * token;
 
-	if (fcall) { // initialize WDcfg when it is call by Janus. No when it is call for overwrite parameters 
-		memset(WDcfg, 0, sizeof(Config_t));
+	if ((ParseMode & PARSEMODE_PARSE_CONNECTION) & PARSEMODE_FIRST_CALL) 
+		memset(J_cfg, 0, sizeof(Janus_Config_t));
+		//J_cfg->NumBrd = 0;
+	
+	if (ParseMode & PARSEMODE_FIRST_CALL) { // initialize J_cfg when it is call by Janus. No when it is call for overwrite parameters 
+		int num_brd = J_cfg->NumBrd;
+		char mpath[MAX_NBRD][200];
+		for (int i = 0; i < MAX_NBRD_JANUS; ++i) 
+			sprintf(mpath[i], "%s", J_cfg->ConnPath[i]);
+
+		memset(J_cfg, 0, sizeof(Janus_Config_t));
 		/* Default settings */
-		strcpy(WDcfg->DataFilePath, "DataFiles");
-		WDcfg->NumBrd = 0;	
-		WDcfg->NumCh = 64;
-		WDcfg->GWn = 0;
-		WDcfg->EHistoNbin = 4096;
-		WDcfg->ToAHistoNbin = 4096;
-		WDcfg->ToARebin = 1;
-		WDcfg->ToAHistoMin = 0;
-		WDcfg->ToTHistoNbin = 512;
-		WDcfg->MCSHistoNbin = 4096;
-		WDcfg->AcquisitionMode = 0;
-		WDcfg->EnableServiceEvents = 3;  // enable service events with both HV mon and Counter
-		WDcfg->EnableCntZeroSuppr = 1;
-		WDcfg->SupprZeroCntListFile = 0;
-		WDcfg->EnableToT = 1;
-		WDcfg->TriggerMask = 0;
-		WDcfg->TriggerLogic = 0;
-		WDcfg->MajorityLevel = 2;
-		WDcfg->Tref_Mask = 0;
-		WDcfg->TrefWindow = 100;
-		WDcfg->PtrgPeriod = 0;
-		WDcfg->QD_CoarseThreshold = 0;
-		//WDcfg->TD_CoarseThreshold = 0;
-		WDcfg->HG_ShapingTime = 0;
-		WDcfg->LG_ShapingTime = 0;
-		WDcfg->Enable_HV_Adjust = 0;
-		WDcfg->EnableChannelTrgout = 1;
-		WDcfg->HV_Adjust_Range = 1;
-		WDcfg->EnableQdiscrLatch = 1;
-		WDcfg->GainSelect = GAIN_SEL_AUTO;
-		WDcfg->WaveformLength = 800;
-		WDcfg->Trg_HoldOff = 0;
-		WDcfg->Pedestal = 100;
-		WDcfg->TempSensCoeff[0] = 0;
-		WDcfg->TempSensCoeff[1] = 50;
-		WDcfg->TempSensCoeff[2] = 0;
-		WDcfg->EnLiveParamChange = 1;
-		WDcfg->AskHVShutDownOnExit = 1;
-		WDcfg->MaxOutFileSize = 1e9; // 1 GB
-		WDcfg->EnableRawDataRead = 0;
-		WDcfg->EnableMaxFileSize = 0;
-		WDcfg->Range_14bit = 0;
+		strcpy(J_cfg->DataFilePath, "DataFiles");
+		J_cfg->NumBrd = num_brd;	
+		for (int i = 0; i < MAX_NBRD_JANUS; ++i) 
+			sprintf(J_cfg->ConnPath[i], "%s", mpath[i]);
 
-		for (b = 0; b < MAX_NBRD; b++) {
-			WDcfg->TD_CoarseThreshold[b] = 0;	// new
-			WDcfg->ChEnableMask0[b] = 0xFFFFFFFF;
-			WDcfg->ChEnableMask1[b] = 0xFFFFFFFF;
-			WDcfg->Q_DiscrMask0[b] = 0xFFFFFFFF;
-			WDcfg->Q_DiscrMask1[b] = 0xFFFFFFFF;
-			WDcfg->Tlogic_Mask0[b] = 0xFFFFFFFF;
-			WDcfg->Tlogic_Mask1[b] = 0xFFFFFFFF;
-			WDcfg->HV_Vbias[b] = 30;
-			WDcfg->HV_Imax[b] = (float)0.01;
-			// Default values for TMP37
-			for (i = 0; i < MAX_NCH; i++) {
-				WDcfg->ZS_Threshold_LG[b][i] = 0;
-				WDcfg->ZS_Threshold_HG[b][i] = 0;
-				WDcfg->QD_FineThreshold[b][i] = 0;
-				WDcfg->TD_FineThreshold[b][i] = 0;
-				WDcfg->HG_Gain[b][i] = 0;
-				WDcfg->LG_Gain[b][i] = 0;
-				WDcfg->HV_IndivAdj[b][i] = 0;
-			}
-		}
+		J_cfg->NumCh = 64;
+		J_cfg->EHistoNbin = 4096;
+		J_cfg->ToAHistoNbin = 4096;
+		J_cfg->ToARebin = 1;
+		J_cfg->ToAHistoMin = 0;
+		J_cfg->ToTHistoNbin = 4096;
+		J_cfg->MCSHistoNbin = 4096;
+		J_cfg->AcquisitionMode = 0;
+		J_cfg->EnableToT = 1;
+		J_cfg->TriggerMask = 0;
+		J_cfg->PtrgPeriod = 0;
+		//J_cfg->TD_CoarseThreshold = 0;
+		J_cfg->EnLiveParamChange = 1;
+		J_cfg->AskHVShutDownOnExit = 1;
+		J_cfg->MaxOutFileSize = 1e9; // 1 GB
+		J_cfg->EnableRawDataRead = 0;
+		J_cfg->EnableMaxFileSize = 0;
+
 	}
 	
 	//read config file and assign parameters 
 	while(!feof(f_ini)) {
-		int read;
-		char *cb, *cc;
-
-		brd1 = -1;
-		ch1 = -1;
+		brd = -1;
+		ch = -1;
 		ValidParameterName = 0;
-        // read a word from the file
-        read = fscanf(f_ini, "%s", str);
-        if( !read || (read == EOF) || !strlen(str))
-			continue;
-
-        // skip comments
-        if (str[0] == '#') {
-			fgets(str, 1000, f_ini);
-			continue;
-		}
-
 		ValidParameterValue = 1;
 		ValidUnits = 1;
-        // Section (COMMON or individual channel)
-		if (str[0] == '[')	{
-			ValidParameterName = 1;
-			if (strstr(str, "COMMON")!=NULL) {
-				brd2 = -1;
-				ch2 = -1;
-			} else if (strstr(str, "BOARD")!=NULL) {
-				ch2 = -1;
-				fscanf(f_ini, "%s", str1);
-				sscanf(str1, "%d", &val);
-				if (val < 0 || val >= MAX_NBRD) Con_printf("LCSm", "%s: Invalid board number\n", str);
-				else brd2 = val;
-			} else if (strstr(str, "CHANNEL") != NULL) {
-				fscanf(f_ini, "%s", str1);
-				sscanf(str1, "%d", &val);
-				if (val < 0 || val >= MAX_NCH) Con_printf("LCSm", "%s: Invalid channel number\n", str);
-				if ((brd2 == -1) && (WDcfg->NumBrd == 1)) brd2 = 0;
-				else ch2 = val;
-			}
-		} else if ((cb = strstr(str, "[")) != NULL) {
-			char *ei;
-			sscanf(cb+1, "%d", &brd1); 
-			if ((ei = strstr(cb, "]")) == NULL) {
-				Con_printf("LCSm", "%s: Invalid board index\n", str);
-				fgets(str1, 1000, f_ini);
-			}
-			if ((cc = strstr(ei, "[")) != NULL) {
-				sscanf(cc+1, "%d", &ch1);
-				if ((ei = strstr(cc, "]")) == NULL) {
-					Con_printf("LCSm", "%s: Invalid channel index\n", str);
-					fgets(str1, 1000, f_ini);
-				}
-			}
-			*cb = 0;
+
+		// Read a line from the file
+		fgets(tstr, sizeof(tstr), f_ini);
+		if (strlen(tstr) < 2) continue;
+
+		// skip comments
+		if (tstr[0] == '#' || strlen(tstr) <= 2) continue;
+		if (strstr(tstr, "#") != NULL) tparval = strtok(tstr, "#");
+		else tparval = tstr;
+
+		// Get param name (str) and values (parval)
+		sscanf(tparval, "%s", str1);
+		tparval += strlen(str1);
+		parval = trim(tparval);
+
+		// Search for boards and channels
+		parname = strtok(trim(str1), "[]"); // Param name with [brd][ch]
+		token = strtok(NULL, "[]");
+		if (token != NULL) {
+			sscanf(token, "%d", &brd);
+			if ((token = strtok(NULL, "[]")) != NULL)
+				sscanf(token, "%d", &ch);
 		}
-		if ((brd1 >= 0) && (brd1 < MAX_NBRD) && (ch1 < MAX_NCH)) {
-			brd = brd1;
-			ch = ch1;
-		} else {
-			brd = brd2;
-			ch = ch2;
+		if (brd != -1) {
+			brd_l = brd;
+			brd_h = brd + 1;
+		}
+		else {
+			brd_l = 0;
+			brd_h = (J_cfg->NumBrd > 0) ? J_cfg->NumBrd : MAX_NBRD_JANUS;
+		}
+
+		if (brd_l < 0 || brd_l > (MAX_NBRD_JANUS - 1)) { // brd_l cannot be larger than MAX_NBRD - 1
+			Con_printf("LCSw", "%s: brd %d index out of range\n", parname, brd_l);
+			continue;
 		}
 
 		// Some name replacement for back compatibility
-		if (streq(str, "TriggerSource"))		sprintf(str, "BunchTrgSource");
-		if (streq(str, "DwellTime"))			sprintf(str, "PtrgPeriod");
-		if (streq(str, "TrgTimeWindow"))		sprintf(str, "TstampCoincWindow");
-		if (streq(str, "Hit_HoldOff"))			sprintf(str, "Trg_HoldOff");
-		if (streq(str, "PairedCnt_CoincWin"))	sprintf(str, "ChTrg_Width");
+		if (streq(parname, "TriggerSource"))		sprintf(parname, "BunchTrgSource");
+		if (streq(parname, "DwellTime"))			sprintf(parname, "PtrgPeriod");
+		if (streq(parname, "TrgTimeWindow"))		sprintf(parname, "TstampCoincWindow");
+		if (streq(parname, "Hit_HoldOff"))			sprintf(parname, "Trg_HoldOff");
+		if (streq(parname, "PairedCnt_CoincWin"))	sprintf(parname, "ChTrg_Width");
 
- 		if (streq(str, "Open"))	{
-			if (brd==-1) {
-				Con_printf("LCSm", "%s: cannot be a common setting (must be in a [BOARD] section)\n", str); 
-				fgets(str1, 1000, f_ini);
-			} else {
-				fscanf(f_ini, "%s", str1);
-				if (streq(WDcfg->ConnPath[brd], ""))
-					WDcfg->NumBrd++;
-				strcpy(WDcfg->ConnPath[brd], str1);
-				//WDcfg->NumBrd++;
+		// START PARAM PARSER
+		if (ParseMode & PARSEMODE_PARSE_CONNECTION) {
+			if (streq(parname, "Open")) {
+				if (brd == -1) {
+					Con_printf("LCSw", "%s: cannot be a common setting (must be in a [BOARD] section)\n", parname);
+				}
+				else {
+					if (J_cfg->NumBrd >= MAX_NBRD_JANUS) {
+						Con_printf("LCSw", "WARNING: Maximum number of supported boards reached (NumBoards = %d)\n", J_cfg->NumBrd);
+						continue;
+					}
+					if (streq(J_cfg->ConnPath[brd], ""))
+						J_cfg->NumBrd++;
+					strcpy(J_cfg->ConnPath[brd], parval);
+
+					if (streq(J_cfg->ConnPath[brd], ""))
+						Con_printf("LCSw", "%s: connection path cannot be empty\n", parval);
+				}
+			}
+			// Also FiberDelayAdjust can be read and used in Lib during InitTdlChains
+			if (streq(parname, "Load"))
+				LoadMacro(parval, J_cfg, ParseMode);
+			if (streq(parname, "FiberDelayAdjust")) {
+				int np, cnc, chain, node;
+				float length; // length expressed in m
+				np = sscanf(parval, "%d %d %d %f", &cnc, &chain, &node, &length);
+				if ((np == 4) && (cnc >= 0) && (cnc < FERSLIB_MAX_NCNC) && (chain >= 0) && (chain < 8) && (node >= 0) && (node < 16))
+					J_cfg->FiberDelayAdjust[cnc][chain][node] = length;
+			}
+			continue; // Skip the rest of the code
+		} 
+
+		if (streq(parname, "Open")) continue; // Skip Open param when not parse connection
+
+		if (streq(parname, "EventBuildingMode")) {
+			if		(streq(parval, "DISABLED"))		J_cfg->EventBuildingMode = EVBLD_DISABLED;
+			else if	(streq(parval, "TRGTIME_SORTING"))J_cfg->EventBuildingMode = EVBLD_TRGTIME_SORTING;
+			else if	(streq(parval, "TRGID_SORTING"))	J_cfg->EventBuildingMode = EVBLD_TRGID_SORTING;
+			else 	ValidParameterValue = 0;
+		}
+		if (streq(parname, "DataAnalysis")) {
+			if (streq(parval, "NONE") || streq(parval, "DISABLED"))	J_cfg->DataAnalysis = 0;
+			else if (streq(parval, "CNT_ONLY"))		J_cfg->DataAnalysis = DATA_ANALYSIS_CNT;
+			else if (streq(parval, "ALL"))			J_cfg->DataAnalysis = DATA_ANALYSIS_CNT | DATA_ANALYSIS_HISTO | DATA_ANALYSIS_MEAS;
+			else if (strstr(parval, "MASK"))			J_cfg->DataAnalysis = GetHex32(trim(strtok(parval, "MASK")));
+			else 	ValidParameterValue = 0;
+		}
+		if (streq(parname, "OF_OutFileUnit")) {
+			if (streq(parval, "LSB"))					J_cfg->OutFileUnit = OF_UNIT_LSB;
+			else if (streq(parval, "ns"))				J_cfg->OutFileUnit = OF_UNIT_NS;
+			else 	ValidParameterValue = 0;
+		}
+		if (streq(parname, "CitirocCfgMode")) {
+			if		(streq(parval, "FROM_FILE"))		J_cfg->CitirocCfgMode = CITIROC_CFG_FROM_FILE;
+			else if	(streq(parval, "FROM_REGS"))		J_cfg->CitirocCfgMode = CITIROC_CFG_FROM_REGS;
+			else 	ValidParameterValue = 0;
+		}
+
+		if (streq(parname, "DataFilePath"))				GetDatapath(parval, J_cfg);
+		if (streq(parname, "EHistoNbin"))				J_cfg->EHistoNbin			= GetNbin(parval);
+		if (streq(parname, "ToAHistoNbin"))				J_cfg->ToAHistoNbin			= GetNbin(parval);
+		if (streq(parname, "ToARebin"))					J_cfg->ToARebin				= GetInt(parval);
+		if (streq(parname, "ToAHistoMin"))				J_cfg->ToAHistoMin			= GetTime(parval, "ns");
+		if (streq(parname, "ToTHistoNbin"))				J_cfg->ToTHistoNbin			= GetNbin(parval);
+		if (streq(parname, "MCSHistoNbin"))				J_cfg->MCSHistoNbin			= GetNbin(parval);
+		if (streq(parname, "JobFirstRun"))				J_cfg->JobFirstRun			= GetInt(parval);
+		if (streq(parname, "JobLastRun"))				J_cfg->JobLastRun			= GetInt(parval);
+		if (streq(parname, "RunSleep"))					J_cfg->RunSleep				= GetTime(parval, "s");
+		if (streq(parname, "EnableJobs"))				J_cfg->EnableJobs			= GetInt(parval);
+		if (streq(parname, "EnLiveParamChange"))		J_cfg->EnLiveParamChange	= GetInt(parval);
+		if (streq(parname, "OutFileEnableMask"))		J_cfg->OutFileEnableMask	= GetHex32(parval);
+		if (streq(parname, "OF_EnMaxSize"))				J_cfg->EnableMaxFileSize	= GetInt(parval);
+		if (streq(parname, "OF_MaxSize"))				J_cfg->MaxOutFileSize		= GetBytes(parval);
+		if (streq(parname, "EnableRawDataRead"))		J_cfg->EnableRawDataRead	= GetInt(parval);
+		if (streq(parname, "OF_ListLL"))				J_cfg->OutFileEnableMask	= SETBIT(J_cfg->OutFileEnableMask, OUTFILE_RAW_LL, GetInt(parval));
+		if (streq(parname, "OF_ListBin"))				J_cfg->OutFileEnableMask	= SETBIT(J_cfg->OutFileEnableMask, OUTFILE_LIST_BIN, GetInt(parval));
+		if (streq(parname, "OF_ListCSV"))				J_cfg->OutFileEnableMask	= SETBIT(J_cfg->OutFileEnableMask, OUTFILE_LIST_CSV, GetInt(parval));
+		if (streq(parname, "OF_ListAscii"))				J_cfg->OutFileEnableMask	= SETBIT(J_cfg->OutFileEnableMask, OUTFILE_LIST_ASCII, GetInt(parval));
+		if (streq(parname, "OF_Sync"))					J_cfg->OutFileEnableMask	= SETBIT(J_cfg->OutFileEnableMask, OUTFILE_SYNC, GetInt(parval));
+		if (streq(parname, "OF_SpectHisto"))			J_cfg->OutFileEnableMask	= SETBIT(J_cfg->OutFileEnableMask, OUTFILE_SPECT_HISTO, GetInt(parval));
+		if (streq(parname, "OF_ToAHisto"))				J_cfg->OutFileEnableMask	= SETBIT(J_cfg->OutFileEnableMask, OUTFILE_ToA_HISTO, GetInt(parval));
+		if (streq(parname, "OF_ToTHisto"))				J_cfg->OutFileEnableMask	= SETBIT(J_cfg->OutFileEnableMask, OUTFILE_TOT_HISTO, GetInt(parval));
+		if (streq(parname, "OF_Staircase"))				J_cfg->OutFileEnableMask	= SETBIT(J_cfg->OutFileEnableMask, OUTFILE_STAIRCASE, GetInt(parval));
+		if (streq(parname, "OF_RunInfo"))				J_cfg->OutFileEnableMask	= SETBIT(J_cfg->OutFileEnableMask, OUTFILE_RUN_INFO, GetInt(parval));
+		if (streq(parname, "OF_ServiceInfo"))			J_cfg->OutFileEnableMask	= SETBIT(J_cfg->OutFileEnableMask, OUTFILE_SERVICE_INFO, GetInt(parval));
+		if (streq(parname, "OF_MCS"))					J_cfg->OutFileEnableMask	= SETBIT(J_cfg->OutFileEnableMask, OUTFILE_MCS_HISTO, GetInt(parval));
+		if (streq(parname, "RingBuffer"))			J_cfg->OutFileEnableMask    = SETBIT(J_cfg->OutFileEnableMask, OUTFILE_RAW_DATA_RINGBUFFER, GetInt(f_ini));
+		if (streq(parname, "SourceID"))			        J_cfg->SourceID = GetInt(f_ini);
+		if (streq(parname, "RingBufferName"))			fscanf(f_ini, "%s", J_cfg->RingBufferName);
+		if (streq(parname, "RunTitle"))					GetTitle(f_ini, J_cfg);
+		if (streq(parname, "TstampCoincWindow"))		J_cfg->TstampCoincWindow	= (uint32_t)GetTime(parval, "ns");
+		if (streq(parname, "PresetTime"))				J_cfg->PresetTime			= GetTime(parval, "s");
+		if (streq(parname, "PresetCounts"))				J_cfg->PresetCounts			= GetInt(parval);
+		if (streq(parname, "RunNumber_AutoIncr"))		J_cfg->RunNumber_AutoIncr	= GetInt(parval);
+		if (streq(parname, "AskHVShutDownOnExit"))		J_cfg->AskHVShutDownOnExit  = GetInt(parval);
+
+			
+		if (streq(parname, "Load")) {
+			FILE* n_cfg;
+			n_cfg = fopen(parval, "r");
+			if (n_cfg != NULL) {
+				Con_printf("LCSm", "Loading Additional config file \"%s\"\n", parval);
+				ParseConfigFile(n_cfg, J_cfg, ParseMode & 0xE);
+				fclose(n_cfg);
+			}
+			else {
+				Con_printf("LCSw", "WARNING: Loading Macro: Macro file \"%s\" not found\n", parval);
+				ValidParameterValue = 0;
 			}
 		}
-		if (streq(str, "WriteRegister")) {	
-			if (WDcfg->GWn < MAX_GW) {
-				WDcfg->GWbrd[WDcfg->GWn]=brd;
-				fscanf(f_ini, "%x", (int *)&WDcfg->GWaddr[WDcfg->GWn]);
-				fscanf(f_ini, "%x", (int *)&WDcfg->GWdata[WDcfg->GWn]);
-				fscanf(f_ini, "%x", (int *)&WDcfg->GWmask[WDcfg->GWn]);
-				WDcfg->GWn++;
-			} else {
-				Con_printf("LCSw", "WARNING: MAX_GW Generic Write exceeded (%d). Change MAX_GW and recompile\n", MAX_GW);
+
+		// if exists, load the extra settings contained in PostConfig.txt
+		static int PostConfigDone = 0;
+		if (!PostConfigDone) {
+			FILE* pcfg = fopen("PostConfig.txt", "r");
+			PostConfigDone = 1;
+			if (pcfg != NULL) {
+				Con_printf("LCSm", "Reading additional configuration file PostConfig.txt\n");
+				ParseConfigFile(pcfg, J_cfg, ParseMode);
+				fclose(pcfg);
+				PostConfigDone = 0;
 			}
 		}
-		if (streq(str, "WriteRegisterBits")) {
-			if (WDcfg->GWn < MAX_GW) {
-				int start, stop, data;
-				WDcfg->GWbrd[WDcfg->GWn]=brd;
-				fscanf(f_ini, "%x", (int *)&WDcfg->GWaddr[WDcfg->GWn]);
-				fscanf(f_ini, "%d", &start);
-				fscanf(f_ini, "%d", &stop);
-				fscanf(f_ini, "%d", &data);
-				WDcfg->GWmask[WDcfg->GWn] = ((1<<(stop-start+1))-1) << start;
-				WDcfg->GWdata[WDcfg->GWn] = ((uint32_t)data << start) & WDcfg->GWmask[WDcfg->GWn];
-				WDcfg->GWn++;
-			} else {
-				Con_printf("LCSw", "WARNING: MAX_GW Generic Write exceeded (%d). Change MAX_GW and recompile\n", MAX_GW);
-			}
-		}
-		if (streq(str, "AcquisitionMode")) {
-			fscanf(f_ini, "%s", str1);
-			if		(streq(str1, "COUNTING"))			WDcfg->AcquisitionMode = ACQMODE_COUNT;
-			else if	(streq(str1, "SPECTROSCOPY"))		WDcfg->AcquisitionMode = ACQMODE_SPECT;
-			else if	(streq(str1, "SPECT_TIMING"))		WDcfg->AcquisitionMode = ACQMODE_TSPECT;
-			else if	(streq(str1, "TIMING"))				WDcfg->AcquisitionMode = ACQMODE_TIMING_CSTART;
-			else if	(streq(str1, "TIMING_CSTART"))		WDcfg->AcquisitionMode = ACQMODE_TIMING_CSTART;
-			else if	(streq(str1, "TIMING_CSTOP"))		WDcfg->AcquisitionMode = ACQMODE_TIMING_CSTOP;
-			else if	(streq(str1, "TIMING_STREAMING"))	WDcfg->AcquisitionMode = ACQMODE_TIMING_STREAMING;
-			else if	(streq(str1, "WAVEFORM"))			WDcfg->AcquisitionMode = ACQMODE_WAVE;
-			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
-		}
-		if (streq(str, "StartRunMode")) {
-			fscanf(f_ini, "%s", str1);
-			if		(streq(str1, "MANUAL"))			WDcfg->StartRunMode = STARTRUN_ASYNC;  // keep "MANUAL" option for backward compatibility
-			else if	(streq(str1, "ASYNC"))			WDcfg->StartRunMode = STARTRUN_ASYNC;  
-			else if	(streq(str1, "CHAIN_T0"))		WDcfg->StartRunMode = STARTRUN_CHAIN_T0;  
-			else if	(streq(str1, "CHAIN_T1"))		WDcfg->StartRunMode = STARTRUN_CHAIN_T1;  
-			else if	(streq(str1, "TDL"))			WDcfg->StartRunMode = STARTRUN_TDL;  
-			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
-		}
-		if (streq(str, "StopRunMode")) {
-			fscanf(f_ini, "%s", str1);
-			if		(streq(str1, "MANUAL"))			WDcfg->StopRunMode = STOPRUN_MANUAL;
-			else if	(streq(str1, "PRESET_TIME"))	WDcfg->StopRunMode = STOPRUN_PRESET_TIME;
-			else if	(streq(str1, "PRESET_COUNTS"))	WDcfg->StopRunMode = STOPRUN_PRESET_COUNTS;
-			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
-		}
-		if (streq(str, "BunchTrgSource")) {
-			fscanf(f_ini, "%s", str1);
-			if		(streq(str1, "SW_ONLY"))		WDcfg->TriggerMask = 0x1;
-			else if	(streq(str1, "T1-IN"))			WDcfg->TriggerMask = 0x3;
-			else if	(streq(str1, "Q-OR"))			WDcfg->TriggerMask = 0x5;
-			else if	(streq(str1, "T-OR"))			WDcfg->TriggerMask = 0x9;
-			else if	(streq(str1, "T0-IN"))			WDcfg->TriggerMask = 0x11;
-			else if	(streq(str1, "PTRG"))			WDcfg->TriggerMask = 0x21;
-			else if	(streq(str1, "TLOGIC"))			WDcfg->TriggerMask = 0x41;
-			else if	(streq(str1, "MASK"))			fscanf(f_ini, "%x", &WDcfg->TriggerMask);
-			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
-		}
-		if (streq(str, "TriggerLogic")) {
-			fscanf(f_ini, "%s", str1);
-			if		(streq(str1, "OR64"))			WDcfg->TriggerLogic = 0;
-			else if	(streq(str1, "AND2_OR32"))		WDcfg->TriggerLogic = 1;
-			else if	(streq(str1, "OR32_AND2"))		WDcfg->TriggerLogic = 2;
-			else if	(streq(str1, "MAJ64"))			WDcfg->TriggerLogic = 4;
-			else if	(streq(str1, "MAJ32_AND2"))		WDcfg->TriggerLogic = 5;
-			else if	(streq(str1, "OR_QUAD"))		WDcfg->TriggerLogic = 6;
-			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
-		}
-		if (streq(str, "TrefSource")) {
-			fscanf(f_ini, "%s", str1);
-			if		(streq(str1, "T0-IN"))			WDcfg->Tref_Mask = 0x1;
-			else if	(streq(str1, "T1-IN"))			WDcfg->Tref_Mask = 0x2;
-			else if	(streq(str1, "Q-OR"))			WDcfg->Tref_Mask = 0x4;
-			else if	(streq(str1, "T-OR"))			WDcfg->Tref_Mask = 0x8;
-			else if	(streq(str1, "PTRG"))			WDcfg->Tref_Mask = 0x10;
-			else if	(streq(str1, "TLOGIC"))			WDcfg->Tref_Mask = 0x40;
-			else if	(streq(str1, "MASK"))			fscanf(f_ini, "%x", &WDcfg->Tref_Mask);
-			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
-		}
-		if (streq(str, "ValidationSource")) {
-			fscanf(f_ini, "%s", str1);
-			if		(streq(str1, "SW_CMD"))			WDcfg->Validation_Mask = 0x1;
-			else if	(streq(str1, "T0-IN"))			WDcfg->Validation_Mask = 0x2;
-			else if	(streq(str1, "T1-IN"))			WDcfg->Validation_Mask = 0x4;
-			else if	(streq(str1, "MASK"))			fscanf(f_ini, "%x", &WDcfg->Validation_Mask);
-			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
-		}
-		if (streq(str, "ValidationMode")) {
-			fscanf(f_ini, "%s", str1);
-			if		(streq(str1, "DISABLED"))		WDcfg->Validation_Mode = 0;
-			else if	(streq(str1, "ACCEPT"))			WDcfg->Validation_Mode = 1;
-			else if	(streq(str1, "REJECT"))			WDcfg->Validation_Mode = 2;
-			else if	(streq(str1, "MASK"))			fscanf(f_ini, "%x", &WDcfg->Validation_Mask);
-			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
-		}
-		if (streq(str, "CountingMode")) {
-			fscanf(f_ini, "%s", str1);
-			if		(streq(str1, "SINGLES"))		WDcfg->Counting_Mode = 0;
-			else if	(streq(str1, "PAIRED_AND"))		WDcfg->Counting_Mode = 1;
-			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
-		}
-		if (streq(str, "TrgIdMode")) {
-			fscanf(f_ini, "%s", str1);
-			if		(streq(str1, "TRIGGER_CNT"))	WDcfg->TrgIdMode = 0;
-			else if	(streq(str1, "VALIDATION_CNT"))	WDcfg->TrgIdMode = 1;
-			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
-		}
-		if (streq(str, "VetoSource")) {
-			fscanf(f_ini, "%s", str1);
-			if		(streq(str1, "DISABLED"))		WDcfg->Veto_Mask = 0x0;
-			else if	(streq(str1, "SW_CMD"))			WDcfg->Veto_Mask = 0x1;
-			else if	(streq(str1, "T0-IN"))			WDcfg->Veto_Mask = 0x2;
-			else if	(streq(str1, "T1-IN"))			WDcfg->Veto_Mask = 0x4;
-			else if	(streq(str1, "MASK"))			fscanf(f_ini, "%x", &WDcfg->Veto_Mask);
-			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
-		}
-		if (streq(str, "EventBuildingMode")) {
-			fscanf(f_ini, "%s", str1);
-			if		(streq(str1, "DISABLED"))		WDcfg->EventBuildingMode = EVBLD_DISABLED;
-			else if	(streq(str1, "TRGTIME_SORTING"))WDcfg->EventBuildingMode = EVBLD_TRGTIME_SORTING;
-			else if	(streq(str1, "TRGID_SORTING"))	WDcfg->EventBuildingMode = EVBLD_TRGID_SORTING;
-			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
-		}
-		if (streq(str, "DataAnalysis")) {
-			fscanf(f_ini, "%s", str1);
-			if (streq(str1, "NONE") || streq(str1, "DISABLED"))	WDcfg->DataAnalysis = 0;
-			else if (streq(str1, "CNT_ONLY"))		WDcfg->DataAnalysis = DATA_ANALYSIS_CNT;
-			else if (streq(str1, "ALL"))			WDcfg->DataAnalysis = DATA_ANALYSIS_CNT | DATA_ANALYSIS_HISTO | DATA_ANALYSIS_MEAS;
-			else if (streq(str1, "MASK"))			fscanf(f_ini, "%x", &WDcfg->DataAnalysis);
-			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
-		}
-		if (streq(str, "T0_Out")) {
-			fscanf(f_ini, "%s", str1);
-			if		(streq(str1, "T0-IN"))			SetBoardParam((int *)WDcfg->T0_outMask, 0x001);
-			else if	(streq(str1, "BUNCHTRG"))		SetBoardParam((int *)WDcfg->T0_outMask, 0x002);
-			else if	(streq(str1, "T-OR"))			SetBoardParam((int *)WDcfg->T0_outMask, 0x004);
-			else if	(streq(str1, "RUN"))			SetBoardParam((int *)WDcfg->T0_outMask, 0x008);
-			else if	(streq(str1, "PTRG"))			SetBoardParam((int *)WDcfg->T0_outMask, 0x010);
-			else if	(streq(str1, "BUSY"))			SetBoardParam((int *)WDcfg->T0_outMask, 0x020);
-			else if	(streq(str1, "DPROBE"))			SetBoardParam((int *)WDcfg->T0_outMask, 0x040);
-			else if	(streq(str1, "TLOGIC"))			SetBoardParam((int *)WDcfg->T0_outMask, 0x080);
-			else if	(streq(str1, "SQ_WAVE"))		SetBoardParam((int *)WDcfg->T0_outMask, 0x100);
-			else if	(streq(str1, "TDL_SYNC"))		SetBoardParam((int *)WDcfg->T0_outMask, 0x200);
-			else if	(streq(str1, "RUN_SYNC"))		SetBoardParam((int *)WDcfg->T0_outMask, 0x400);
-			else if	(streq(str1, "ZERO"))			SetBoardParam((int *)WDcfg->T0_outMask, 0x000);
-			else if (streq(str1, "MASK")) {
-				int val;
-				fscanf(f_ini, "%x", &val);
-				SetBoardParam((int*)WDcfg->T0_outMask, val);
-			}
-			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
-		}
-		if (streq(str, "T1_Out")) {
-			fscanf(f_ini, "%s", str1);
-			if		(streq(str1, "T1-IN"))			SetBoardParam((int*)WDcfg->T1_outMask, 0x001);
-			else if (streq(str1, "BUNCHTRG"))		SetBoardParam((int*)WDcfg->T1_outMask, 0x002);
-			else if (streq(str1, "Q-OR"))			SetBoardParam((int*)WDcfg->T1_outMask, 0x004);
-			else if (streq(str1, "RUN"))			SetBoardParam((int*)WDcfg->T1_outMask, 0x008);
-			else if (streq(str1, "PTRG"))			SetBoardParam((int*)WDcfg->T1_outMask, 0x010);
-			else if (streq(str1, "BUSY"))			SetBoardParam((int*)WDcfg->T1_outMask, 0x020);
-			else if (streq(str1, "DPROBE"))			SetBoardParam((int*)WDcfg->T1_outMask, 0x040);
-			else if (streq(str1, "TLOGIC"))			SetBoardParam((int*)WDcfg->T1_outMask, 0x080);
-			else if (streq(str1, "SQ_WAVE"))		SetBoardParam((int*)WDcfg->T1_outMask, 0x100);
-			else if (streq(str1, "TDL_SYNC"))		SetBoardParam((int*)WDcfg->T1_outMask, 0x200);
-			else if (streq(str1, "RUN_SYNC"))		SetBoardParam((int*)WDcfg->T1_outMask, 0x400);
-			else if (streq(str1, "ZERO"))			SetBoardParam((int*)WDcfg->T1_outMask, 0x000);
-			else if (streq(str1, "MASK")) {
-				int val;
-				fscanf(f_ini, "%x", &val);
-				SetBoardParam((int*)WDcfg->T1_outMask, val);
-			}
-			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
-		}
-		if (streq(str, "TestPulseSource")) {
-			fscanf(f_ini, "%s", str1);
-			if		(streq(str1, "OFF"))			WDcfg->TestPulseSource = -1;
-			else if	(streq(str1, "EXT"))			WDcfg->TestPulseSource = TEST_PULSE_SOURCE_EXT;
-			else if	(streq(str1, "T0-IN"))			WDcfg->TestPulseSource = TEST_PULSE_SOURCE_T0_IN;
-			else if	(streq(str1, "T1-IN"))			WDcfg->TestPulseSource = TEST_PULSE_SOURCE_T1_IN;
-			else if	(streq(str1, "PTRG"))			WDcfg->TestPulseSource = TEST_PULSE_SOURCE_PTRG;
-			else if	(streq(str1, "SW-CMD"))			WDcfg->TestPulseSource = TEST_PULSE_SOURCE_SW_CMD;
-			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
-		}
-		if (streq(str, "TestPulseDestination")) {
-			fscanf(f_ini, "%s", str1);
-			if		(streq(str1, "ALL"))			WDcfg->TestPulseDestination = TEST_PULSE_DEST_ALL;
-			else if	(streq(str1, "EVEN"))			WDcfg->TestPulseDestination = TEST_PULSE_DEST_EVEN;
-			else if	(streq(str1, "ODD"))			WDcfg->TestPulseDestination = TEST_PULSE_DEST_ODD;
-			else if	(streq(str1, "NONE"))			WDcfg->TestPulseDestination = TEST_PULSE_DEST_NONE;
-			else if	(streq(str1, "CH"))				fscanf(f_ini, "%d", &WDcfg->TestPulseDestination);
-			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
-		}
-		if (streq(str, "TestPulsePreamp")) {
-			fscanf(f_ini, "%s", str1);
-			if		(streq(str1, "HG"))			WDcfg->TestPulsePreamp = TEST_PULSE_PREAMP_HG;
-			else if	(streq(str1, "LG"))			WDcfg->TestPulsePreamp = TEST_PULSE_PREAMP_LG;
-			else if	(streq(str1, "BOTH"))		WDcfg->TestPulsePreamp = TEST_PULSE_PREAMP_BOTH;
-			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
-		}
-		if (streq(str, "LG_ShapingTime")) {
-			float st = GetTime(f_ini, "ns");
-			if      ((st==0) || (st==87.5))		WDcfg->LG_ShapingTime = 0;
-			else if ((st==1) || (st==75))		WDcfg->LG_ShapingTime = 1;
-			else if ((st==2) || (st==62.5))		WDcfg->LG_ShapingTime = 2;
-			else if ((st==3) || (st==50))		WDcfg->LG_ShapingTime = 3;
-			else if ((st==4) || (st==37.5))		WDcfg->LG_ShapingTime = 4;
-			else if ((st==5) || (st==25))		WDcfg->LG_ShapingTime = 5;
-			else if ((st==6) || (st==12.5))		WDcfg->LG_ShapingTime = 6;
-			else 	Con_printf("LCSw", "WARNING: Shaping Time LG: invalid setting\n");
-		}
-		if (streq(str, "HG_ShapingTime")) {
-			float st = GetTime(f_ini, "ns");
-			if      ((st==0) || (st==87.5))		WDcfg->HG_ShapingTime = 0;
-			else if ((st==1) || (st==75))		WDcfg->HG_ShapingTime = 1;
-			else if ((st==2) || (st==62.5))		WDcfg->HG_ShapingTime = 2;
-			else if ((st==3) || (st==50))		WDcfg->HG_ShapingTime = 3;
-			else if ((st==4) || (st==37.5))		WDcfg->HG_ShapingTime = 4;
-			else if ((st==5) || (st==25))		WDcfg->HG_ShapingTime = 5;
-			else if ((st==6) || (st==12.5))		WDcfg->HG_ShapingTime = 6;
-			else 	Con_printf("LCSw", "WARNING: Shaping Time HG: invalid setting\n");
-		}
-		if (streq(str, "AnalogProbe") || streq(str, "AnalogProbe0") || streq(str, "AnalogProbe1")) {
-			int ap = 0;
-			if (streq(str, "AnalogProbe1")) ap = 1;
-			fscanf(f_ini, "%s", str1);
-			if		(streq(str1, "OFF"))			WDcfg->AnalogProbe[ap] = APROBE_OFF;
-			else if	(streq(str1, "FAST"))			WDcfg->AnalogProbe[ap] = APROBE_FAST;
-			else if	(streq(str1, "SLOW_LG"))		WDcfg->AnalogProbe[ap] = APROBE_SLOW_LG;
-			else if	(streq(str1, "SLOW_HG"))		WDcfg->AnalogProbe[ap] = APROBE_SLOW_HG;
-			else if	(streq(str1, "PREAMP_LG"))		WDcfg->AnalogProbe[ap] = APROBE_PREAMP_LG;
-			else if	(streq(str1, "PREAMP_HG"))		WDcfg->AnalogProbe[ap] = APROBE_PREAMP_HG;
-			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
-			if (streq(str, "AnalogProbe")) WDcfg->AnalogProbe[1] = WDcfg->AnalogProbe[0];
-		}
-		if (streq(str, "DigitalProbe") || streq(str, "DigitalProbe0") || streq(str, "DigitalProbe1")) {
-			int val;
-			int dp = 0;
-			if (streq(str, "DigitalProbe1")) dp = 1;
-			fscanf(f_ini, "%s", str1);
-			if		(streq(str1, "OFF"))			WDcfg->DigitalProbe[dp] = DPROBE_OFF;
-			else if	(streq(str1, "PEAK_LG"))		WDcfg->DigitalProbe[dp] = DPROBE_PEAK_LG;
-			else if	(streq(str1, "PEAK_HG"))		WDcfg->DigitalProbe[dp] = DPROBE_PEAK_HG;
-			else if	(streq(str1, "HOLD"))			WDcfg->DigitalProbe[dp] = DPROBE_HOLD;
-			else if	(streq(str1, "START_CONV"))		WDcfg->DigitalProbe[dp] = DPROBE_START_CONV;
-			else if	(streq(str1, "DATA_COMMIT"))	WDcfg->DigitalProbe[dp] = DPROBE_DATA_COMMIT;
-			else if	(streq(str1, "DATA_VALID"))		WDcfg->DigitalProbe[dp] = DPROBE_DATA_VALID;
-			else if	(streq(str1, "CLK_1024"))		WDcfg->DigitalProbe[dp] = DPROBE_CLK_1024;
-			else if	(streq(str1, "VAL_WINDOW"))		WDcfg->DigitalProbe[dp] = DPROBE_VAL_WINDOW;
-			else if	(streq(str1, "T_OR"))			WDcfg->DigitalProbe[dp] = DPROBE_T_OR;
-			else if	(streq(str1, "Q_OR"))			WDcfg->DigitalProbe[dp] = DPROBE_Q_OR;
-			else if	(strstr(str1, "ACQCTRL") != NULL) {
-				char *c = strchr(str1, '_');
-				sscanf(c+1, "%d", &val);
-				WDcfg->DigitalProbe[dp] = 0x80000000 | val;
-			} else if	(strstr(str1, "CRIF") != NULL) {
-				char *c = strchr(str1, '_');
-				sscanf(c+1, "%d", &val);
-				WDcfg->DigitalProbe[dp] = 0x80010000 | val;
-			} else if	(strstr(str1, "DTBLD") != NULL) {
-				char *c = strchr(str1, '_');
-				sscanf(c+1, "%d", &val);
-				WDcfg->DigitalProbe[dp] = 0x80020000 | val;
-			} else if (strstr(str1, "TSTMP") != NULL) {
-				char* c = strchr(str1, '_');
-				sscanf(c + 1, "%d", &val);
-				WDcfg->DigitalProbe[dp] = 0x80030000 | val;
-			} else if (strstr(str1, "TDL") != NULL) {
-				char* c = strchr(str1, '_');
-				sscanf(c + 1, "%d", &val);
-				WDcfg->DigitalProbe[dp] = 0x80040000 | val;
-			} else if (strstr(str1, "PMP") != NULL) {
-				char* c = strchr(str1, '_');
-				sscanf(c + 1, "%d", &val);
-				WDcfg->DigitalProbe[dp] = 0x80050000 | val;
-			} else if	((str1[0]=='0') && (tolower(str1[1])=='x')) {
-				sscanf(str1+2, "%x", &val);
-				WDcfg->DigitalProbe[dp] = 0x80000000 | val;
-			} 
-			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
-			if (streq(str, "DigitalProbe")) WDcfg->DigitalProbe[1] = WDcfg->DigitalProbe[0];
-		}
-		if (streq(str, "CitirocCfgMode")) {
-			fscanf(f_ini, "%s", str1);
-			if		(streq(str1, "FROM_FILE"))		WDcfg->CitirocCfgMode = CITIROC_CFG_FROM_FILE;
-			else if	(streq(str1, "FROM_REGS"))		WDcfg->CitirocCfgMode = CITIROC_CFG_FROM_REGS;
-			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
-		}
-		if (streq(str, "PeakDetectorMode")) {
-			fscanf(f_ini, "%s", str1);
-			if		(streq(str1, "PEAK_STRETCH"))	WDcfg->PeakDetectorMode = 0;
-			else if	(streq(str1, "TRACK&HOLD"))		WDcfg->PeakDetectorMode = 1;
-			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
-		}
-		if (streq(str, "FastShaperInput")) {
-			fscanf(f_ini, "%s", str1);
-			if		((streq(str1, "HG-PA") || streq(str1, "HG")))	WDcfg->FastShaperInput = FAST_SHAPER_INPUT_HGPA;
-			else if	((streq(str1, "LG-PA") || streq(str1, "LG")))	WDcfg->FastShaperInput = FAST_SHAPER_INPUT_LGPA;
-			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
-		}
-		if (streq(str, "HV_Adjust_Range")) {
-			fscanf(f_ini, "%s", str1);
-			if		((streq(str1, "2.5")      || streq(str1, "0")))		WDcfg->HV_Adjust_Range = 0;
-			else if	((streq(str1, "4.5")      || streq(str1, "1")))		WDcfg->HV_Adjust_Range = 1;
-			else if	(streq(str1, "DISABLED"))							WDcfg->HV_Adjust_Range = -1;
-			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
-		}
-		if (streq(str, "MuxNSmean")) {
-			fscanf(f_ini, "%s", str1);
-			if		((streq(str1, "1")  || streq(str1, "0")))		WDcfg->MuxNSmean = 0;
-			else if	((streq(str1, "4")  || streq(str1, "1")))		WDcfg->MuxNSmean = 1;
-			else if	((streq(str1, "16") || streq(str1, "2")))		WDcfg->MuxNSmean = 2;
-			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
-		}
-		if (streq(str, "GainSelect")) {
-			fscanf(f_ini, "%s", str1);
-			if		((streq(str1, "HIGH") || streq(str1, "HG")))	WDcfg->GainSelect = GAIN_SEL_HIGH;
-			else if	((streq(str1, "LOW")  || streq(str1, "LG")))	WDcfg->GainSelect = GAIN_SEL_LOW;
-			else if	(streq(str1, "AUTO"))							WDcfg->GainSelect = GAIN_SEL_AUTO;
-			else if	(streq(str1, "BOTH"))							WDcfg->GainSelect = GAIN_SEL_BOTH;
-			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
-		}
-		if (streq(str, "TempSensType")) {
-			fscanf(f_ini, "%s", str1);
-			if (streq(str1, "TMP37")) {
-				WDcfg->TempSensCoeff[0] = 0;
-				WDcfg->TempSensCoeff[1] = (float)50;
-				WDcfg->TempSensCoeff[2] = 0;
-			} else if (streq(str1, "LM94021_G11")) {
-				WDcfg->TempSensCoeff[0] = (float)194.25;
-				WDcfg->TempSensCoeff[1] = (float)-73.63;
-				WDcfg->TempSensCoeff[2] = 0;
-			} else if (streq(str1, "LM94021_G00")) {
-				WDcfg->TempSensCoeff[0] = (float)188.12;
-				WDcfg->TempSensCoeff[1] = (float)-181.62;
-				WDcfg->TempSensCoeff[2] = 0;
-			} else {
-				float v0, v1, v2;
-				if (sscanf(str1+1, "%f", &v0) == 1) {
-					char strv[500];
-					fgets(strv, 500, f_ini);
-					sscanf(strv, "%f %f", &v1, &v2);
-					WDcfg->TempSensCoeff[0] = v0;
-					WDcfg->TempSensCoeff[1] = v1;
-					WDcfg->TempSensCoeff[2] = v2;
-				} else {
-				 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
+
+		//if (!ValidParameterName) IsJanusParam = 0;
+
+		// Param name not find in Janus param list. Can be a param of the lib. Call the set_param
+		if (ParseMode & PARSEMODE_PARSE_ALL) {
+			if (!ValidParameterName) {
+				// Append the '[ch]' if ch != 0
+				char tmp_name[100] = "";
+				if (ch >= 0) {
+					sprintf(tmp_name, "%.98s[%d]", parname, ch);
+					sprintf(parname, "%s", tmp_name);
+				}
+				for (b = brd_l; b < brd_h; b++) {
+					int ret;
+					//printf("%s %s\n", parname, parval);
+					ret = FERS_SetParam(handle[b], parname, parval);
+					ValidParameterName = (ret == FERSLIB_ERR_INVALID_PARAM) ? 0 : 1;
+					ValidParameterValue = (ret == FERSLIB_ERR_INVALID_PARAM_VALUE) ? 0 : 1;
+					ValidUnits = (ret == FERSLIB_ERR_INVALID_PARAM_UNIT) ? 0 : 1;
 				}
 			}
 		}
-		if (streq(str, "OF_OutFileUnit")) {
-			fscanf(f_ini, "%s", str1);
-			if (streq(str1, "LSB"))					WDcfg->OutFileUnit = 0;
-			else if (streq(str1, "ns"))				WDcfg->OutFileUnit = 1;
-			else 	Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);
-		}
-		if (streq(str, "SupprZeroCntListFile")) {
-			fscanf(f_ini, "%s", str1);
-			if (streq(str1, "DISABLED"))			WDcfg->SupprZeroCntListFile = 0;
-			else if (streq(str1, "ENABLED"))		WDcfg->SupprZeroCntListFile = 1;
-		}
-		if (streq(str, "OF_ListLL")) {
-			fscanf(f_ini, "%s", str1);
-			if (streq(str1, "DISABLED")) {
-				WDcfg->EnableRawDataRead = 0;
-				WDcfg->OutFileEnableMask = SETBIT(WDcfg->OutFileEnableMask, OUTFILE_RAW_LL, 0);
-			} else if (streq(str1, "SAVE")) {
-				WDcfg->EnableRawDataRead = 0;
-				WDcfg->OutFileEnableMask = SETBIT(WDcfg->OutFileEnableMask, OUTFILE_RAW_LL, 1);
-			} else if (streq(str1, "LOAD")) {
-				WDcfg->EnableRawDataRead = 1;
-				WDcfg->OutFileEnableMask = SETBIT(WDcfg->OutFileEnableMask, OUTFILE_RAW_LL, 0);
-			} else Con_printf("LCSw", "WARNING: %s: invalid setting %s\n", str, str1);	
-		}
 
-		if (streq(str, "DataFilePath"))				GetDatapath(f_ini, WDcfg);
-		if (streq(str, "EHistoNbin"))				WDcfg->EHistoNbin			= GetNbin(f_ini);
-		if (streq(str, "ToAHistoNbin"))				WDcfg->ToAHistoNbin			= GetNbin(f_ini);
-		if (streq(str, "ToARebin"))					WDcfg->ToARebin				= GetInt(f_ini);
-		if (streq(str, "ToAHistoMin"))				WDcfg->ToAHistoMin			= GetTime(f_ini, "ns");
-		if (streq(str, "ToTHistoNbin"))				WDcfg->ToTHistoNbin			= GetNbin(f_ini);
-		if (streq(str, "MCSHistoNbin"))				WDcfg->MCSHistoNbin			= GetNbin(f_ini);
-		if (streq(str, "JobFirstRun"))				WDcfg->JobFirstRun			= GetInt(f_ini);
-		if (streq(str, "JobLastRun"))				WDcfg->JobLastRun			= GetInt(f_ini);
-		if (streq(str, "RunSleep"))					WDcfg->RunSleep				= GetTime(f_ini, "s");
-		if (streq(str, "EnableJobs"))				WDcfg->EnableJobs			= GetInt(f_ini);
-		if (streq(str, "DebugLogMask"))				WDcfg->DebugLogMask			= GetHex(f_ini);
-		if (streq(str, "EnLiveParamChange"))		WDcfg->EnLiveParamChange	= GetInt(f_ini);
-		if (streq(str, "OutFileEnableMask"))		WDcfg->OutFileEnableMask	= GetHex(f_ini);
-		if (streq(str, "OF_EnMaxSize"))				WDcfg->EnableMaxFileSize	= GetInt(f_ini);
-		if (streq(str, "OF_MaxSize"))				WDcfg->MaxOutFileSize		= GetBytes(f_ini);
-		if (streq(str, "EnableRawDataRead"))		WDcfg->EnableRawDataRead	= GetInt(f_ini);
-		if (streq(str, "EnableToT"))				WDcfg->EnableToT			= GetInt(f_ini);
-		//if (streq(str, "OF_ListLL"))				WDcfg->OutFileEnableMask	= SETBIT(WDcfg->OutFileEnableMask, OUTFILE_RAW_LL, GetInt(f_ini));
-		//if (streq(str, "OF_RawBin"))				WDcfg->OutFileEnableMask	= SETBIT(WDcfg->OutFileEnableMask, OUTFILE_RAW_DATA_BIN, GetInt(f_ini));
-		//if (streq(str, "OF_RawAscii"))				WDcfg->OutFileEnableMask	= SETBIT(WDcfg->OutFileEnableMask, OUTFILE_RAW_DATA_ASCII, GetInt(f_ini));
-		if (streq(str, "OF_ListBin"))				WDcfg->OutFileEnableMask	= SETBIT(WDcfg->OutFileEnableMask, OUTFILE_LIST_BIN, GetInt(f_ini));
-		if (streq(str, "OF_ListCSV"))				WDcfg->OutFileEnableMask	= SETBIT(WDcfg->OutFileEnableMask, OUTFILE_LIST_CSV, GetInt(f_ini));
-		if (streq(str, "OF_ListAscii"))				WDcfg->OutFileEnableMask	= SETBIT(WDcfg->OutFileEnableMask, OUTFILE_LIST_ASCII, GetInt(f_ini));
-		if (streq(str, "OF_Sync"))					WDcfg->OutFileEnableMask	= SETBIT(WDcfg->OutFileEnableMask, OUTFILE_SYNC, GetInt(f_ini));
-		if (streq(str, "OF_SpectHisto"))			WDcfg->OutFileEnableMask	= SETBIT(WDcfg->OutFileEnableMask, OUTFILE_SPECT_HISTO, GetInt(f_ini));
-		if (streq(str, "OF_ToAHisto"))				WDcfg->OutFileEnableMask	= SETBIT(WDcfg->OutFileEnableMask, OUTFILE_ToA_HISTO, GetInt(f_ini));
-		if (streq(str, "OF_ToTHisto"))				WDcfg->OutFileEnableMask	= SETBIT(WDcfg->OutFileEnableMask, OUTFILE_TOT_HISTO, GetInt(f_ini));
-		if (streq(str, "OF_Staircase"))				WDcfg->OutFileEnableMask	= SETBIT(WDcfg->OutFileEnableMask, OUTFILE_STAIRCASE, GetInt(f_ini));
-		if (streq(str, "OF_RunInfo"))				WDcfg->OutFileEnableMask	= SETBIT(WDcfg->OutFileEnableMask, OUTFILE_RUN_INFO, GetInt(f_ini));
-		if (streq(str, "OF_ServiceInfo"))			WDcfg->OutFileEnableMask	= SETBIT(WDcfg->OutFileEnableMask, OUTFILE_SERVICE_INFO, GetInt(f_ini));
-		if (streq(str, "OF_MCS"))					WDcfg->OutFileEnableMask	= SETBIT(WDcfg->OutFileEnableMask, OUTFILE_MCS_HISTO, GetInt(f_ini));
-		if (streq(str, "RingBuffer"))			WDcfg->OutFileEnableMask    = SETBIT(WDcfg->OutFileEnableMask, OUTFILE_RAW_DATA_RINGBUFFER, GetInt(f_ini));
-		if (streq(str, "SourceID"))			        WDcfg->SourceID             = GetInt(f_ini);
-		if (streq(str, "RingBufferName"))			fscanf(f_ini, "%s", WDcfg->RingBufferName);
-		if (streq(str, "RunTitle"))					GetTitle(f_ini, WDcfg);
-		if (streq(str, "TstampCoincWindow"))		WDcfg->TstampCoincWindow	= (uint32_t)GetTime(f_ini, "ns");
-		if (streq(str, "PresetTime"))				WDcfg->PresetTime			= GetTime(f_ini, "s");
-		if (streq(str, "PresetCounts"))				WDcfg->PresetCounts			= GetInt(f_ini);
-		if (streq(str, "TrefWindow"))				WDcfg->TrefWindow			= GetTime(f_ini, "ns");
-		if (streq(str, "TrefDelay"))				WDcfg->TrefDelay			= GetTime(f_ini, "ns");
-		if (streq(str, "PtrgPeriod"))				WDcfg->PtrgPeriod			= GetTime(f_ini, "ns");
-		if (streq(str, "Trg_HoldOff"))				WDcfg->Trg_HoldOff			= (uint32_t)GetTime(f_ini, "ns");
-		if (streq(str, "ChTrg_Width"))				WDcfg->ChTrg_Width			= (uint32_t)GetTime(f_ini, "ns");
-		if (streq(str, "Tlogic_Width"))				WDcfg->Tlogic_Width			= (uint32_t)GetTime(f_ini, "ns");
-		if (streq(str, "TestPulseAmplitude"))		WDcfg->TestPulseAmplitude	= GetInt(f_ini);
-		if (streq(str, "WaveformLength"))			WDcfg->WaveformLength		= GetInt(f_ini);
-		if (streq(str, "Range_14bit"))				WDcfg->Range_14bit			= GetInt(f_ini);
-		if (streq(str, "QD_CoarseThreshold"))		WDcfg->QD_CoarseThreshold	= GetInt(f_ini);
-		if (streq(str, "Enable_HV_Adjust"))			WDcfg->Enable_HV_Adjust		= GetInt(f_ini);
-		if (streq(str, "HoldDelay"))				WDcfg->HoldDelay			= (uint32_t)GetTime(f_ini, "ns");
-		if (streq(str, "EnableQdiscrLatch"))		WDcfg->EnableQdiscrLatch	= GetInt(f_ini);
-		if (streq(str, "EnableChannelTrgout"))		WDcfg->EnableChannelTrgout	= GetInt(f_ini);
-		if (streq(str, "MuxClkPeriod"))				WDcfg->MuxClkPeriod			= (uint32_t)GetTime(f_ini, "ns");
-		if (streq(str, "Pedestal"))					WDcfg->Pedestal				= GetInt(f_ini);
-		if (streq(str, "ProbeChannel0"))			WDcfg->ProbeChannel[0] = GetInt(f_ini);
-		if (streq(str, "ProbeChannel1"))			WDcfg->ProbeChannel[1] = GetInt(f_ini);
-		if (streq(str, "ProbeChannel")) {
-			WDcfg->ProbeChannel[0] = GetInt(f_ini);
-			WDcfg->ProbeChannel[1] = GetInt(f_ini);
-		}
-		if (streq(str, "MajorityLevel"))			WDcfg->MajorityLevel		= GetInt(f_ini);
-		if (streq(str, "RunNumber_AutoIncr"))		WDcfg->RunNumber_AutoIncr	= GetInt(f_ini);
-		if (streq(str, "EnableTempFeedback"))		WDcfg->EnableTempFeedback	= GetInt(f_ini);
-		if (streq(str, "TempFeedbackCoeff"))		WDcfg->TempFeedbackCoeff	= GetFloat(f_ini);
-		if (streq(str, "EnableServiceEvents"))      WDcfg->EnableServiceEvents	= GetInt(f_ini);
-		if (streq(str, "EnableCntZeroSuppr"))		WDcfg->EnableCntZeroSuppr	= GetInt(f_ini);
-		if (streq(str, "AskHVShutDownOnExit"))		WDcfg->AskHVShutDownOnExit  = GetInt(f_ini);
-		if (streq(str, "Enable_2nd_tstamp"))		WDcfg->Enable_2nd_tstamp = GetInt(f_ini);
-
-		if (streq(str, "ZS_Threshold_LG"))			SetChannelParam(WDcfg->ZS_Threshold_LG,				GetInt(f_ini));
-		if (streq(str, "ZS_Threshold_HG"))			SetChannelParam(WDcfg->ZS_Threshold_HG,				GetInt(f_ini));
-		if (streq(str, "QD_FineThreshold"))			SetChannelParam(WDcfg->QD_FineThreshold,			GetInt(f_ini));
-		if (streq(str, "TD_FineThreshold"))			SetChannelParam(WDcfg->TD_FineThreshold,			GetInt(f_ini));
-		if (streq(str, "HG_Gain"))					SetChannelParam(WDcfg->HG_Gain,						GetInt(f_ini));
-		if (streq(str, "LG_Gain"))					SetChannelParam(WDcfg->LG_Gain,						GetInt(f_ini));
-		if (streq(str, "HV_IndivAdj"))				SetChannelParam(WDcfg->HV_IndivAdj,					GetInt(f_ini));		
-		if (streq(str, "TD_CoarseThreshold"))		SetBoardParam((int *)WDcfg->TD_CoarseThreshold,		GetInt(f_ini));	// for Romualdo
-		if (streq(str, "ChEnableMask0"))			SetBoardParam((int *)WDcfg->ChEnableMask0,			GetHex(f_ini));
-		if (streq(str, "ChEnableMask1"))			SetBoardParam((int *)WDcfg->ChEnableMask1,			GetHex(f_ini));
-		if (streq(str, "Q_DiscrMask0"))				SetBoardParam((int *)WDcfg->Q_DiscrMask0,			GetHex(f_ini));
-		if (streq(str, "Q_DiscrMask1"))				SetBoardParam((int *)WDcfg->Q_DiscrMask1,			GetHex(f_ini));
-		if (streq(str, "Tlogic_Mask0"))				SetBoardParam((int *)WDcfg->Tlogic_Mask0,			GetHex(f_ini));
-		if (streq(str, "Tlogic_Mask1"))				SetBoardParam((int *)WDcfg->Tlogic_Mask1,			GetHex(f_ini));
-		if (streq(str, "HV_Vbias"))					SetBoardParamFloat(WDcfg->HV_Vbias,					GetVoltage(f_ini));
-		if (streq(str, "HV_Imax"))					SetBoardParamFloat(WDcfg->HV_Imax,					GetCurrent(f_ini));  // Imax is expressed in mA
-			
-		if (streq(str, "Load"))						LoadExtCfgFile(f_ini, WDcfg);
-
-		if (!ValidParameterName || !ValidParameterValue || !ValidUnits) {
-			if (!ValidUnits && ValidParameterValue)
-				Con_printf("LCSw", "WARNING: %s: unkwown units. Janus use as default V, mA, ns\n", str);
-			else
-				Con_printf("LCSw", "WARNING: %s: unkwown parameter\n", str);
-			fgets(str, (int)strlen(str)-1, f_ini);
-		}
+		if (!ValidParameterName)
+			Con_printf("LCSw", "WARNING: %s: unkwown parameter\n", parname);
+		else if (!ValidParameterValue)
+			Con_printf("LCSw", "WARNING: %s: unkwown value '%s'\n", parname, parval);
+		else if (!ValidUnits)
+			Con_printf("LCSw", "WARNING: %s: unkwown units. Janus use as default V, mA, ns\n", parname);
 	}
 
-	// Rise Warnings for specific parameters
-	if (WDcfg->EnableRawDataRead && WDcfg->StopRunMode != STOPRUN_MANUAL) {
-		Con_printf("LCSw", "WARNING: Manual Stop Run must be set when Raw Data are processed\n");
+	if (!(ParseMode & PARSEMODE_FIRST_CALL)) return 0; // The code below must be executed just on the first call
+
+
+	if (J_cfg->EHistoNbin > (1 << ENERGY_NBIT))	J_cfg->EHistoNbin = (1 << ENERGY_NBIT);
+	if (J_cfg->ToAHistoNbin > (1 << TOA_NBIT))	J_cfg->ToAHistoNbin = (1 << TOA_NBIT);	// DNIN: misleading. This is just for plot visualization
+	if (J_cfg->ToTHistoNbin > (1 << TOT_NBIT))	J_cfg->ToTHistoNbin = (1 << TOT_NBIT);
+	
+	J_cfg->AcquisitionMode = FERS_GetParam_int(handle[0], "AcquisitionMode");
+	J_cfg->StartRunMode = FERS_GetParam_int(handle[0], "StartRunMode");
+	J_cfg->StopRunMode = FERS_GetParam_int(handle[0], "StopRunMode");
+
+	J_cfg->PtrgPeriod = FERS_GetParam_float(handle[0], "PtrgPeriod");
+	for (int b = 0; b < J_cfg->NumBrd; ++b) {
+		J_cfg->HV_Vbias[b] = FERS_GetParam_float(handle[b], "HV_Vbias");
 	}
-	char w_msg[1000] = "";
-	char w_val[1000] = "HV_Vbias:";
-	for (int b = 0; b < WDcfg->NumBrd; ++b) {
-		if (WDcfg->HV_Vbias[b] < 20) {
-			sprintf(w_msg, "%s WARNING: HV bias : HV bias board%d out of lower bound (20 V, 85 V). HV bias value set to 20\n", w_msg, b);
-			WDcfg->HV_Vbias[b] = 20;
-			sprintf(w_val, "%s%d %2.0f,", w_val, b, WDcfg->HV_Vbias[b]);
-			if (SockConsole) Con_printf("SM", "HV_Vbias:%f", WDcfg->HV_Vbias[b]);
-		} else if (WDcfg->HV_Vbias[b] > 85) {
-			sprintf(w_msg, "%s WARNING: HV bias : HV bias board%d out of lower bound (20 V, 85 V). HV bias value set to 85\n", w_msg, b);
-			WDcfg->HV_Vbias[b] = 85;
-			sprintf(w_val, "%s%d %2.0f,", w_val, b, WDcfg->HV_Vbias[b]);
-		}
-	}
-	if (strlen(w_msg) > 0) {
-		Con_printf("LCSw", "%s", w_msg);
-		w_msg[strlen(w_msg) - 1] = '\0';
-		if (SockConsole) Con_printf("SM", "%s\n", w_val);
-	}
+	J_cfg->TriggerMask = FERS_GetParam_hex(handle[0], "TriggerMask");
+	J_cfg->EnableServiceEvent = FERS_GetParam_int(handle[0], "EnableServiceEvents");
 
-	if (!fcall) return 0; // The code below must be executed just on the first call
 
-	if (WDcfg->EHistoNbin > (1 << ENERGY_NBIT))	WDcfg->EHistoNbin = (1 << ENERGY_NBIT);
-	if (WDcfg->ToAHistoNbin > (1 << TOA_NBIT))	WDcfg->ToAHistoNbin = (1 << TOA_NBIT);	// DNIN: misleading. This is just for plot visualization
-	if (WDcfg->ToTHistoNbin > (1 << TOT_NBIT))	WDcfg->ToTHistoNbin = (1 << TOT_NBIT);
-	int ediv = 1;
-
-	//if (WDcfg->EHistoNbin < 256)	WDcfg->EHistoNbin = 256;
-	//if (WDcfg->ToAHistoNbin < 256)	WDcfg->ToAHistoNbin = 256;
-	//if (WDcfg->ToTHistoNbin < 256)	WDcfg->ToTHistoNbin = 256;
-
-	// Scale pedestal value to 8K
-	if (WDcfg->EHistoNbin > 0) ediv = WDcfg->Range_14bit ? ((1 << 14) / WDcfg->EHistoNbin) : ((1 << 13) / WDcfg->EHistoNbin);
-	WDcfg->Pedestal = WDcfg->Pedestal * ediv;
 
 #ifdef linux
-	if (WDcfg->DataFilePath[strlen(WDcfg->DataFilePath)-1] != '/')	sprintf(WDcfg->DataFilePath, "%s/", WDcfg->DataFilePath);
+	if (J_cfg->DataFilePath[strlen(J_cfg->DataFilePath)-1] != '/')	strcat(J_cfg->DataFilePath, "/");
 #else
-	if (WDcfg->DataFilePath[strlen(WDcfg->DataFilePath)-1] != '\\')	sprintf(WDcfg->DataFilePath, "%s\\", WDcfg->DataFilePath);
+	if (J_cfg->DataFilePath[strlen(J_cfg->DataFilePath)-1] != '\\')	strcat(J_cfg->DataFilePath, "\\");
 #endif
 
-	// if exists, load the extra settings contained in PostConfig.txt
-	static int PostConfigDone = 0;
-	if (!PostConfigDone) {
-		FILE *pcfg = fopen("PostConfig.txt", "r");
-		PostConfigDone = 1;
-		if (pcfg != NULL) {
-			Con_printf("LCSm", "Reading additional configuration file PostConfig.txt\n");
-			ParseConfigFile(pcfg, WDcfg, 0);
-			fclose(pcfg);
-			PostConfigDone = 0;
+	// Force options when connection is offline
+	for (i = 0; i < J_cfg->NumBrd; ++i) {
+		if (strstr(J_cfg->ConnPath[i], "offline") != NULL) {
+			if (J_cfg->StopRunMode != STOPRUN_MANUAL) {
+				Con_printf("LCSw", "WARNING: Manual Stop Run must be set when Raw Data are processed\n");
+				J_cfg->StopRunMode = STOPRUN_MANUAL;
+				Con_printf("SM", "STOPRUNMODE:%d", STOPRUN_MANUAL);
+			}
+			if (J_cfg->EnableJobs != 0) {
+				Con_printf("LCSw", "WARNING: Jobs are not permitted when Raw Data are processed\n");
+				J_cfg->EnableJobs = 0;
+				Con_printf("SM", "EnableJobs:%d", J_cfg->EnableJobs);
+			}
+			break;
 		}
 	}
 
-	// Set Reading LLData if offline is selected
-	for (i = 0; i < WDcfg->NumBrd; ++i) {
-		if (strstr(WDcfg->ConnPath[i], "offline") != NULL) {
-			WDcfg->EnableRawDataRead = 1;
-			WDcfg->OutFileEnableMask = SETBIT(WDcfg->OutFileEnableMask, OUTFILE_RAW_LL, 0);
-			WDcfg->EnableJobs = 0;
-			break;
-		}
+	// SetParam for RawData saving
+	char buffLS[50];
+	char buffMS[50];
+	sprintf(buffLS, "%" PRIu8, J_cfg->EnableMaxFileSize);
+	sprintf(buffMS, "%f", J_cfg->MaxOutFileSize);
+	for (int i = 0; i < J_cfg->NumBrd; ++i) {
+		FERS_SetParam(handle[i], "OF_RawDataPath", J_cfg->DataFilePath);
+		FERS_SetParam(handle[i], "OF_LimitedSize", buffLS);
+		FERS_SetParam(handle[i], "MaxSizeOutputDataFile", buffMS);
 	}
 
 	return 0;

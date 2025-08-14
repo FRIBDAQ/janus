@@ -21,10 +21,11 @@
 #include <inttypes.h>
 
 
-#include "FERSlib.h"
-#include "console.h"
-#include "configure.h"
+//#include "FERSlib.h"
 #include "JanusC.h"
+#include "console.h"
+//#include "configure.h"
+
 
 int OpenOutputFiles(int RunNumber);
 int WriteListfileHeader();
@@ -32,7 +33,7 @@ int CloseOutputFiles();
 int SaveRawData(uint32_t *buff, int nw);
 int SaveList(int brd, double ts, uint64_t trgid, void *generic_ev, int dtq);
 int SaveHistos();
-int WriteTempHV(ServEvent_t sev[FERSLIB_MAX_NBRD]);
+int WriteTempHV(uint64_t pc_tstamp, ServEvent_t sev[MAX_NBRD]);
 int SaveRunInfo();
 //int SaveMeasurement();
 

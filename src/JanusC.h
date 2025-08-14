@@ -22,6 +22,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <math.h>
+#include "FERSlib.h"
 #include "MultiPlatform.h"
 
 #ifdef _WIN32
@@ -56,8 +57,8 @@
 	#endif
 #endif
 
-#define SW_RELEASE_NUM			"3.6.0"
-#define SW_RELEASE_DATE			"14/05/2024"
+#define SW_RELEASE_NUM			"4.2.0"
+#define SW_RELEASE_DATE			"06/06/2025"
 #define FILE_LIST_VER			"3.3"
 
 #ifdef _WIN32
@@ -73,7 +74,8 @@
 //****************************************************************************
 // Definition of limits and sizes
 //****************************************************************************
-#define MAX_NBRD						16	// max. number of boards 
+#define MAX_NBRD						128	// max. number of boards supported in console
+#define MAX_NBRD_GUI					16	// max. number of boards in the GUI	
 #define MAX_NCNC						8	// max. number of concentrators
 #define MAX_NCH							64	// max. number of channels 
 #define MAX_GW							20	// max. number of generic write commads
@@ -95,6 +97,9 @@
 #define OUTFILE_SYNC					0x0400
 #define OUTFILE_SERVICE_INFO			0x0800
 #define OUTFILE_RAW_DATA_RINGBUFFER		0x8000 // Genie: In case Caen adds something after the last one
+
+#define OF_UNIT_LSB						0
+#define OF_UNIT_NS						1
 
 #define PLOT_E_SPEC_LG					0
 #define PLOT_E_SPEC_HG					1
@@ -137,19 +142,29 @@
 #define CITIROC_CFG_FROM_REGS			0
 #define CITIROC_CFG_FROM_FILE			1
 
-#define SCPARAM_MIN						0
-#define SCPARAM_MAX						1
-#define SCPARAM_STEP					2
-#define SCPARAM_DWELL					3
+#define SCPARAM_BRD						0
+#define SCPARAM_MIN						1
+#define SCPARAM_MAX						2
+#define SCPARAM_STEP					3
+#define SCPARAM_DWELL					4
 										
-#define HDSPARAM_MIN					0
-#define HDSPARAM_MAX					1
-#define HDSPARAM_STEP					2
-#define HDSPARAM_NMEAN					3
+#define HDSPARAM_BRD					0
+#define HDSPARAM_MIN					1
+#define HDSPARAM_MAX					2
+#define HDSPARAM_STEP					3
+#define HDSPARAM_NMEAN					4
+
 
 // Temperatures
 #define TEMP_BOARD						0
 #define TEMP_FPGA						1
+#define TEMP_DETECTOR					2
+#define TEMP_HV							3
+
+
+// HV monitor
+#define HV_VMON							0
+#define HV_IMON							1
 
 
 // Acquisition Status Bits
@@ -172,13 +187,10 @@
 typedef struct Config_t {
 
 	// System info 
-	char ConnPath[MAX_NBRD][40];	// IP address of the board
-	int FERSmodel;					// Type of FERS board
+	char ConnPath[MAX_NBRD][200];	// IP address of the board
 	int NumBrd;                     // Tot number of connected boards
 	int NumCh;						// Number of channels 
-	int SerialNumber;				// Board serial number
 
-	int DebugLogMask;				// Enable debug messages or log files
 	int EnLiveParamChange;			// Enable param change while running (when disabled, Janus will stops and restarts the acq. when a param changes)
 	int AskHVShutDownOnExit;		// Ask if the HV must be shut down before quitting
 	int OutFileEnableMask;			// Enable/Disable output files 
@@ -207,11 +219,35 @@ typedef struct Config_t {
 	int ToAHistoNbin;				// Number of channels (bins) in the ToA Histogram
 	int8_t ToARebin;				// Rebin factor for ToA histogram. New bin = 0.5*Rebin ns
 	float ToAHistoMin;				// Minimum time value for ToA Histogram. Maximum is Min+0.5*Rebin*Nbin
+	char DataFilePath[500];			// Output file data path
+	uint8_t EnableMaxFileSize;		// Enable the Limited size for list output files. Value set in MaxOutFileSize parameter
+	float MaxOutFileSize;			// Max size of list output files in bytes. Minimum size allowed 1 MB
+	uint8_t EnableRawDataRead;		// Enable the readout from RawData file
+	uint8_t OutFileUnit;			// Unit for time measurement in output files (0 = LSB, 1 = ns)
+	int EnableJobs;					// Enable Jobs
+	int JobFirstRun;				// First Run Number of the job
+	int JobLastRun;					// Last Run Number of the job
+	float RunSleep;					// Wait time between runs of one job
+	int StartRunMode;				// Start Mode (this is a HW setting that defines how to start/stop the acquisition in the boards)
+	int StopRunMode;				// Stop Mode (unlike the start mode, this is a SW setting that deicdes the stop criteria)
+	int RunNumber_AutoIncr;			// auto increment run number after stop
+	float PresetTime;				// Preset Time (Real Time in s) for auto stop
+	int PresetCounts;				// Preset Number of counts (triggers)
+	int EventBuildingMode;			// Event Building Mode
+	int TstampCoincWindow;			// Time window (ns) in event buiding based on trigger Tstamp
+	int DataAnalysis;				// Data Analysis Enable/disable mask
+
+	float FiberDelayAdjust[MAX_NCNC][8][16];		// Fiber length (in meters) for individual tuning of the propagation delay along the TDL daisy chains
+
+	int EHistoNbin;					// Number of channels (bins) in the Energy Histogram
+	int ToAHistoNbin;				// Number of channels (bins) in the ToA Histogram
+	int8_t ToARebin;				// Rebin factor for ToA histogram. New bin = 0.5*Rebin ns
+	float ToAHistoMin;				// Minimum time value for ToA Histogram. Maximum is Min+0.5*Rebin*Nbin
 	int ToTHistoNbin;				// Number of channels (bins) in the ToT Histogram
 	int MCSHistoNbin;				// Number of channels (bins) in the MCS Histogram
 
 	int CitirocCfgMode;				// 0=from regs, 1=from file
-	uint16_t Pedestal;				// Common pedestal added to all channels
+	//uint16_t Pedestal;				// Common pedestal added to all channels
 
 	//                                                                       
 	// Acquisition Setup (HW settings)
@@ -219,86 +255,15 @@ typedef struct Config_t {
 	// Board Settings
 	uint32_t AcquisitionMode;						// ACQMODE_COUNT, ACQMODE_SPECT, ACQMODE_TIMING, ACQMODE_WAVE
 	uint32_t EnableToT;								// Enable readout of ToT (time over threshold)
-	uint32_t TimingMode;							// COMMON_START, COMMON_STOP, STREAMING
-	uint32_t EnableServiceEvents;					// Enable service events. 0=disabled, 1=enabled HV, 2=enabled counters, 3=enabled all
-	uint32_t EnableCntZeroSuppr;					// Enable zero suppression in Counting Mode (1 by default)
-	uint32_t SupprZeroCntListFile;		    			// 
-	uint32_t TriggerMask;							// Bunch Trigger mask
-	uint32_t TriggerLogic;							// Trigger Logic Definition
-	uint32_t T0_outMask[MAX_NBRD];					// T0-OUT mask
-	uint32_t T1_outMask[MAX_NBRD];					// T1-OUT mask
-	uint32_t Tref_Mask;								// Tref mask
-	uint32_t Veto_Mask;								// Veto mask
-	uint32_t Validation_Mask;						// Validation mask
-	uint32_t Validation_Mode;						// Validation Mode: 0=disabled, 1=positive (accept), 2=negative (reject)
-	uint32_t Counting_Mode;							// Counting Mode (Singles, Paired_AND)
-	float TrefWindow;								// Tref Windows in ns (Common start/stop)
-	float TrefDelay;								// Tref delay in ns (can be negative)
-	uint32_t ChTrg_Width;							// Self Trg Width in ns => Coinc window for paired counting and trigger logic
-	uint32_t Tlogic_Width;							// TriggerLogic output width (0=linear)
-	uint32_t MajorityLevel;							// Majority Level
-	float PtrgPeriod;							    // period in ns of the internal periodic trigger (dwell time)
-	uint32_t TestPulseSource;						// EXT, INT_T0, INT_T1, INT_PTRG, INT_SW
-	uint32_t TestPulseDestination;					// -1=ALL, -2=EVEN, -3=ODD or channel number (0 to 63) for single channel pulsing
-	uint32_t TestPulsePreamp;						// 1=LG, 2=HG, 3=BOTH
-	uint32_t TestPulseAmplitude;					// DAC setting for the internal test pulser (12 bit). Meaningless for TestPulseSource=EXT 
-	uint32_t WaveformLength;						// Num of samples in the waveform
-	uint32_t WaveformSource;						// LG0, HG0, LG1, HG1 (High/Low Gain, chip 0/1)
-	uint32_t AnalogProbe[2];						// Analog probe in Citiroc (Preamp LG/HG, Slow Shaper HG/LG, Fast Shaper)
-	uint32_t DigitalProbe[2];						// Citiroc digital probe (peak Sens HG/LG) or other FPGA signal (start_conv, data_commit...)
-	uint32_t ProbeChannel[2];						// Probing channel
-	uint16_t Range_14bit;							// Use full 14 bit range for the A/D conversion
-	uint32_t TrgIdMode;								// Trigger ID: 0 = trigger counter, 1 = validation counter
-	uint32_t Enable_2nd_tstamp;						// Enable 2nd time stamp relative to the Tref signal
 
-	uint32_t ChEnableMask0[MAX_NBRD];				// Channel enable mask of Citiroc 0
-	uint32_t ChEnableMask1[MAX_NBRD];				// Channel enable mask of Citiroc 1
-	uint32_t Q_DiscrMask0[MAX_NBRD];				// Charge Discriminator mask of Citiroc 0
-	uint32_t Q_DiscrMask1[MAX_NBRD];				// Charge Discriminator mask of Citiroc 1
-	uint32_t Tlogic_Mask0[MAX_NBRD];				// Trigger Logic mask of Citiroc 0
-	uint32_t Tlogic_Mask1[MAX_NBRD];				// Trigger Logic mask of Citiroc 1
+	uint32_t TriggerMask;	// Variable needed in plot.c. There no handle is passed
+	//uint32_t WaveformLength;
+	float PtrgPeriod;
+	float HV_Vbias[MAX_NBRD];
 
-    uint32_t QD_CoarseThreshold;					// Coarse Threshold for Citiroc charge discriminator
-    uint32_t TD_CoarseThreshold[MAX_NBRD];			// Coarse Threshold for Citiroc time discriminator
-    uint32_t HG_ShapingTime;						// Shaping Time of the High Gain preamp
-    uint32_t LG_ShapingTime;						// Shaping Time of the Low Gain preamp
-	uint32_t Enable_HV_Adjust;						// Enable input DAC for HV fine adjust
-	uint32_t HV_Adjust_Range;						// HV adj DAC range (reference): 0 = 2.5V, 1 = 4.5V
-	uint32_t MuxClkPeriod;							// Period of the Mux Clock
-	uint32_t MuxNSmean;								// Num of samples for the Mux mean: 0: 4 samples, 1: 16 samples
-	uint32_t HoldDelay;								// Time between Trigger and Hold
-	uint32_t GainSelect;							// Select gain between High/Low/Auto
-	uint32_t PeakDetectorMode;						// Peaking Mode: 0 = Peak Stretcher, 1 = Track&Hold
-	uint32_t EnableQdiscrLatch;						// Q-dicr mode: 1 = Latched, 0 = Direct
-	uint32_t EnableChannelTrgout;					// 0 = Channel Trgout Disabled, 1 = Enabled
-	uint32_t FastShaperInput;						// Fast Shaper (Tdiscr) connection: 0 = High Gain PA, 1 = Low Gain PA
-	uint32_t Trg_HoldOff;							// Trigger hold off (applied to channel triggers)
-
-	float FiberDelayAdjust[MAX_NCNC][8][16];		// Fiber length (in meters) for individual tuning of the propagation delay along the TDL daisy chains
-
-	float HV_Vbias[MAX_NBRD];						// Voltage setting for HV
-	float HV_Imax[MAX_NBRD];						// Imax for HV
-	float TempSensCoeff[3];							// Temperature Sensor Coefficients (2=quad, 1=lin, 0=offset)
-	float TempFeedbackCoeff;						// Temperature Feedback Coeff: Vout = Vset - k * (T-25)
-	int EnableTempFeedback;							// Enable Temp Feedback
-
-	// Channel Settings 
-    uint16_t ZS_Threshold_LG[MAX_NBRD][MAX_NCH];	// Low Threshold for zero suppression (LG)
-    uint16_t ZS_Threshold_HG[MAX_NBRD][MAX_NCH];	// Low Threshold for zero suppression (HG)
-    uint16_t QD_FineThreshold[MAX_NBRD][MAX_NCH];	// Fine Threshold for Citiroc charge discriminator
-    uint16_t TD_FineThreshold[MAX_NBRD][MAX_NCH];	// Fine Threshold for Citiroc time discriminator
-    uint16_t HG_Gain[MAX_NBRD][MAX_NCH];			// Gain fo the High Gain Preamp
-    uint16_t LG_Gain[MAX_NBRD][MAX_NCH];			// Gain fo the Low Gain Preamp
-	uint16_t HV_IndivAdj[MAX_NBRD][MAX_NCH];		// HV individual bias adjust (Citiroc 8bit input DAC)
-
-	// Generic write accesses 
-	int GWn;
-    uint32_t GWbrd[MAX_GW];						// Board Number (-1 = all)
-    uint32_t GWaddr[MAX_GW];					// Register Address
-    uint32_t GWdata[MAX_GW];					// Data to write
-    uint32_t GWmask[MAX_GW];					// Bit Mask
-
-} Config_t;
+	int EnableServiceEvent;								// Enable service events
+ 
+} Janus_Config_t;
 
 
 typedef struct RunVars_t {
@@ -308,25 +273,25 @@ typedef struct RunVars_t {
 	int SMonType;				// Statistics Monitor Type
 	int Xcalib;					// X-axis calibration
 	int RunNumber;				// Run Number (used in output file name; -1 => no run number)
-	char PlotTraces[8][100];	// Plot Traces (format: "0 3 X" => Board 0, Channel 3, From X[B board - F offline - S from file)
-	int StaircaseCfg[4];		// Staircase Params: MinThr Maxthr Step Dwell
-	int HoldDelayScanCfg[4];	// Hold Delay Scan Params: MinDelay MaxDelay Step Nmean
+	char PlotTraces[MAX_NTRACES][100];	// Plot Traces (format: "0 3 X" => Board 0, Channel 3, From X[B board - F offline - S from file)
+	int StaircaseCfg[5];		// Staircase Params: Board MinThr Maxthr Step Dwell
+	int HoldDelayScanCfg[5];	// Hold Delay Scan Params: Board MinDelay MaxDelay Step Nmean
 } RunVars_t;
-
 
 
 
 //****************************************************************************
 // Global Variables
 //****************************************************************************
-extern Config_t	WDcfg;				// struct containing all acquisition parameters
+extern Janus_Config_t J_cfg;				// struct containing all acquisition parameters
 extern RunVars_t RunVars;			// struct containing run time variables
 extern int handle[MAX_NBRD];		// board handles
-extern int cnc_handle[MAX_NCNC];	// concentrator handles
+extern int cnc_handle[FERSLIB_MAX_NCNC];	// concentrator handles
 //extern int ActiveCh, ActiveBrd;		// Board and Channel active in the plot
 extern int AcqRun;					// Acquisition running
 extern int AcqStatus;				// Acquisition Status
 extern int SockConsole;				// 0: use stdio console, 1: use socket console
 extern char ErrorMsg[250];			// Error Message
+extern int MAX_NBRD_JANUS;			// Max number of boards supported by Janus, 16 in GUI mode, 128 in console mode
 
 #endif

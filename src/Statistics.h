@@ -18,6 +18,7 @@
 #define _STATISTICS_H              // Protect against multiple inclusion
 
 #include <stdint.h>
+#include "MultiPlatform.h"
 
 #define MAX_NUM_ROI					16
 #define MAX_NUM_CALPNT				16
@@ -27,7 +28,7 @@
 #define HISTO2D_NBINY				8
 #define STAIRCASE_NBIN				1024
 
-#define STATS_MAX_NBRD				16
+#define STATS_MAX_NBRD				128
 #define STATS_MAX_NCH				64
 
 
@@ -154,9 +155,9 @@ typedef struct Stats_t {
 	Histogram1D_t H1_MCS[STATS_MAX_NBRD][STATS_MAX_NCH];		// MultiChannel Scaler Histograms
 	float *Staircase[STATS_MAX_NBRD][STATS_MAX_NCH];			// Staircase (Cnt vs Threshold)
 	uint32_t *Hold_PHA_2Dmap[STATS_MAX_NBRD][STATS_MAX_NCH];	// Hold Delay Scan (PHA vs Hold delay)
-	Histogram1D_t H1_File[MAX_NTRACES];							// Histograms read from file (off line)
+	Histogram1D_t H1_File[MAX_NUM_SPECTRA];							// Histograms read from file (off line)
 	//float* Staircase_file[MAX_NTRACES];						// Staircase read from file (offline)
-	Staircase_t Staircase_offline[MAX_NTRACES];					// Staircase structure, offline
+	Staircase_t Staircase_offline[MAX_NUM_SPECTRA];					// Staircase structure, offline
 } Stats_t;
 
 //****************************************************************************

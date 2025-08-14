@@ -1,0 +1,19 @@
+var searchData=
+[
+  ['gain_5fsel_5fauto_0',['GAIN_SEL_AUTO',['../a00035.html#a7b1963c074ae6f0e21ce1d7957bbd394',1,'FERS_Registers_520X.h']]],
+  ['gain_5fsel_5fboth_1',['GAIN_SEL_BOTH',['../a00035.html#a0ed00f1cd045c26ab1c378e4f605fe63',1,'FERS_Registers_520X.h']]],
+  ['gain_5fsel_5fhigh_2',['GAIN_SEL_HIGH',['../a00035.html#ad8b6d6c2af63e107d84cf7ff360289cc',1,'FERS_Registers_520X.h']]],
+  ['gain_5fsel_5flow_3',['GAIN_SEL_LOW',['../a00035.html#ad4eccfb6e4a4f99b56d79c59ffae8366',1,'FERS_Registers_520X.h']]],
+  ['gainselect_4',['GainSelect',['../a00123.html#a966361ede136c997ae2ebc704bce2090',1,'Config_t']]],
+  ['gatewidth_5',['GateWidth',['../a00123.html#a7ea66f5f9f8bde5c9e85752979105c81',1,'Config_t']]],
+  ['glitchfilterdelay_6',['GlitchFilterDelay',['../a00123.html#afbf1e005b21eff7e831facfacb7c366a',1,'Config_t']]],
+  ['glitchfiltermode_7',['GlitchFilterMode',['../a00123.html#a0421c2f114b63533e50a62f1f5beba19',1,'Config_t']]],
+  ['glitchfiltermode_5fboth_8',['GLITCHFILTERMODE_BOTH',['../a00050.html#gga67e42f15a165bf66e22c96dce00f3adfa0313a770664a3985ec29d440353a44d9',1,'FERSlib.h']]],
+  ['glitchfiltermode_5fdisabled_9',['GLITCHFILTERMODE_DISABLED',['../a00050.html#gga67e42f15a165bf66e22c96dce00f3adfabae85a143e9e7cfc402a68d1475f8ea7',1,'FERSlib.h']]],
+  ['glitchfiltermode_5fleading_10',['GLITCHFILTERMODE_LEADING',['../a00050.html#gga67e42f15a165bf66e22c96dce00f3adfa3d5b0c786181fc3ebfd8aba258d7feab',1,'FERSlib.h']]],
+  ['glitchfiltermode_5ftrailing_11',['GLITCHFILTERMODE_TRAILING',['../a00050.html#gga67e42f15a165bf66e22c96dce00f3adfa41e5a332b3c64d3a928c5f41ada8128c',1,'FERSlib.h']]],
+  ['gwaddr_12',['GWaddr',['../a00123.html#a06850c18f45d0f85c58c6a8b26df9c8a',1,'Config_t']]],
+  ['gwdata_13',['GWdata',['../a00123.html#a865edc00f11ddb8223c13e1b2a5f3d2e',1,'Config_t']]],
+  ['gwmask_14',['GWmask',['../a00123.html#af56cd6d07d55f90164e6f08c43478b59',1,'Config_t']]],
+  ['gwn_15',['GWn',['../a00123.html#a6e255ad846e7b6fa44c4366b5cc0e688',1,'Config_t']]]
+];

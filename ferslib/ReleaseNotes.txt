@@ -1,0 +1,57 @@
+*************************************************************************************************************************
+  CAEN SpA - Front End Division
+  Via Vetraia, 11 - 55049 - Viareggio ITALY
+  +390594388398 - www.caen.it
+*************************************************************************************************************************
+
+Release 1.2.0 - 06/06/25
+-------------------------------------------------------------------------------------------------------------------------
+- Ensured compliance with the C++17 standard
+- Improved USB communication stability
+- Added mutex protection during access to the raw data file from data receiver thread
+- Bug fix when opening raw data files created with multiple boards in a TDL connection
+- Bug fix in FERS_SetParam related to deprecated parameter names
+- Bug fix in opening USB with usb:PID
+- Bug fix in board temperature register address
+
+-------------------------------------------------------------------------------------------------------------------------
+Release 1.1.4 - 23/05/25
+-------------------------------------------------------------------------------------------------------------------------
+- Bug fix during the reading of board info for FERS module 5203B
+
+-------------------------------------------------------------------------------------------------------------------------
+Release 1.1.3 - 30/04/25
+-------------------------------------------------------------------------------------------------------------------------
+- Bug fix in FERSlib logging in usb 
+- Bug fix in FERS_OpenDevice in offline mode
+- Fixed memory leakage issue when using TDL connection with multiple FERs modules connected
+
+-------------------------------------------------------------------------------------------------------------------------
+Release 1.1.2 - 15/04/25
+-------------------------------------------------------------------------------------------------------------------------
+- Improved log information provided during FW upgrade procedure
+- Bug fix in reading FPGA temperature
+
+-------------------------------------------------------------------------------------------------------------------------
+Release 1.1.1 - 01/04/25
+-------------------------------------------------------------------------------------------------------------------------
+- Increased the max number of board supported by FERSlib to the 128 (max number of boards handled by the DT5215)
+- Added check on BIC information
+- Added information on FPGA firmware upgrade in FERSlib Log file 
+- Bug fix on nodes syncronization of DT5215
+- Bug fix to make the library compatible with g++/gcc-14
+- Bug fix in saving RawData with TDL connection
+
+-------------------------------------------------------------------------------------------------------------------------
+Release 1.1.0 - 28/02/25
+-------------------------------------------------------------------------------------------------------------------------
+- Added API to check if A5256 adapter is connected
+- Bug fix in USB connection handling
+- Bug fix on threshold talibration for A5256 adapter 
+- Bug fix on dumping the library paramters configuration for FERS 5202 
+- Bug fix on total allocate memory computation
+
+-------------------------------------------------------------------------------------------------------------------------
+Release 1.0.0 - 31/01/25
+-------------------------------------------------------------------------------------------------------------------------
+- First Release

@@ -50,6 +50,9 @@ const int debug = 0;
 // --------------------------------------------------------------------------------
 int OpenPlotter(bool devnull)
 {
+#ifdef linux
+	setenv("GDK_BACKEND", "x11", 1);
+#endif
 	char str[200];
 	//strcpy(str, ConfigVar->GnuPlotPath);
 	strcpy(str, "");
@@ -192,7 +195,11 @@ int PlotSpectrum()
 				sprintf(description[t], "%s", ext_file); //- Offline
 
 			} else {	// online
-				if (brd[t] >= WDcfg.NumBrd) brd[t] = 0;
+				if (brd[t] >= J_cfg.NumBrd) {
+					en[t] = 0;
+					--nt;
+					//brd[t] = 0;
+				}
 				if (ch[t] >= MAX_NCH) ch[t] = 0;
 				if (RunVars.PlotType == PLOT_E_SPEC_LG) {
 					Histo[t] = &Stats.H1_PHA_LG[brd[t]][ch[t]];
@@ -209,8 +216,8 @@ int PlotSpectrum()
 				} else if (RunVars.PlotType == PLOT_MCS_TIME) {
 					Histo[t] = &Stats.H1_MCS[brd[t]][ch[t]];
 					Nbin = Stats.H1_MCS[0][0].Nbin;
-					if (WDcfg.TriggerMask == 0x21)
-						fprintf(plotpipe, "set title 'MCS - dwell time %f ms'\n", WDcfg.PtrgPeriod / 1e6);
+					if (J_cfg.TriggerMask == 0x21)
+						fprintf(plotpipe, "set title 'MCS - dwell time %f ms'\n", J_cfg.PtrgPeriod / 1e6);
 					else
 						fprintf(plotpipe, "set title 'MCS - dwell time ?'\n");
 					// Set mean cnt and rms
@@ -218,8 +225,8 @@ int PlotSpectrum()
 					for (int j = 0; j < (int)Histo[t]->Nbin; ++j) {
 						if (Histo[t]->H_data[j] <= 0) continue;
 						++Histo[t]->H_cnt;
-						Histo[t]->mean += double(Histo[t]->H_data[j]);
-						Histo[t]->rms += double(Histo[t]->H_data[j]) * double(Histo[t]->H_data[j]);
+						Histo[t]->mean += (double)(Histo[t]->H_data[j]);
+						Histo[t]->rms += (double)(Histo[t]->H_data[j]) * (double)(Histo[t]->H_data[j]);
 						if (Histo[t]->H_data[j] > (uint32_t)max_yval)
 							max_yval = Histo[t]->H_data[j];
 					}
@@ -249,34 +256,42 @@ int PlotSpectrum()
 	}
 	if ((LastPlotType != PLOT_TYPE_SPECTRUM) || (LastNbin != Nbin) || (LastXcalib != xcalib) || (LastPlotName != RunVars.PlotType)
 		|| LastA0 != la0 || LastA1 != la1) {
-		fprintf(plotpipe, "clear\n");
-		fprintf(plotpipe, "set terminal wxt noraise title 'FERS Readout' size 1200,800 position 700,10\n");
-		fprintf(plotpipe, "set ylabel 'Counts'\n");
-		fprintf(plotpipe, "set autoscale y\n");
-//		fprintf(plotpipe, "set yrange [0:100]");
-//		fprintf(plotpipe, "set yrange [0:]\n");
-		fprintf(plotpipe, "bind y 'set yrange [0:]'\n");
-		fprintf(plotpipe, "set style fill solid\n");
-		fprintf(plotpipe, "bind y 'set autoscale y'\n");
-		fprintf(plotpipe, "set xtics auto\n");
-		fprintf(plotpipe, "set ytics auto\n");
-		fprintf(plotpipe, "unset logscale\n");
-		fprintf(plotpipe, "unset label\n");
-		fprintf(plotpipe, "set grid\n");
-		fprintf(plotpipe, "set key font 'courier new, 10'\n");
-		fprintf(plotpipe, "set label font 'courier new, 10'\n");
+		char gnuplotSettings[2048] = "";
+		strcat(gnuplotSettings, "clear\n");
+		strcat(gnuplotSettings, "set terminal wxt noraise title 'FERS Readout' size 1200,800 position 700,10\n");
+		strcat(gnuplotSettings, "set ylabel 'Counts'\n");
+		strcat(gnuplotSettings, "set autoscale y\n");
+//		strcat(gnuplotSettings, "set yrange [0:100]");
+//		strcat(gnuplotSettings, "set yrange [0:]\n");
+		strcat(gnuplotSettings, "bind y 'set yrange [0:]'\n");
+		strcat(gnuplotSettings, "set style fill solid\n");
+		strcat(gnuplotSettings, "bind y 'set autoscale y'\n");
+		strcat(gnuplotSettings, "set xtics auto\n");
+		strcat(gnuplotSettings, "set ytics auto\n");
+		strcat(gnuplotSettings, "unset logscale\n");
+		strcat(gnuplotSettings, "unset label\n");
+		strcat(gnuplotSettings, "set grid\n");
+		strcat(gnuplotSettings, "set key font 'courier new, 10'\n");
+		strcat(gnuplotSettings, "set label font 'courier new, 10'\n");
 
-		fprintf(plotpipe, "set key title ' Mean    RMS                '\n");
+		strcat(gnuplotSettings, "set key title ' Mean    RMS                '\n");
 
-		if (xcalib && WDcfg.AcquisitionMode != ACQMODE_COUNT) {
-			fprintf(plotpipe, "set xlabel '%s'\n", xunit);
-			fprintf(plotpipe, "set xrange [%f:%f]\n", la0, la0 + Nbin * la1);
-			fprintf(plotpipe, "bind x 'set xrange [%f:%f]'\n", la0, la0 + Nbin * la1);
+		char tmp_settings[256];
+		if (xcalib) {    // && J_cfg.AcquisitionMode != ACQMODE_COUNT
+			sprintf(tmp_settings, "set xlabel '%s'\n", xunit);
+			strcat(gnuplotSettings, tmp_settings);
+			sprintf(tmp_settings, "set xrange [%f:%f]\n", la0, la0 + Nbin * la1);
+			strcat(gnuplotSettings, tmp_settings);
+			sprintf(tmp_settings, "bind x 'set xrange [%f:%f]'\n", la0, la0 + Nbin * la1);
+			strcat(gnuplotSettings, tmp_settings);
 		} else {
-			fprintf(plotpipe, "set xlabel 'Channels'\n");
-			fprintf(plotpipe, "set xrange [0:%d]\n", Nbin);
-			fprintf(plotpipe, "bind x 'set xrange [0:%d]'\n", Nbin);
+			strcat(gnuplotSettings, "set xlabel 'Channels'\n");
+			sprintf(tmp_settings, "set xrange [0:%d]\n", Nbin);
+			strcat(gnuplotSettings, tmp_settings);
+			sprintf(tmp_settings, "bind x 'set xrange [0:%d]'\n", Nbin);
+			strcat(gnuplotSettings, tmp_settings);
 		}
+		fprintf(plotpipe, "%s", gnuplotSettings);
 		LastNbin = Nbin;
 		LastXcalib = xcalib;
 		LastPlotType = PLOT_TYPE_SPECTRUM;
@@ -284,29 +299,43 @@ int PlotSpectrum()
 		LastA0 = la0;
 		LastA1 = la1;
 	}
-	if ((RunVars.PlotType == PLOT_MCS_TIME) && (WDcfg.AcquisitionMode == ACQMODE_COUNT)) {
+	if ((RunVars.PlotType == PLOT_MCS_TIME) && (J_cfg.AcquisitionMode == ACQMODE_COUNT)) {
+		fprintf(plotpipe, "set ylabel 'Counts [kcps]'\n");
 		fprintf(plotpipe, "set yrange [0:%f]'\n", max_yval * 1.25);
 		fprintf(plotpipe, "bind y 'set yrange [0:]'\n");
 	}
 	
 	if (debug) 	fprintf(debbuff, "$PlotData << EOD\n");
 	fprintf(plotpipe, "$PlotData << EOD\n");
+	char pipeData[MAX_NTRACES * 32768] = "";
 	for(i=0; i < Nbin; i++) {
-		for(t=0; t<MAX_NTRACES; t++)
+		char line[512] = "";
+		for (t = 0; t < MAX_NTRACES; t++) {
 			if (en[t]) {
 				int ind = i;
 				if (i > (int)(Histo[t]->Nbin - 1)) continue; // Offline histograms can have lower number of bins
 				if (RunVars.PlotType == PLOT_MCS_TIME) {	// DNIN: For MCS it is needed to reorder the binning, since the plot is saved in circular buffer but it is visualized as linear one
-					if (Histo[t]->H_data[Nbin-2]>0)
+					if (Histo[t]->H_data[Nbin - 2] > 0)
 						ind = (i + Histo[t]->Bin_set) % (Histo[t]->Nbin - 1);
 				}
-				fprintf(plotpipe, "%" PRIu32 " ", Histo[t]->H_data[ind]);
+				char cat_line[256] = "";
+				sprintf(cat_line, "%" PRIu32 " ", Histo[t]->H_data[ind]);
+				strcat(line, cat_line);
+				//fprintf(plotpipe, "%" PRIu32 " ", Histo[t]->H_data[ind]);
 				if (debug) fprintf(debbuff, "%" PRIu32 " ", Histo[t]->H_data[ind]);
 			}
-		fprintf(plotpipe, "\n");
+		}
+		strcat(line, "\n");
+		//fprintf(plotpipe, "\n");
+		strcat(pipeData, line);
+		if (strlen(pipeData) > sizeof(pipeData) - 512) {
+			fprintf(plotpipe, "%s", pipeData);
+			pipeData[0] = '\0'; // Empty the buffer
+		}
 		if (debug) fprintf(debbuff, "\n");
 	}
-	fprintf(plotpipe, "EOD\n");
+	fprintf(plotpipe, "%sEOD\n", pipeData);
+	//fprintf(plotpipe, "EOD\n");
 	if (debug) fprintf(debbuff, "EOD\n");
 
 	sprintf(cmd, "plot ");
@@ -331,7 +360,7 @@ int PlotSpectrum()
 			fprintf(plotpipe, "set label %d '%s' font 'courier new, 10' at graph 0.95,%f right textcolor rgb '#2B65EC' noenhanced\n", nt_written + 1, title, 0.96 - (nt_written * LEG_VSPACE));
 			sprintf(tmpc, " $PlotData u ($0*%lf+%lf):($%d) title ' ' noenhanced w step", a1, a0, nt_written + 1);
 		} else {
-			if (WDcfg.NumBrd > 1)
+			if (J_cfg.NumBrd > 1)
 				sprintf(title, "Brd[%d] Ch[%d] (%s): %s - %s", brd[t], ch[t], pixel, smeas, description[t]);
 			else
 				sprintf(title, "Ch[%d] (%s): %s - %s", ch[t], pixel, smeas, description[t]);
@@ -395,6 +424,7 @@ int PlotCntHisto()
 		fprintf(plotpipe, "set xtics 2\n");
 		fprintf(plotpipe, "unset logscale\n");
 		fprintf(plotpipe, "unset label\n");
+		fprintf(plotpipe, "unset key\n");
 		fprintf(plotpipe, "set grid\n");
 		LastPlotType = PLOT_TYPE_HISTO;
 	}
@@ -413,12 +443,20 @@ int PlotCntHisto()
 // --------------------------------------------------------------------------------
 // Plot waveforms
 // --------------------------------------------------------------------------------
-int PlotWave(WaveEvent_t *wev, char *title)
+int PlotWave(WaveEvent_t *wev, int brd, int ch)
 {
 	int i;
 	FILE *pd;
 	int xcalib = 0; 
+	char title[20];
 	static int LastXcalib = 0;
+
+	float MuxClkPeriod = FERS_GetParam_float(handle[brd], "MuxClkPeriod");
+	int WaveformLength = FERS_GetParam_int(handle[brd], "WaveformLength");
+
+	if (ch < 32) sprintf(title, "Brd %d, Ch [0-31]", brd);
+	else sprintf(title, "Brd %d, Ch [32-63]", brd);
+
 	if ((wev->wave_hg == NULL) || (wev->wave_lg == NULL) || (wev->dig_probes == NULL)) return -1;
 	if (plotpipe == NULL) return -1;
 	if (LastPlotType != PLOT_TYPE_WAVE || LastXcalib != xcalib) {
@@ -435,13 +473,13 @@ int PlotWave(WaveEvent_t *wev, char *title)
 		fprintf(plotpipe, "set grid\n");
 		if (xcalib) {
 			fprintf(plotpipe, "set xlabel 'ns'\n");
-			fprintf(plotpipe, "set xrange [0:%d]\n", WDcfg.WaveformLength * 25); // 12 sample is a MuxClkPeriod, 1000 for us
-			fprintf(plotpipe, "bind x 'set xrange [0:%d]'\n", WDcfg.WaveformLength * WDcfg.MuxClkPeriod / (12000));
+			fprintf(plotpipe, "set xrange [0:%d]\n", (int)(WaveformLength * MuxClkPeriod / (12000))); // 12 sample is a MuxClkPeriod, 1000 for us
+			fprintf(plotpipe, "bind x 'set xrange [0:%d]'\n", (int)(WaveformLength * MuxClkPeriod / (12000)));
 		}
 		else {
 			fprintf(plotpipe, "set xlabel 'Samples'\n");
-			fprintf(plotpipe, "set xrange [0:%d]\n", WDcfg.WaveformLength);
-			fprintf(plotpipe, "bind x 'set xrange [0:%d]'\n", WDcfg.WaveformLength);
+			fprintf(plotpipe, "set xrange [0:%d]\n", WaveformLength);
+			fprintf(plotpipe, "bind x 'set xrange [0:%d]'\n", WaveformLength);
 		}
 		LastXcalib = xcalib;
 		LastPlotType = PLOT_TYPE_WAVE;
@@ -548,7 +586,7 @@ int Plot2Dmap(int StatIntegral)
 		LastPlotType = PLOT_TYPE_2D_MAP;
 	}
 	fprintf(plotpipe, "bind z 'set cbrange [0:%f]'\n", zmax);
-	if ((RunVars.PlotType == PLOT_2D_CHARGE_LG) || (RunVars.PlotType == PLOT_2D_CHARGE_HG))	fprintf(plotpipe, "set cbrange [0:%d]\n", WDcfg.EHistoNbin);
+	if ((RunVars.PlotType == PLOT_2D_CHARGE_LG) || (RunVars.PlotType == PLOT_2D_CHARGE_HG))	fprintf(plotpipe, "set cbrange [0:%d]\n", J_cfg.EHistoNbin);
 	else fprintf(plotpipe, "set cbrange [0:%f]\n", zmax);
 	fprintf(plotpipe, "set title '%s'\n", title);
 	fprintf(plotpipe, "unset grid; set palette model CMY rgbformulae 15,7,3\n");
@@ -586,18 +624,20 @@ int PlotStaircase()
 		fprintf(plotpipe, "set xtics auto\n");
 		fprintf(plotpipe, "set ytics auto\n");
 		fprintf(plotpipe, "unset label\n");
+		//fprintf(plotpipe, "unset key\n");
 		fprintf(plotpipe, "set grid\n");
 		LastPlotType = PLOT_TYPE_SCAN_THR;
 	}
 	if (RunVars.StaircaseCfg[SCPARAM_STEP] == 0) return 0;
 
+	fprintf(plotpipe, "set key title ' '\n");
 	int nstep_off = 0;
 	for(t=0; t<MAX_NTRACES; t++) {
 		if (strlen(RunVars.PlotTraces[t]) == 0) {
 			en[t] = 0;
 		} else {
 			sscanf(RunVars.PlotTraces[t], "%d %d %s", &brd[t], &ch[t], tmp_rn[t]);
-			if (tmp_rn[t][0] == 'B' && brd[t] >= WDcfg.NumBrd) {
+			if (tmp_rn[t][0] == 'B' && brd[t] >= J_cfg.NumBrd) {
 				en[t] = 0;
 				continue;
 			}
@@ -718,7 +758,7 @@ int PlotScanHoldDelay(int *newrun)	// DNIN: Would be useful to have a view of al
 		fprintf(plotpipe, "set xlabel 'Hold Delay (ns)'\n");
 		fprintf(plotpipe, "set ylabel 'Peak Height'\n");
 		//fprintf(plotpipe, "set autoscale x\n");
-		fprintf(plotpipe, "set xrange [%d:%d]\n", RunVars.HoldDelayScanCfg[0] - 5, RunVars.HoldDelayScanCfg[1]);
+		fprintf(plotpipe, "set xrange [%d:%d]\n", RunVars.HoldDelayScanCfg[HDSPARAM_MIN] - 5, RunVars.HoldDelayScanCfg[HDSPARAM_MAX]);
 		fprintf(plotpipe, "bind x 'set xrange [*:*]'\n"); // 
 		//fprintf(plotpipe, "bind x 'set autoscale x'\n");
 		//fprintf(plotpipe, "set autoscale y\n");
@@ -726,18 +766,23 @@ int PlotScanHoldDelay(int *newrun)	// DNIN: Would be useful to have a view of al
 		fprintf(plotpipe, "bind y 'set yrange [*:*]'\n");
 		fprintf(plotpipe, "set autoscale cb\n");
 		fprintf(plotpipe, "unset label\n");
+		fprintf(plotpipe, "unset key\n");
 		LastPlotType = PLOT_TYPE_SCAN_DELAY;
 		*newrun = 0;
 	}
 
 	sscanf(RunVars.PlotTraces[0], "%d %d", &b, &ch);
+//	b = RunVars.HoldDelayScanCfg[HDSPARAM_BRD];
 	//if (Stats.Hold_PHA_2Dmap[b][ch] == NULL) return -1; 
 	st = fopen("PlotData.txt", "w");
-	nstep = (RunVars.HoldDelayScanCfg[HDSPARAM_MAX] - RunVars.HoldDelayScanCfg[HDSPARAM_MIN]) / RunVars.HoldDelayScanCfg[HDSPARAM_STEP] + 1;
+	if (RunVars.HoldDelayScanCfg[HDSPARAM_STEP] <= 0)
+		nstep = 0;
+	else
+		nstep = (RunVars.HoldDelayScanCfg[HDSPARAM_MAX] - RunVars.HoldDelayScanCfg[HDSPARAM_MIN]) / RunVars.HoldDelayScanCfg[HDSPARAM_STEP] + 1;
 	for(int y=0; y<512; y++) {
 		for(int x=0; x<nstep; x++) {
 			if (Stats.Hold_PHA_2Dmap[b][ch] != NULL)
-				fprintf(st, "%d %d %d\n", RunVars.HoldDelayScanCfg[HDSPARAM_MIN] + x*RunVars.HoldDelayScanCfg[HDSPARAM_STEP], y*WDcfg.EHistoNbin/512, Stats.Hold_PHA_2Dmap[b][ch][y*nstep+x]);
+				fprintf(st, "%d %d %d\n", RunVars.HoldDelayScanCfg[HDSPARAM_MIN] + x*RunVars.HoldDelayScanCfg[HDSPARAM_STEP], y*J_cfg.EHistoNbin/512, Stats.Hold_PHA_2Dmap[b][ch][y*nstep+x]);
 			else
 				fprintf(st, "%d %d %d\n", RunVars.HoldDelayScanCfg[HDSPARAM_MIN] + x * RunVars.HoldDelayScanCfg[HDSPARAM_STEP], 0, 0);	// DNIN: allows the visualization of HoldDelay with no data
 		}

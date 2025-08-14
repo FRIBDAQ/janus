@@ -18,13 +18,16 @@
 #define _PARAMPARSER_H                    // Protect against multiple inclusion
 
 #include "JanusC.h"
+#include "FERSutils.h"
+
+#define PARSEMODE_FIRST_CALL		0x01
+#define PARSEMODE_PARSE_CONNECTION	0x02
+#define PARSEMODE_PARSE_ALL			0x04
 
 //****************************************************************************
 // Function prototypes
 //****************************************************************************
-int ParseConfigFile(FILE *f_ini, Config_t *WRcfg, bool start);
-int streq(char* str1, char* str2);
-int streq(char* str1, char* str2);
+int ParseConfigFile(FILE *f_ini, Janus_Config_t *J_cfg, int ParseMode);
 
 
 #endif

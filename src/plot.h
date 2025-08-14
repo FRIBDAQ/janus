@@ -27,7 +27,7 @@ int OpenPlotter(bool devnull = false);
 int ClosePlotter();
 int PlotSpectrum();
 int PlotCntHisto();
-int PlotWave(WaveEvent_t *wev, char *title);
+int PlotWave(WaveEvent_t *wev, int brd, int ch);
 int Plot2Dmap(int StatIntegral);
 int PlotStaircase();
 int PlotScanHoldDelay(int *newrun);

@@ -1,0 +1,14 @@
+# Note: The FiberDelayAdjust values are set during the TDL initialization only.
+# Janus calls the InitTdlChains function only once during the device connection.
+# Different values for this parameter will be set only after a disconnection and reconnection.
+#
+# Usage:
+# FiberDelayAdjust CNC_IDX CHAIN_IDX NODE_IDX FIBER_LENGTH_IN_METERS
+#
+# Example: 
+# 1. For 2 boards in different chains of a concentrator, where the fiber to board 1 is 5 meters longer than to board 0:
+#    Set the delay of board 1 (chain 1, node 0) to 5 meters: FiberDelayAdjust 0 1 0 5
+# 2. For a daisy chain configuration, where the fiber to board 1 is 5 meters longer than to board 0:
+#    Set the delay of board 1 (chain 0, node 1) to 5 meters: FiberDelayAdjust 0 0 1 5
+
+FiberDelayAdjust	0 0 0 0				# Cnc Chain Node FiberLength (in meters)

@@ -78,11 +78,8 @@ OF_OutFileUnit					LSB					g		c		# ToA and ToT unit
 	- LSB
 	- ns
 OF_EnMaxSize					0					g		b		# Enable List file maximum size (Raw, binary, ASCII, CSV)
-OF_MaxSize						"1 GB"				g		fu		# Max size of List files (in Bytes), minimum size allowed 1 kB
-OF_ListLL						DISABLED			g		c		# Event List file (Raw data). SAVE: enabling raw data files saving. LOAD: enabling raw data files reading and events processing
-	- DISABLED
-	- SAVE
-	- LOAD
+OF_MaxSize						"1 GB"				g		fu		# Max size of List files (in Bytes), minimum size allowed 1 MB
+OF_RawData						0					g		b		# Event List file (Raw data)
 OF_ListBin						0					g		b		# Event List file (binary)
 OF_ListAscii 					0					g		b		# Event List file (ASCII) 
 OF_ListCSV						0					g		b		# Event List file (CSV)
@@ -127,7 +124,7 @@ ValidationSource				T0-IN				g		c		# Source of the trigger validation signal. It
 	- T0-IN
 	- T1-IN
 
-ValidationMode					DISABLED			g		c		# ACCEPT: Trigger validated by the signal in the val. window. REJECT: trigger rejected if no signal arrives in the val. window. Options: DISABLED, ACCEPT, REJECT
+ValidationMode					DISABLED			g		c		# ACCEPT: Trigger validated by the signal in the val. window. REJECT: trigger rejected if a signal arrives in the val. window. Options: DISABLED, ACCEPT, REJECT
 	- DISABLED
 	- ACCEPT
 	- REJECT
@@ -215,8 +212,8 @@ FastShaperInput					HG-PA				g		c		# The fast shaper can be connected to High ga
 	- HG-PA
 	- LG-PA
 
-TD_CoarseThreshold				185					b		d		# Timing Discriminator coarse threshold (common to all channels)
-TD_FineThreshold				0					c		d		# Timing Discriminator fine threshold (individual)
+TD_CoarseThreshold				185					b		d		# Timing Discriminator coarse threshold (0 to 2047, common to all channels)
+TD_FineThreshold				0					c		d		# Timing Discriminator fine threshold (0 to 15, individual)
 Hit_HoldOff						0					g		u		# Trigger hold-off time (imposed dead time)
 
 Tlogic_Mask0					FFFFFFFF			b		h		# Trigger Logic channel enable mask (ch 0..31) 

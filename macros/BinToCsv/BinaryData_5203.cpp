@@ -195,13 +195,14 @@ void t_BinaryData_5203::WriteCsvHeader(std::ofstream& csvfile) {
     csvfile << "//TStamp LSB value_ns:" << t_Tstamp_LSB_ns * 1e3 << "\n";
     csvfile << "//Run#:" << t_run_num << "\n";
     csvfile << "//Start_Time_Epoch:" << t_start_run << "\nStart_Time_DateTime:" << date << "\n";
+    csvfile << "//************************************************\n";
     if (t_acq_mode == ACQMODE_COMMONSTART || t_acq_mode == ACQMODE_COMMONSTOP)
-        csvfile << "TStamp_" << t_BinaryData_5203::t_unit_tstamp[time_unit] << ",Trigger_ID,Board_Id,Num_hits,Ch_Id,ToA_" << t_BinaryData_5203::t_unit[time_unit];
-    else csvfile << "TStamp_" << t_BinaryData_5203::t_unit_tstamp[time_unit] << ",Trigger_ID,Board_Id,Num_hits,Ch_Id,Edge,ToA_" << t_BinaryData_5203::t_unit[time_unit];
+        csvfile << "TStamp_" << t_BinaryData_5203::t_unit_tstamp[time_unit] << ",Trigger_ID,Entries,Board_Id,Ch_Id,deltaT_" << t_BinaryData_5203::t_unit[time_unit];
+    else csvfile << "TStamp_" << t_BinaryData_5203::t_unit_tstamp[time_unit] << ",Trigger_ID,Entries,Board_Id,Ch_Id,Edge,ToA_" << t_BinaryData_5203::t_unit[time_unit];
     //std::cout << "TStamp unit: " << t_unit_tstamp[time_unit] << std::endl;
     
     if (t_meas_mode != MEASMODE_LEADONLY)
-        csvfile << ",ToT_" << t_BinaryData_5203::t_unit[time_unit] << " \n";
+        csvfile << ",ToT_" << t_BinaryData_5203::t_unit[time_unit] << "\n";
     else csvfile << "\n";
 }
 
@@ -344,7 +345,7 @@ void t_BinaryData_5203::WriteTmpEvt(std::ofstream& csvfile) {
     for (uint32_t i = 0; i < t_ch_id.size(); ++i) {
         std::string s_data;
 
-        s_data += std::to_string(t_brd_id.at(i)) + "," + std::to_string(t_num_of_hit) + ',' + std::to_string(t_ch_id.at(i));
+        s_data += std::to_string(t_num_of_hit) + ',' + std::to_string(t_brd_id.at(i)) + "," + std::to_string(t_ch_id.at(i));
         if (t_acq_mode != ACQMODE_COMMONSTART && t_acq_mode != ACQMODE_COMMONSTOP)
             s_data += "," + std::to_string(t_edge.at(i));
 

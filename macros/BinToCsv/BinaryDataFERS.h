@@ -31,7 +31,7 @@
 #include "BinaryData_5202.h"
 #include "BinaryData_5203.h"
 
-#define VERSION     "3.2"
+#define VERSION     "3.2.1"
 
 // Acquisition Mode 5203 (CSTART/STOP and STREAMING as in 5202)
 #define ACQMODE_COMMONSTART 0x02            // The same for A5202
