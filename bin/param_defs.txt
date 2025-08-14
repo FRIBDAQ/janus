@@ -58,6 +58,15 @@ EnableJobs						0					g		b		# Enable Jobs
 RunNumber_AutoIncr				0					g		b		# Run Number auto increment
 
 _BLANK							-					-		-
+FRIBDAQ-specific_Settings			-					-		-
+#______________________________________________________________
+
+RingBuffer						0					g		b		# Data to RingBuffer
+SourceID                        0                   g       d       # Source ID
+RingBufferName					"janus"				g		s		# RingBuffer Name
+RunTitle						""					g		s		# Run title for RingStateChangeItem
+
+_BLANK							-					-		-
 OutputFiles  					-					-		-
 #______________________________________________________________
 DataAnalysis					ALL					g		c		# Data Analysis Enable/disable mask

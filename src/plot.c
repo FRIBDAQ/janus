@@ -48,7 +48,7 @@ const int debug = 0;
 // --------------------------------------------------------------------------------
 // Open Gnuplot
 // --------------------------------------------------------------------------------
-int OpenPlotter()
+int OpenPlotter(bool devnull)
 {
 #ifdef linux
 	setenv("GDK_BACKEND", "x11", 1);
@@ -56,10 +56,18 @@ int OpenPlotter()
 	char str[200];
 	//strcpy(str, ConfigVar->GnuPlotPath);
 	strcpy(str, "");
-	strcat(str, GNUPLOT_COMMAND);
+	if (devnull) {
+		strcat(str, "/dev/null");
+	} else {
+		strcat(str, GNUPLOT_COMMAND);
+	}
 	strcat(str, " 2> ");  
 	strcat(str, NULL_PATH); // redirect stderr to nul (to hide messages showing up in the console output)
-	if ((plotpipe = popen(str, "w")) == NULL) return -1;
+	if (devnull) {
+		if ((plotpipe = fopen(str, "w")) == NULL) return -1;
+	} else {
+		if ((plotpipe = popen(str, "w")) == NULL) return -1;
+	}
 
 	fprintf(plotpipe, "set terminal wxt noraise title 'FERS Readout' size 1200,800 position 700,10\n");
 	fprintf(plotpipe, "set grid\n");

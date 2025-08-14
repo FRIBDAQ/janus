@@ -23,7 +23,7 @@
 
 #define MAX_NTRACES   8
 
-int OpenPlotter();
+int OpenPlotter(bool devnull = false);
 int ClosePlotter();
 int PlotSpectrum();
 int PlotCntHisto();

@@ -24,6 +24,7 @@
 #include "JanusC.h"
 #include "Statistics.h"
 
+#include "RBHWrapper.h"
 
 // ****************************************************
 // Global Variables
@@ -43,6 +44,7 @@ char dtq_mode_ch[6][15] = { " ", "Spectroscopy", "Timing_CStart", "Spect_Timing"
 static uint64_t bin_size = 0, ascii_size = 0, csv_size = 0;
 static int bin_srun = 0, ascii_srun = 0, csv_srun = 0;
 static int LocalRunNum = 0;
+bool m_writeToRingBuffer = false;
 
 // ****************************************************
 // Local functions
@@ -142,6 +144,13 @@ int OpenOutputFiles(int RunNumber)
 		CreateOutFileName("ServiceInfo", RunNumber, 2, filename);
 		of_servInfo = fopen(filename, "w");
 	}
+	if ((J_cfg.OutFileEnableMask & OUTFILE_RAW_DATA_RINGBUFFER)) {
+		RBH_setSourceID(J_cfg.SourceID);
+		RBH_setRingname(J_cfg.RingBufferName);
+		RBH_setTitle(J_cfg.RunTitle);
+		RBH_setRunNumber(RunNumber);
+		m_writeToRingBuffer = true;
+	}
 	return 0;
 }
 
@@ -168,6 +177,11 @@ int CloseOutputFiles()
 	ascii_srun = 0;
 	csv_size = 0;
 	csv_srun = 0;
+
+	if (m_writeToRingBuffer) {
+		RBH_emitStateChangeToRing(false, true);
+		m_writeToRingBuffer = false;
+	}
 	return 0;
 }
 
@@ -334,6 +348,33 @@ int WriteListfileHeader() {
 	if (of_sync != NULL)
 		fprintf(of_sync, "Brd    Tstamp_us      TrgID \n");
 
+    // Genie - Copy of statements for of_list_b
+    if (m_writeToRingBuffer) {
+        RBH_emitStateChangeToRing(true, true);
+
+        float tmpLSB = (float)TOA_LSB_ns;
+        uint16_t enbin = J_cfg.EHistoNbin;
+        //uint32_t tmask = WDcfg.ChEnableMask1[brd];	// see below
+        uint8_t header_size =
+                sizeof(header_size) + 5 * sizeof(fnumFVer) + sizeof(brdVer) + sizeof(rn) + sizeof(type_file) +
+                sizeof(enbin) + sizeof(J_cfg.OutFileUnit) + sizeof(tmpLSB) + sizeof(Stats.start_time);
+
+        //RBH_addToBuffer(&header_size, sizeof(header_size), 1);
+        RBH_addToBuffer(&fnumFVer, sizeof(fnumFVer), 1);
+        RBH_addToBuffer(&snumFVer, sizeof(snumFVer), 1);
+        RBH_addToBuffer(&fnumSW, sizeof(fnumSW), 1);
+        RBH_addToBuffer(&snumSW, sizeof(snumSW), 1);
+        RBH_addToBuffer(&tnumSW, sizeof(tnumSW), 1);
+        RBH_addToBuffer(&brdVer, sizeof(brdVer), 1);	// next File Format
+        RBH_addToBuffer(&rn, sizeof(rn), 1);
+        RBH_addToBuffer(&type_file, sizeof(type_file), 1); // Acquisition Mode
+        RBH_addToBuffer(&enbin, sizeof(enbin), 1);
+        RBH_addToBuffer(&J_cfg.OutFileUnit, sizeof(J_cfg.OutFileUnit), 1);	// Type of unit used for Time. 0 LSB, 1 ns
+        RBH_addToBuffer(&tmpLSB, sizeof(tmpLSB), 1);	// Keep it as float for homogenity with A5203, the value of the LSB of which is not fixed
+        //RBH_addToBuffer(&tmask, sizeof(tmask), 1);	// uncomment if we want the Channel Mask
+        RBH_addToBuffer(&Stats.start_time, sizeof(Stats.start_time), 1);
+        RBH_writeToRing(true);
+    }
 	return 0;
 }
 
@@ -548,6 +589,65 @@ int SaveList(int brd, double ts, uint64_t trgid, void *generic_ev, int dtq)
 			fflush(of_list_c);
 			csv_size = ftell(of_list_c);
 		}
+		// Genie - Copy of statements for of_list_b
+		if (m_writeToRingBuffer) {
+			uint16_t size = sizeof(size) + sizeof(b8) + sizeof(ts) + sizeof(trgid) + sizeof(ev->chmask);
+			if (dtq & 0x80) size += sizeof(ev->rel_tstamp_us);
+			for (i = 0; i < MAX_NCH; i++) {	// DNIN: Is it somehow usefull keeping the condition temp_enL/H >= 0??
+				datatype = 0;
+				if ((ev->chmask >> i) & 1) size += (sizeof(i) + sizeof(datatype));
+				else continue;
+				if (tmp_enL[i] >= 0 && ((GainSelect & GAIN_SEL_LOW) || GainSelect == GAIN_SEL_AUTO)) {
+					datatype = datatype | 0x01;
+					size += sizeof(ev->energyLG[i]);
+				}
+				if (tmp_enH[i] >= 0 && ((GainSelect & GAIN_SEL_HIGH) || GainSelect == GAIN_SEL_AUTO)) {
+					datatype = datatype | 0x02;
+					size += sizeof(ev->energyHG[i]);
+				}
+				if (isTSpect) {
+					if (ev->tstamp[i] > 0) {
+						datatype = datatype | 0x10;
+						if (J_cfg.OutFileUnit) size += sizeof(float);
+						else size += sizeof(ev->tstamp[i]);
+					}
+					if (EnableToT && (ev->ToT[i] > 0)) {
+						datatype = datatype | 0x20;
+						if (J_cfg.OutFileUnit) size += sizeof(float);
+						else size += sizeof(ev->ToT[i]);
+					}
+				}
+				data_t[i] = datatype;
+			}
+			RBH_addToBuffer(&size, sizeof(size), 1);
+			RBH_addToBuffer(&b8, sizeof(b8), 1);
+			RBH_addToBuffer(&ts, sizeof(ts), 1);
+			if (dtq & 0x80)	RBH_addToBuffer(&ev->rel_tstamp_us, sizeof(ev->rel_tstamp_us), 1);
+			RBH_addToBuffer(&trgid, sizeof(trgid), 1);
+			RBH_addToBuffer(&ev->chmask, sizeof(ev->chmask), 1);
+			for(i=0; i<MAX_NCH; i++) {
+				if ((ev->chmask >> i) & 1) {
+					uint8_t tmp_type = data_t[i];
+					uint16_t tmp_nrgL = tmp_enL[i];
+					uint16_t tmp_nrgH = tmp_enH[i];
+					float tmpToA = float(ev->tstamp[i] * TOA_LSB_ns);
+          float tmpToT = (tmpToA == 0) ? 0 : float(ev->ToT[i] * TOA_LSB_ns);  // don't write ToT if there is no ToA
+					RBH_addToBuffer(&i, sizeof(i), 1);	// Channel
+					RBH_addToBuffer(&tmp_type, sizeof(tmp_type), 1);
+					if (data_t[i] & 0x01) RBH_addToBuffer(&tmp_nrgL, sizeof(ev->energyLG[i]), 1);
+					if (data_t[i] & 0x02) RBH_addToBuffer(&tmp_nrgH, sizeof(ev->energyHG[i]), 1);
+					if (data_t[i] & 0x10) {
+						if (J_cfg.OutFileUnit) RBH_addToBuffer(&tmpToA, sizeof(float), 1);
+						else RBH_addToBuffer(&ev->tstamp[i], sizeof(ev->tstamp[i]), 1);
+					}
+					if (data_t[i] & 0x20) {
+						if (J_cfg.OutFileUnit) RBH_addToBuffer(&tmpToT, sizeof(float), 1);
+						else RBH_addToBuffer(&ev->ToT[i], sizeof(ev->ToT[i]), 1);
+					}
+				}
+			}
+			RBH_writeToRing();
+		}
 	}
 
 	// ----------------------------------------------------------------------------------
@@ -651,6 +751,24 @@ int SaveList(int brd, double ts, uint64_t trgid, void *generic_ev, int dtq)
 			fprintf(of_list_c, "%s", allChVal);
 			fflush(of_list_c);
 			csv_size = ftell(of_list_c);
+		}
+		// Genie - Copy of statements for of_list_b
+		if (m_writeToRingBuffer) {
+			uint16_t size = sizeof(size) + sizeof(b8) + sizeof(ts) + sizeof(trgid) + sizeof(ev->chmask);
+			if (dtq & 0x80) size += sizeof(ev->rel_tstamp_us);
+			size += num_of_hits * (sizeof(uint8_t) + sizeof(uint64_t));
+			bin_size += size;
+			RBH_addToBuffer(&size, sizeof(size), 1);
+			RBH_addToBuffer(&b8, sizeof(b8), 1);
+			RBH_addToBuffer(&ts, sizeof(ts), 1);
+			if (dtq & 0x80)	RBH_addToBuffer(&ev->rel_tstamp_us, sizeof(ev->rel_tstamp_us), 1);
+			RBH_addToBuffer(&trgid, sizeof(trgid), 1);
+			RBH_addToBuffer(&ev->chmask, sizeof(ev->chmask), 1);
+			for (i = 0; i < num_of_hits; ++i) {
+				RBH_addToBuffer(&chId[i], sizeof(uint8_t), 1);
+				RBH_addToBuffer(&cntW[i], sizeof(uint64_t), 1);
+			}
+			RBH_writeToRing();
 		}
 	}
 
@@ -794,6 +912,54 @@ int SaveList(int brd, double ts, uint64_t trgid, void *generic_ev, int dtq)
 			fprintf(of_list_c, "%s", allChVal);
 			fflush(of_list_c);
 			csv_size = ftell(of_list_c);
+		}
+		// Genie - Copy of statements for of_list_b
+		if (m_writeToRingBuffer) {
+			uint8_t* mydtype = NULL;
+			mydtype = (uint8_t*)malloc(ev->nhits * sizeof(uint8_t));
+			uint16_t size = sizeof(size) + sizeof(b8) + sizeof(ts) + sizeof(ev->nhits); // +sizeof(trgid); //trgid = 0 in timing mode
+			// DNIN: as in Spect, tstamp and ToT may not be in data simultaneously, or simply ToT is disabled.
+			// Size must to be computed hit-wise
+			size += ev->nhits * (sizeof(ev->channel[i]) + sizeof(datatype));
+			for (int chit = 0; chit < ev->nhits; ++chit) {
+				datatype = 0x0;
+				if (ev->tstamp[chit] > 0) {
+					datatype = datatype | 0x10;
+					if (J_cfg.OutFileUnit) size += sizeof(float);
+					else size += sizeof(ev->tstamp[chit]);
+				}
+				if (ev->ToT[chit] > 0 && EnableToT) {
+					datatype = datatype | 0x20;
+					if (J_cfg.OutFileUnit) size += sizeof(float);
+					else size += sizeof(ev->ToT[chit]);
+				}
+				mydtype[chit] = datatype;
+			}
+
+			RBH_addToBuffer(&size, sizeof(size), 1);
+			RBH_addToBuffer(&b8, sizeof(b8), 1);
+			RBH_addToBuffer(&fine_tstamp, sizeof(fine_tstamp), 1);
+			//RBH_addToBuffer(&trgid, sizeof(trgid), 1);
+			RBH_addToBuffer(&ev->nhits, sizeof(ev->nhits), 1);
+			for(i=0; i<ev->nhits; i++) {
+				float tmpToA = float(ev->tstamp[i] * TOA_LSB_ns);
+				float tmpToT = float(ev->ToT[i] * TOA_LSB_ns);
+				datatype = mydtype[i];
+				RBH_addToBuffer(&ev->channel[i], 1, sizeof(ev->channel[i]));
+				// Write Datatype as specttiming
+				RBH_addToBuffer(&datatype, 1, sizeof(datatype));
+				if (datatype & 0x10) {
+					if (J_cfg.OutFileUnit) RBH_addToBuffer(&tmpToA, sizeof(float), 1);
+					else RBH_addToBuffer(&ev->tstamp[i], sizeof(ev->tstamp[i]), 1);
+				}
+				if (datatype & 0x20) {
+					if (J_cfg.OutFileUnit) RBH_addToBuffer(&tmpToT, sizeof(float), 1);
+					else RBH_addToBuffer(&ev->ToT[i], sizeof(ev->ToT[i]), 1);
+				}
+			}
+			RBH_writeToRing();
+			free(mydtype);	// Deallocating memory
+			mydtype = NULL;
 		}
 	}
 

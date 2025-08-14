@@ -1262,6 +1262,69 @@ int RunTimeCmd(int c)
 
 	if (c == '#') PrintMap();
 
+	if (c == 'L') {
+		memset(J_cfg.RunTitle, 0, 81);
+		printf("\nEnter title for this run (Max. 80 characters, type \"empty\" for blank title):\n");
+		int strlen = 0;
+		if (SockConsole) {
+			strlen = Con_GetString(J_cfg.RunTitle, 80);
+			J_cfg.RunTitle[strcspn(J_cfg.RunTitle, "\r")] = 0;
+		} else
+			myscanf("%80[^\n]s", J_cfg.RunTitle);
+		if (strcmp(J_cfg.RunTitle, "empty") == 0) {
+			printf("Title will be empty!\n");
+			memset(J_cfg.RunTitle, 0, 81);
+		}
+	}
+
+	if (c == 'N') {
+		printf("\nEnter a run number:\n");
+		int runNumber = -1;
+		if (!Con_GetInt(&runNumber) && runNumber > -1) {
+			RunVars.RunNumber = runNumber;
+			SaveRunVariables(RunVars);
+		} else {
+			printf("Wrong input received! No change made!\n");
+			while (getchar() != '\n');
+		}
+	}
+
+	if (c == 'i') {
+		printf("\nEnter a source ID:\n");
+		int sourceID = -1;
+		if (!Con_GetInt(&sourceID) && sourceID > -1) {
+			J_cfg.SourceID = sourceID;
+		} else {
+			printf("Wrong input received! No change made!\n");
+			while (getchar() != '\n');
+		}
+	}
+
+	if (c == 'B') {
+		memset(J_cfg.RingBufferName, 0, 50);
+		printf("\nEnter output RingBuffer name (Max. 49 characters, Default 'janus'):\n");
+		int strlen = 0;
+		if (SockConsole) {
+			strlen = Con_GetString(J_cfg.RingBufferName, 49);
+			J_cfg.RingBufferName[strcspn(J_cfg.RingBufferName, "\r")] = 0;
+		} else
+			strlen = myscanf("%49[^\n]s", J_cfg.RingBufferName);
+		if (strlen == 0) {
+			printf("Default RingBuffer name is used: janus\n");
+			strncpy(J_cfg.RingBufferName, "janus", 50);
+		}
+	}
+
+	if (c == 'u') {
+		bool isEnabled = (J_cfg.OutFileEnableMask&0x8000) >> 15;
+		if (isEnabled) {
+			printf("\nTurning OFF using RingBuffer output\n");
+		} else {
+			printf("\nTurning ON using RingBuffer output\n");
+		}
+		J_cfg.OutFileEnableMask ^= 0x8000;
+	}
+
 	if ((c == ' ') && !SockConsole) {
 		if (!offline_conn) {
 			Con_printf("Cm", "[q] Quit\n");
@@ -1276,6 +1339,11 @@ int RunTimeCmd(int c)
 			Con_printf("Cm", "[f] Freeze plot\n");
 			Con_printf("Cm", "[o] One shot plot\n");
 			Con_printf("Cm", "[r] Reset histograms\n");
+			Con_printf("Cm", "[u] Toggle use RingBuffer output (FRIB)\n");
+			Con_printf("Cm", "[i] Set source ID (FRIB)\n");
+			Con_printf("Cm", "[B] Set output RingBuffer name (FRIB)\n");
+			Con_printf("Cm", "[L] Set title for RingStateChangeItem (FRIB)\n");
+			Con_printf("Cm", "[N] Set run number (FRIB)\n");
 			Con_printf("Cm", "[j] Reset jobs (when enabled)\n");
 			Con_printf("Cm", "[y] Scan Thresholds\n");
 			Con_printf("Cm", "[A] Register Access Test\n");
@@ -1304,6 +1372,11 @@ int RunTimeCmd(int c)
 			Con_printf("Cm", "[f] Freeze plot\n");
 			Con_printf("Cm", "[o] One shot plot\n");
 			Con_printf("Cm", "[r] Reset histograms\n");
+			Con_printf("Cm", "[u] Toggle use RingBuffer output (FRIB)\n");
+			Con_printf("Cm", "[i] Set source ID (FRIB)\n");
+			Con_printf("Cm", "[B] Set output RingBuffer name (FRIB)\n");
+			Con_printf("Cm", "[L] Set title for RingStateChangeItem (FRIB)\n");
+			Con_printf("Cm", "[N] Set run number (FRIB)\n");
 			Con_printf("Cm", "[e] Exit this menu\n");
 		}
 		c = Con_getch(); 
@@ -1392,6 +1465,8 @@ int main(int argc, char* argv[])
 	int a1, a2, AllocSize;
 	int ROmode, brdInWarning[MAX_NBRD] = {}, crcBrdError[MAX_NBRD], crcCncError = 0;
 	uint32_t CrcErrorLevel = 1;
+	char port[6] = "";
+	bool devnull = false;
 
 	char description[1024];
 
@@ -1399,6 +1474,8 @@ int main(int argc, char* argv[])
 	for (i = 1; i < argc; i++) {
 		if (argv[i][0] == '-') {
 			if (strcmp(argv[i] + 1, "g") == 0) SockConsole = 1;
+			if (argv[i][1] == 'p') strcpy(port, &argv[i][2]);
+			if (argv[i][1] == 'd') devnull = true;
 			if (argv[i][1] == 'c') strcpy(ConfigFileName, &argv[i][2]);
 			if (argv[i][1] == 'u') {
 				if (argc > (i + 2)) {
@@ -1411,7 +1488,7 @@ int main(int argc, char* argv[])
 	}
 
 	MsgLog = fopen("MsgLog.txt", "w");
-	ret = InitConsole(SockConsole, MsgLog);
+	ret = InitConsole(SockConsole, MsgLog, port);
 	if (ret) {
 		printf(FONT_STYLE_BOLD COLOR_RED "ERROR: init console failed\n" COLOR_RESET);
 		exit(0);
@@ -1704,7 +1781,7 @@ ReadCfg:
 	// -----------------------------------------------------
 	// Open plotter
 	// -----------------------------------------------------
-	OpenPlotter();
+	OpenPlotter(devnull);
 
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++
 Restart:  // when config file changes or a new run of the job is scheduled, the acquisition restarts here // BUG: it does not restart when job is enabled, just when preset time or count is active
@@ -1922,7 +1999,8 @@ Restart:  // when config file changes or a new run of the job is scheduled, the 
 					}
 				}
 				if ((J_cfg.OutFileEnableMask & OUTFILE_LIST_ASCII) || (J_cfg.OutFileEnableMask & OUTFILE_LIST_BIN) 
-					|| (J_cfg.OutFileEnableMask & OUTFILE_SYNC) || (J_cfg.OutFileEnableMask & OUTFILE_LIST_CSV)) {
+					|| (J_cfg.OutFileEnableMask & OUTFILE_SYNC) || (J_cfg.OutFileEnableMask & OUTFILE_LIST_CSV)
+					|| (J_cfg.OutFileEnableMask & OUTFILE_RAW_DATA_RINGBUFFER)) {
 					SaveList(b, Stats.current_tstamp_us[b], Stats.current_trgid[b], Ev, dtq);
 				}
 
@@ -1947,7 +2025,8 @@ Restart:  // when config file changes or a new run of the job is scheduled, the 
 					}
 				}
 				if ((J_cfg.OutFileEnableMask & OUTFILE_LIST_ASCII) || (J_cfg.OutFileEnableMask & OUTFILE_LIST_BIN) 
-					|| (J_cfg.OutFileEnableMask & OUTFILE_SYNC) || (J_cfg.OutFileEnableMask & OUTFILE_LIST_CSV)) {
+					|| (J_cfg.OutFileEnableMask & OUTFILE_SYNC) || (J_cfg.OutFileEnableMask & OUTFILE_LIST_CSV)
+					|| (J_cfg.OutFileEnableMask & OUTFILE_RAW_DATA_RINGBUFFER)) {
 					SaveList(b, Stats.current_tstamp_us[b], Stats.current_trgid[b], Ev, dtq);
 				}
 
@@ -1965,7 +2044,8 @@ Restart:  // when config file changes or a new run of the job is scheduled, the 
 					Stats.trgcnt_update_us[b] = curr_tstamp_us;
 				}
 				if ((J_cfg.OutFileEnableMask & OUTFILE_LIST_ASCII) || (J_cfg.OutFileEnableMask & OUTFILE_LIST_BIN) 
-					|| (J_cfg.OutFileEnableMask & OUTFILE_SYNC) || (J_cfg.OutFileEnableMask & OUTFILE_LIST_CSV)) {
+					|| (J_cfg.OutFileEnableMask & OUTFILE_SYNC) || (J_cfg.OutFileEnableMask & OUTFILE_LIST_CSV)
+					|| (J_cfg.OutFileEnableMask & OUTFILE_RAW_DATA_RINGBUFFER)) {
 					SaveList(b, Stats.current_tstamp_us[b], Stats.current_trgid[b], Ev, dtq);
 				}
 			} else if (dtq == DTQ_WAVE) {

@@ -29,6 +29,8 @@ import ctrl as ctrl
 import tabs as tabs
 import ctypes
 
+import server_for_fribdaq as frib
+
 
 
 if sys.platform.find('win') == 0:
@@ -114,6 +116,10 @@ class Open_GUI(Frame):
 		self.AddMenu()
 		self.update_guimode()
 		self.bglabel.place_forget()
+
+		self.server = Thread(target=frib.ServerForFRIBDAQ, args=[self.Ctrl, self.Tabs])
+		self.server.daemon = True
+		self.server.start()
 
 		# start thread for reading messages from the client and print to output window
 		# self.stop_thread = False
@@ -209,6 +215,7 @@ class Open_GUI(Frame):
 		wrmsg = ""
 		if len(cfg.gain_check) > 0 or len(cfg.empty_field) > 0:
 			for empt in cfg.empty_field:
+				if empt == "RunTitle": return # Skip RunTitle warning
 				empt = self.Tabs.param_rename[empt]
 				mymsg = empt + " entry value is empty. Janus will use its default value\n"
 				wrmsg = wrmsg + empt + "\n"

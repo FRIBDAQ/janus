@@ -128,6 +128,22 @@ void GetDatapath(char* value, Janus_Config_t* J_cfg) {
 	}
 }
 
+void GetTitle(FILE* f_ini, Config_t *WDcfg) {
+	memset(J_cfg->RunTitle, 0, 81);
+
+	while (true) {
+		char str[1000];
+		fscanf(f_ini, "%s", str);
+
+		if (str[0] == '#') {
+			fgets(str, 1000, f_ini);
+			break;
+		}
+
+		strcat(J_cfg->RunTitle, str);
+	}
+}
+
 // ---------------------------------------------------------------------------------
 // Description: Read an integer (decimal) from the conig file
 // Inputs:		f_ini: config file
@@ -529,6 +545,10 @@ int ParseConfigFile(FILE* f_ini, Janus_Config_t* J_cfg, int ParseMode)
 		if (streq(parname, "OF_RunInfo"))				J_cfg->OutFileEnableMask	= SETBIT(J_cfg->OutFileEnableMask, OUTFILE_RUN_INFO, GetInt(parval));
 		if (streq(parname, "OF_ServiceInfo"))			J_cfg->OutFileEnableMask	= SETBIT(J_cfg->OutFileEnableMask, OUTFILE_SERVICE_INFO, GetInt(parval));
 		if (streq(parname, "OF_MCS"))					J_cfg->OutFileEnableMask	= SETBIT(J_cfg->OutFileEnableMask, OUTFILE_MCS_HISTO, GetInt(parval));
+		if (streq(parname, "RingBuffer"))				J_cfg->OutFileEnableMask    = SETBIT(J_cfg->OutFileEnableMask, OUTFILE_RAW_DATA_RINGBUFFER, GetInt(f_ini));
+		if (streq(parname, "SourceID"))			        J_cfg->SourceID = GetInt(f_ini);
+		if (streq(parname, "RingBufferName"))			fscanf(f_ini, "%s", J_cfg->RingBufferName);
+		if (streq(parname, "RunTitle"))					GetTitle(f_ini, J_cfg);
 		if (streq(parname, "TstampCoincWindow"))		J_cfg->TstampCoincWindow	= (uint32_t)GetTime(parval, "ns");
 		if (streq(parname, "PresetTime"))				J_cfg->PresetTime			= GetTime(parval, "s");
 		if (streq(parname, "PresetCounts"))				J_cfg->PresetCounts			= GetInt(parval);

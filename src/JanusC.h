@@ -96,6 +96,7 @@
 #define OUTFILE_MCS_HISTO				0x0200
 #define OUTFILE_SYNC					0x0400
 #define OUTFILE_SERVICE_INFO			0x0800
+#define OUTFILE_RAW_DATA_RINGBUFFER		0x8000 // Genie: In case Caen adds something after the last one
 
 #define OF_UNIT_LSB						0
 #define OF_UNIT_NS						1
@@ -193,6 +194,9 @@ typedef struct Config_t {
 	int EnLiveParamChange;			// Enable param change while running (when disabled, Janus will stops and restarts the acq. when a param changes)
 	int AskHVShutDownOnExit;		// Ask if the HV must be shut down before quitting
 	int OutFileEnableMask;			// Enable/Disable output files 
+	int SourceID;                   // Source ID in FRIBDAQ stack (FRIB)
+	char RingBufferName[50];       // RingBuffer Name (FRIB)
+	char RunTitle[81];              // Run title for RingStateChangeItem (FRIB)
 	char DataFilePath[500];			// Output file data path
 	uint8_t EnableMaxFileSize;		// Enable the Limited size for list output files. Value set in MaxOutFileSize parameter
 	float MaxOutFileSize;			// Max size of list output files in bytes. Minimum size allowed 1 MB

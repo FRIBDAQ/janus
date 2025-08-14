@@ -53,6 +53,10 @@ OF_ToAHisto                        0                   # ToA spectrum
 OF_ToTHisto                        0                   # ToT spectrum
 OF_MCS                             0                   # MCS Spectrum
 OF_Staircase                       0                   # Staircase
+RingBuffer                         0                   # Data to RingBuffer
+SourceID                           0                   # Source ID in FRIBDAQ stack
+RingBufferName                     janus               # RingBuffer Name
+RunTitle                           ""                  # Run title for RingStateChangeItem
 
 # ------------------------------------------------------------------------------------------
 # AcqMode

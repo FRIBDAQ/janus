@@ -1,7 +1,9 @@
+NSCLDAQ=$(DAQROOT)
+
 TARGET = JanusC
 CXX = g++
-CFLAGS = -Wall -Wno-write-strings -std=c++17 -Dlinux
-LDFLAGS = -pthread -lrt 
+CFLAGS = -Wall -Wno-write-strings -std=c++17 -Dlinux -I$(NSCLDAQ)/include
+LDFLAGS = -pthread -lrt -L$(NSCLDAQ)/lib -Wl,-rpath=$(NSCLDAQ)/lib -ldataformat -lDataFlow -lException
 LDPATH = -Lferslib/local/lib
 INCLUDE = -I/usr/include/libusb-1.0
 INCLUDELIB = -Iferslib/local/include
@@ -19,14 +21,17 @@ default: $(TARGET)
 conversion: $(TARGETMACRO)
 all: default conversion
 
-OBJECTS = $(SRCDIR)/console.o $(SRCDIR)/FERSutils.o $(SRCDIR)/JanusC.o $(SRCDIR)/MultiPlatform.o $(SRCDIR)/outputfiles.o $(SRCDIR)/paramparser.o $(SRCDIR)/plot.o $(SRCDIR)/Statistics.o
+OBJECTS = $(SRCDIR)/console.o $(SRCDIR)/FERSutils.o $(SRCDIR)/JanusC.o $(SRCDIR)/MultiPlatform.o $(SRCDIR)/outputfiles.o $(SRCDIR)/paramparser.o $(SRCDIR)/plot.o $(SRCDIR)/Statistics.o $(SRCDIR)/RingBufferHandler.o $(SRCDIR)/RBHWrapper.o
 
 $(SRCDIR)/%.o: $(SRCDIR)/%.c
 	$(CXX) $(CFLAGS) -D$(MYDEF) -c $< -o $@ $(INCLUDELIB)
 	
 $(SRCDIR)/%.o: $(SRCDIR)/%.cpp
 	$(CXX) $(CFLAGS) -D$(MYDEF) -c $< -o $@ $(INCLUDE) $(INCLUDELIB)
-	
+
+$(SRCDIR)/RingBufferHandler.o: $(SRCDIR)/RingBufferHandler.cpp
+	$(CC) $(CFLAGS) -std=c++11 -c $< -o $@ $(INCLUDE) $(LDFLAGS)
+
 #OBJECT = $(OBJECT) FERS_LLusb.o
 	
 .PRECIOUS: $(TARGET) $(OBJECTS)
