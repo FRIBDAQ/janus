@@ -1,6 +1,6 @@
 #	Copyright (C) 2020-2023 CAEN SpA
 #
-#	This file is part of the CAEN Dig2 Low Level Library.
+#	This file is part of the CAEN FERS Low Level Library.
 
 ACLOCAL_AMFLAGS = -I m4
 SUBDIRS = src
@@ -14,7 +14,7 @@ dist_noinst_HEADERS = \
 	include/FERS_LLusb.h \
 	include/FERS_config.h \
 	include/FERS_paramparser.h 	
-EXTRA_DIST = FERSlibDemo README ReleaseNotes.txt doc/html/
-ferslibdocdir = $(docdir)
-dist_ferslibdoc_DATA = \
-	doc/documentation.tar.gz
+EXTRA_DIST = FERSlibDemo README ReleaseNotes.txt doc/html
+#ferslibdocdir = $(docdir)
+#dist_ferslibdoc_DATA = \
+#	doc/documentation.tar.gz

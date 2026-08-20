@@ -64,7 +64,6 @@ typedef struct {
 	int wpnt, rpnt; // pointers
 } SocketBuffer_t;
 
-
 #ifdef linux
     #include <sys/time.h> /* struct timeval, select() */
     #include <termios.h>  /* tcgetattr(), tcsetattr() */

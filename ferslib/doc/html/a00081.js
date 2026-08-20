@@ -1,0 +1,105 @@
+var a00081 =
+[
+    [ "SpectEvent_t", "a00139.html", [
+      [ "tstamp_us", "a00139.html#a3910478268d5c9fa19ab68084cbe8195", null ],
+      [ "rel_tstamp_us", "a00139.html#a2b3208fa9688764fcab912d52f700b7f", null ],
+      [ "tstamp_clk", "a00139.html#af0fcb8217ed82b6bd7f7d5d23d7912a3", null ],
+      [ "Tref_tstamp", "a00139.html#a0e861894bce57948ad0c12e3a00d0abc", null ],
+      [ "trigger_id", "a00139.html#ad55fb5f524440d8935780ee42b9ab099", null ],
+      [ "chmask", "a00139.html#ac68b66c6b15066ab7f3e4a26db7de8e1", null ],
+      [ "qdmask", "a00139.html#a82fb92352a02a70f14efa099c9427d90", null ],
+      [ "energyHG", "a00139.html#a92a18f85977e6f62bb7342282a557abf", null ],
+      [ "energyLG", "a00139.html#a40699a4c602273a034fe61130599046a", null ],
+      [ "tstamp", "a00139.html#ae32044fc39e9e22c6cebc861b5b8b50a", null ],
+      [ "ToT", "a00139.html#aa3c3cb15c1d76366bf8f1d6660f9253a", null ]
+    ] ],
+    [ "CountingEvent_t", "a00143.html", [
+      [ "tstamp_us", "a00143.html#a3910478268d5c9fa19ab68084cbe8195", null ],
+      [ "rel_tstamp_us", "a00143.html#a2b3208fa9688764fcab912d52f700b7f", null ],
+      [ "trigger_id", "a00143.html#ad55fb5f524440d8935780ee42b9ab099", null ],
+      [ "chmask", "a00143.html#ac68b66c6b15066ab7f3e4a26db7de8e1", null ],
+      [ "counts", "a00143.html#afa6fee4c52670e03d2b50840e2389b30", null ],
+      [ "t_or_counts", "a00143.html#ae7da8ea4c5c949691927ef06c2f92dfc", null ],
+      [ "q_or_counts", "a00143.html#a2b9d1220a4230cdc313cf38ae1a3c060", null ]
+    ] ],
+    [ "CountingEvent_5204_t", "a00147.html", [
+      [ "tstamp_us", "a00147.html#a3910478268d5c9fa19ab68084cbe8195", null ],
+      [ "rel_tstamp_us", "a00147.html#a2b3208fa9688764fcab912d52f700b7f", null ],
+      [ "trigger_id", "a00147.html#ad55fb5f524440d8935780ee42b9ab099", null ],
+      [ "chmask", "a00147.html#ac68b66c6b15066ab7f3e4a26db7de8e1", null ],
+      [ "counts", "a00147.html#afa6fee4c52670e03d2b50840e2389b30", null ],
+      [ "t1_or_counts", "a00147.html#ad12a09842a70559c9e1528d00cdc1498", null ],
+      [ "t2_or_counts", "a00147.html#aa14c37d99d928807cc9cf5f6e94ba3e7", null ]
+    ] ],
+    [ "WaveEvent_t", "a00151.html", [
+      [ "tstamp_us", "a00151.html#a3910478268d5c9fa19ab68084cbe8195", null ],
+      [ "trigger_id", "a00151.html#ad55fb5f524440d8935780ee42b9ab099", null ],
+      [ "ns", "a00151.html#aa621ccbc8c262d784aede40ce31a7f98", null ],
+      [ "wave_hg", "a00151.html#aa7f0c94fae796814461ebb9659b5aa9b", null ],
+      [ "wave_lg", "a00151.html#abbeb506076c4669d81670e7d5f963550", null ],
+      [ "dig_probes", "a00151.html#a02f87a4018ffd8005831ce3b4a2d1045", null ]
+    ] ],
+    [ "ListEvent_t", "a00155.html", [
+      [ "tstamp_us", "a00155.html#a3910478268d5c9fa19ab68084cbe8195", null ],
+      [ "Tref_tstamp", "a00155.html#a384da401a0e80ab9d1fc8674dac42675", null ],
+      [ "tstamp_clk", "a00155.html#af0fcb8217ed82b6bd7f7d5d23d7912a3", null ],
+      [ "trigger_id", "a00155.html#ad55fb5f524440d8935780ee42b9ab099", null ],
+      [ "nhits", "a00155.html#a33d602c2d56bd128ee277e1d8a950028", null ],
+      [ "header1", "a00155.html#a08b0b848573b5a84d1dbf497d80e4bc7", null ],
+      [ "header2", "a00155.html#a80a34df41151a9744a043bcc478a1d75", null ],
+      [ "ow_trailer", "a00155.html#aaad59b141738e883b58b85f06d51e640", null ],
+      [ "trailer", "a00155.html#a83cf4301d95e7c900f00da716e5a218a", null ],
+      [ "channel", "a00155.html#aad141c60e03f0aeb0e73a8ceff10fce5", null ],
+      [ "edge", "a00155.html#a6cdae0083bfd8be6fac29e057f03ead5", null ],
+      [ "tstamp", "a00155.html#af766b352ea6868a0b3367b952cc51d1d", null ],
+      [ "ToA", "a00155.html#a0abe42c3b79e0fdd12bd743b03ac2803", null ],
+      [ "ToT", "a00155.html#afe3f8047c1060192c1e5156822f86de4", null ]
+    ] ],
+    [ "ListEvent_5204_t", "a00159.html", [
+      [ "tstamp_us", "a00159.html#a3910478268d5c9fa19ab68084cbe8195", null ],
+      [ "tstamp_clk", "a00159.html#af0fcb8217ed82b6bd7f7d5d23d7912a3", null ],
+      [ "trigger_id", "a00159.html#ad55fb5f524440d8935780ee42b9ab099", null ],
+      [ "nhits", "a00159.html#a33d602c2d56bd128ee277e1d8a950028", null ],
+      [ "ch_flags", "a00159.html#a7dbcc9a85b25a4cc9125d1f7194493f7", null ],
+      [ "gr_flags", "a00159.html#a3aa255f69dc5ad94ce105bd48030a2ba", null ],
+      [ "channel", "a00159.html#aad141c60e03f0aeb0e73a8ceff10fce5", null ],
+      [ "ToA", "a00159.html#a0abe42c3b79e0fdd12bd743b03ac2803", null ],
+      [ "ToT", "a00159.html#afe3f8047c1060192c1e5156822f86de4", null ]
+    ] ],
+    [ "ServEvent5204_t", "a00163.html", [
+      [ "tstamp_us", "a00163.html#a3910478268d5c9fa19ab68084cbe8195", null ],
+      [ "update_time", "a00163.html#a80e980f3cd66afd59868c2747c75cda1", null ],
+      [ "pkt_size", "a00163.html#af26c62179cae5a2798f0c77dbcc3327c", null ],
+      [ "version", "a00163.html#ab22abc2906422da61885ac6c8e6a1a59", null ],
+      [ "format", "a00163.html#a7864fd50d470f893524181b4a59d9828", null ],
+      [ "ch_trg_cnt", "a00163.html#a15c31f621a020883435bcb3be335343e", null ],
+      [ "q_or_cnt", "a00163.html#a55c32cac234e6c1b676245c59e080c46", null ],
+      [ "t_or_cnt", "a00163.html#a4dda054f86086a28c6b261cdb26b9ec5", null ],
+      [ "t1_or_cnt", "a00163.html#a3675e65ba4fd13104eb9d4adbec85f87", null ],
+      [ "t2_or_cnt", "a00163.html#ab2cb85b425135673ccdddac76fcd590e", null ],
+      [ "tempFPGA", "a00163.html#ac8a1e8d07e492e30519b7c9e26be6357", null ],
+      [ "tempBoard", "a00163.html#af6dad84da1e680713731353f2e6c4e01", null ],
+      [ "tempTDC", "a00163.html#a0a9fa9fb31612af559c280410286e5ad", null ],
+      [ "tempHV", "a00163.html#a68c508e1ce7ea9e6e94e1829a0c48542", null ],
+      [ "tempDetector", "a00163.html#a69a204836413c009880954688711189f", null ],
+      [ "hv_Vmon", "a00163.html#a3169b74d10cd84679532d1be9a90dceb", null ],
+      [ "hv_Imon", "a00163.html#aba3db8d4b8356c12c23faec6d797d224", null ],
+      [ "hv_status_on", "a00163.html#a2cfe8dd607aa24a2d361319813f16a59", null ],
+      [ "hv_status_ramp", "a00163.html#ae301bbd321f1d5fec696792155cac967", null ],
+      [ "hv_status_ovv", "a00163.html#a2b7c07660ce2d1c679634d5ded171529", null ],
+      [ "hv_status_ovc", "a00163.html#adf7a5d00937b3d0f492edb75537bb894", null ],
+      [ "Status", "a00163.html#ada867201db4267c42d610764b42b9525", null ],
+      [ "TDCROStatus", "a00163.html#a7ae3bd5be793e5f1348c26f5f07bdaad", null ],
+      [ "ChAlmFullFlags", "a00163.html#aefbcda3aa8ca621c15f7ad94e2e2032e", null ],
+      [ "ReadoutFlags", "a00163.html#a0661a91caf3a102cf354c9769f15df86", null ],
+      [ "TotTrg_cnt", "a00163.html#ad3ae9238c9e61dfe395482e09a20624b", null ],
+      [ "RejTrg_cnt", "a00163.html#ad884e1d141ee4ea7fe7547ba6e6c521b", null ],
+      [ "SupprTrg_cnt", "a00163.html#a263e3429ff8c11046c636d4b325cbc35", null ]
+    ] ],
+    [ "TestEvent_t", "a00175.html", [
+      [ "tstamp_us", "a00175.html#a3910478268d5c9fa19ab68084cbe8195", null ],
+      [ "trigger_id", "a00175.html#ad55fb5f524440d8935780ee42b9ab099", null ],
+      [ "nwords", "a00175.html#aa231dd283544fe9246bd1b9373877ec0", null ],
+      [ "test_data", "a00175.html#a25e2198100421e35c991b89f3ad80a86", null ]
+    ] ]
+];

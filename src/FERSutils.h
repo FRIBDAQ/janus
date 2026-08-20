@@ -23,12 +23,12 @@
 #define SCAN_HDLY_FILENAME	"ScanHoldDelay.txt"
 
 // simplified version of the GetParam
-int FERS_GetParam_int(int handle, char *param_name);
-uint32_t FERS_GetParam_uint32(int handle, char* param_name);
-uint64_t FERS_GetParam_uint64(int handle, char* param_name);
-uint32_t FERS_GetParam_hex(int handle, char* param_name);
-uint64_t FERS_GetParam_hex64(int handle, char* param_name);
-float FERS_GetParam_float(int handle, char *param_name);
+int FERS_GetParam_int(int handle, const char *param_name);
+uint32_t FERS_GetParam_uint32(int handle, const char* param_name);
+uint64_t FERS_GetParam_uint64(int handle, const char* param_name);
+uint32_t FERS_GetParam_hex(int handle, const char* param_name);
+uint64_t FERS_GetParam_hex64(int handle, const char* param_name);
+float FERS_GetParam_float(int handle, const char *param_name);
 
 // Channel to Pixel Remapping
 int Read_ch2xy_Map (char *filename);
@@ -48,5 +48,7 @@ int AcquirePedestals(int handle, uint16_t *pedestalLG, uint16_t *pedestalHG);
 int ScanThreshold(int handle);
 int ScanHoldDelay(int handle);
 
+// Other utilities
+int compare_version(const char* v1, const char* v2);
 
 #endif

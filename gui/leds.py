@@ -1,6 +1,8 @@
 from tkinter import *
         
-class Led:   #  DNIN: We can inherit Widget from Tkinter to use its function and make the class more complete and powerfull
+class Led:   # Possible improvement: inherit from Canvas
+	"""A simple LED widget for Tkinter."""
+	# Constructor
 	def __init__(self, master, size=20):
 		self.size = size
 		self.master = master

@@ -27,6 +27,8 @@
 #include "FERSlib.h"	
 #include "FERS_config.h"
 
+int CncClkSrcChanged[FERSLIB_MAX_NCNC] = { 1, 1, 1, 1 };		//!< Flag indicating that the clock source has been changed for the concentrator
+
 
 // **********************************************
 //  CONFIGURE FERS
@@ -35,18 +37,31 @@ int FERS_configure(int handle, int mode)
 {
 	int brd = FERS_INDEX(handle);
 	int ret = 0;
+	FERS_LibMsg("Start FERS board %02d configuration\n", brd);
 	lock(FERScfg[brd]->bmutex);
 	if (FERS_BoardInfo[brd]->FERSCode == 5202)
-		ret |= Configure5202(handle, mode);
+		ret |= Configure5202(handle, mode);  
 	if (FERS_BoardInfo[brd]->FERSCode == 5203)
 		ret |= Configure5203(handle, mode);
-	if (FERS_BoardInfo[brd]->FERSCode == 5204)
+	if (FERS_BoardInfo[brd]->FERSCode == 5204 || FERS_BoardInfo[brd]->FERSCode == 5205)
 		ret |= Configure5204(handle, mode);
 	unlock(FERScfg[brd]->bmutex);
+
+	FERS_LibMsg("FERS board %02d configuration completed\n", brd);
 
 	if (DebugLogs && DBLOG_CONFIG)
 		FERS_DumpBoardRegister(handle);
 
+	return ret;
+}
+
+
+int FERS_PostConfigure() {
+	int ret = 0;
+	// need re-sync of chain if clock phase has been changed
+	if (ReSync) {
+		ret |= FERS_SyncTDLchains(CncHandles, FERScfg[0]->StartRunMode); // 
+	}
 	return ret;
 }
 
@@ -60,6 +75,8 @@ int ConfigureProbe(int handle) {
 		ret |= ConfigureProbe5203(handle);
 	if (FERS_BoardInfo[brd]->FERSCode == 5204)
 		ret |= ConfigureProbe5204(handle);
+	if (FERS_BoardInfo[brd]->FERSCode == 5205)		
+		ret |= ConfigureProbe5205(handle);
 
 	return ret;
 }
@@ -72,7 +89,7 @@ int FERS_DumpBoardRegister(int handle) {
 	int brd = FERS_INDEX(handle);
 	int ret = 0;
 	char filename[128];
-	sprintf(filename, "FERSLIB_brd_registers_brd%02d_PID%d.txt", brd, FERS_BoardInfo[brd]->pid);
+	sprintf(filename, "FERSLIB_Registers_brd%02d_PID%d.txt", brd, FERS_BoardInfo[brd]->pid);
 	if (FERS_BoardInfo[brd]->FERSCode == 5202)
 		ret |= FERS_DumpBoardRegister5202(handle, filename);
 	if (FERS_BoardInfo[brd]->FERSCode == 5203)

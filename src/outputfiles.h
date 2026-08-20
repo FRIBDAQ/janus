@@ -33,8 +33,9 @@ int CloseOutputFiles();
 int SaveRawData(uint32_t *buff, int nw);
 int SaveList(int brd, double ts, uint64_t trgid, void *generic_ev, int dtq);
 int SaveHistos();
-int WriteTempHV(uint64_t pc_tstamp, ServEvent_t sev[MAX_NBRD]);
+int WriteTempHV(uint64_t pc_tstamp, ServEvent5202_t sev[MAX_NBRD]);
 int SaveRunInfo();
 //int SaveMeasurement();
+
 
 #endif

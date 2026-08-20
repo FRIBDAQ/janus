@@ -25,6 +25,7 @@
 f_socket_t ConSocket = 0;	// 0: stdio console; 1: console I/O through socket 
 FILE *ConLog = NULL;
 SocketBuffer_t Sbuff; 
+mutex_t ConMutex;  // to guard the Con_printf
 
 #ifdef linux
 
@@ -203,7 +204,7 @@ int ConnectSocket()
 	// Start Listen thread
 	//DWORD prodThrdID;
 	//_beginthreadex(NULL, 0, (unsigned int(__stdcall *)(void*))ListenThread, 0, 0, (unsigned int *)&prodThrdID);
-	f_thread_t prodThrdID;
+	j_thread_t prodThrdID;
 	thread_create(ListenThread, NULL, &prodThrdID);
 	return 0;
 }
@@ -278,7 +279,7 @@ int InitConsole(int Mode, FILE *log)
 		// Set console window size
 		SMALL_RECT rect;
 		COORD coord;
-		coord.X = 150; // Defining our X and
+		coord.X = 1000; // Defining our X and  era 150
 		coord.Y = 50;  // Y size for buffer.
 
 		rect.Top = 100;
@@ -434,6 +435,8 @@ int Con_GetInt(int *val)
 	if (!ConSocket) {
 		if (myscanf("%d", val) != 1)	// scanf
 			ret = -1;
+		int dump;
+		while (((dump=getchar()) != '\n') && dump!=EOF); // clear input buffer
 	}
 	else {
 		char data[SOCKET_BUFFER_SIZE];
@@ -473,7 +476,6 @@ int SendDataToGUI(char* data, int size)
 {
 	//	c_send(const c_socket_t * sckt, const void* buffer, size_t totSize)
 	if (send(ConSocket, data, size, 0) < 0) {	// send IS multiplatform!!!
-		Con_printf("L", "ERROR: send data to socket failed\n");
 
 #ifdef _WIN32
 		WSACleanup();	// only on windows?
@@ -490,6 +492,7 @@ int SendDataToGUI(char* data, int size)
 // --------------------------------------------------------------------------------------------------------- 
 int Con_printf(const char *dest, const char *fmt, ...) 
 {
+	lock(ConMutex);	// to avoid interleaving of messages in case of multiple threads
 	const int msize = 2048;
 	char msg[1000];
 	uint16_t size;
@@ -518,7 +521,22 @@ int Con_printf(const char *dest, const char *fmt, ...)
 		//buff[2] = *(strstr(dest, "S")+1);  // destination of data packet in GUI program ('m' = log messsages, 's' = statistics, 'i' = info)
 		memcpy(buff+2, sdest, sizeof(sdest));
 		memcpy(buff+2+strlen(sdest), msg, sizeof(msg));
-		SendDataToGUI(buff, size);
+		if (SendDataToGUI(buff, size) < 0) {
+			uint64_t elapsed_time;
+			uint64_t log_time = j_get_time();
+			char type[50];
+			char mmsg[1100];
+
+			elapsed_time = log_time;
+			uint64_t ms = elapsed_time % 1000;
+			uint64_t s = (elapsed_time / 1000) % 60;
+			uint64_t m = (elapsed_time / 60000) % 60;
+			uint64_t h = (elapsed_time / 3600000);
+
+			sprintf(mmsg, "[%02dh:%02dm:%02ds:%03dms][JE] ERROR: send data to socket failed\n", (int)h, (int)m, (int)s, (int)ms);
+			fprintf(ConLog, "%s", mmsg); // Write to Log File
+			fflush(ConLog);
+		}
 	}
 		
 	if ((ConLog != NULL) && (strstr(dest, "L"))) {
@@ -555,6 +573,7 @@ int Con_printf(const char *dest, const char *fmt, ...)
 		fprintf(ConLog, "%s", mmsg); // Write to Log File
 		fflush(ConLog);
 	}
+	unlock(ConMutex);
 	return 0;
 }
 

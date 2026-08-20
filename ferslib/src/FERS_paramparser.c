@@ -82,13 +82,19 @@ char* trim(char* s) {
 // ---------------------------------------------------------------------------------
 // Get a 32 bit decimal 
 // ---------------------------------------------------------------------------------
-static uint32_t GetInt(char *val)
+static uint32_t GetInt(char* val)
 {
-	uint32_t ret=0;
+	int ret = 0;
 	int num = sscanf(val, "%d", &ret);
+	//if (strstr(val, "x")) return GetHex32(val);
 	if (ret < 0 || num < 1) ValidParameterValue = 0;
 	else ValidParameterValue = 1;
 	return ret;
+}
+
+static uint32_t GetUint(char *val)
+{
+	return (uint32_t)GetInt(val);
 }
 
 // ---------------------------------------------------------------------------------
@@ -449,15 +455,14 @@ static void SetChannelParamFloat(int handle, float *param, float val, int ch) {
 // #################################################################################
 // Set/Get Parameter
 // #################################################################################
-
 // ---------------------------------------------------------------------------------
 // Description: Inizialize Configuration for each opened board
 // Inputs:		brd: board index
 // Outputs:		-
 // Return:		0=OK, -1=error
 // ---------------------------------------------------------------------------------
-static int _SetDefaultConfig(int brd) {
-
+int _setDefaultConfig(int brd)
+{
 	// reset all parameters, then set the default value of those ones that are not zero
 	memset(FERScfg[brd], 0, sizeof(Config_t));
 
@@ -468,6 +473,7 @@ static int _SetDefaultConfig(int brd) {
 	FERScfg[brd]->MaxSizeDataOutputFile = 1e9;
 	FERScfg[brd]->OF_RawDataPath[0] = '\0';
 
+	StartRunMode = STARTRUN_ASYNC;
 	FERScfg[brd]->StartRunMode = STARTRUN_ASYNC;			// Start Mode
 	FERScfg[brd]->StopRunMode = STOPRUN_MANUAL;				// Stop Mode
 
@@ -502,8 +508,8 @@ static int _SetDefaultConfig(int brd) {
 	FERScfg[brd]->TestPulseDestination = 0;					// -1=ALL, -2=EVEN, -3=ODD or channel number (0 to 63) for single channel pulsing
 	FERScfg[brd]->TestPulsePreamp = TEST_PULSE_PREAMP_BOTH;	// 1=LG, 2=HG, 3=BOTH
 	FERScfg[brd]->WaveformLength = 800;						// Num of samples in the waveform
-	FERScfg[brd]->HeaderField0 = 4;
-	FERScfg[brd]->HeaderField1 = 5;
+	FERScfg[brd]->HeaderField0 = 5;
+	FERScfg[brd]->HeaderField1 = 4;
 	FERScfg[brd]->LeadTrail_LSB = 1;
 	FERScfg[brd]->ToT_LSB = 1;
 	FERScfg[brd]->TrgWindowWidth = 1000;
@@ -530,8 +536,8 @@ static int _SetDefaultConfig(int brd) {
 	FERScfg[brd]->EnableChannelTrgout = 1;					// 0 = Channel Trgout Disabled, 1 = Enabled
 	FERScfg[brd]->FastShaperInput = 0;						// Fast Shaper (Tdiscr) connection: 0 = High Gain PA, 1 = Low Gain PA
 	FERScfg[brd]->CncBufferSize = 0;
-	FERScfg[brd]->CncProbe_A = (uint32_t)-1;
-	FERScfg[brd]->CncProbe_B = (uint32_t)-1;
+	FERScfg[brd]->CncProbe_A = (uint32_t)0;
+	FERScfg[brd]->CncProbe_B = (uint32_t)0;
 
 	FERScfg[brd]->HV_Vbias = 55;							// Voltage setting for HV
 	FERScfg[brd]->HV_Imax = 1.0;							// Imax for HV
@@ -555,12 +561,12 @@ static int _SetDefaultConfig(int brd) {
 		FERScfg[brd]->DiscrThreshold2[i] = 100;				// Discriminator 2nd Threshold (double thershold mode only)
 	}
 	FERScfg[brd]->A5256_Ch0Polarity = A5256_CH0_DUAL;		// Polarity of Ch0 in A5256 (POS, NEG)
+	FERScfg[brd]->TestMode = 0;							
 
 	// Generic write accesses 
 	FERScfg[brd]->GWn = 0;
 	return 0;
 }
-
 
 
 // ---------------------------------------------------------------------------------
@@ -583,20 +589,54 @@ int FERS_SetParam(int handle, const char *param_name, const char *value_original
 	brd = FERS_INDEX(handle);
 
 	if (brd < 0 || brd > FERSLIB_MAX_NBRD) {
-		_setLastLocalError("Set Param: brd index %d out of range", brd);
+		FERS_LibMsg("[ERROR] Parameter %s: brd index out of range (brd connected = %d)\n", param_name, NumBoardConnected);
+		_setLastLocalError("Set Param %s: brd index out of range (brd connected = %d)", param_name, NumBoardConnected);
 		free(str_to_split);
 		return FERSLIB_ERR_INVALID_HANDLE;
 	}
+
+	// For SyncMode must be set before connect, it stays in this first version
+	if (!BoardConnected[brd]) {
+		if (streq(before_str, "StartRunMode")) {
+			char* value = j_strdup(value_original);
+			if (streq(value, "MANUAL"))					StartRunMode = STARTRUN_ASYNC;  // keep "MANUAL" option for backward compatibility
+			else if (streq(value, "ASYNC"))				StartRunMode = STARTRUN_ASYNC;
+			else if (streq(value, "CHAIN_T0"))			StartRunMode = STARTRUN_CHAIN_T0;
+			else if (streq(value, "CHAIN_T1"))			StartRunMode = STARTRUN_CHAIN_T1;
+			else if (streq(value, "TDL"))				StartRunMode = STARTRUN_TDL;
+			else if (streq(value, "TDL_EXTRUN"))		StartRunMode = STARTRUN_TDL_EXTRUN;
+			else if (streq(value, "TDL_GPS"))			StartRunMode = STARTRUN_TDL_GPS;
+			else {
+				_setLastLocalError("WARNING: %s: unkown parameter\n", before_str);
+				free(str_to_split);
+				free(value);
+				return FERSLIB_ERR_INVALID_PARAM;
+			}
+
+			free(str_to_split);
+			free(value);
+
+			return 0;
+		}
+		if (streq(before_str, "DebugLogMask")) {
+			char* value = j_strdup(value_original);
+			DebugLogs = GetHex32(value);
+			free(str_to_split);
+			free(value);
+			return 0;
+		}
+	}
+
 	if (!BoardConnected[brd]) {
 		_setLastLocalError("Set Param: brd %d not connected", brd);
 		free(str_to_split);
 		return FERSLIB_ERR_OPER_NOT_ALLOWED;
 	}
 
-	if (!SetDefault[brd]) {
-		_SetDefaultConfig(brd);
-		SetDefault[brd] = 1;
-	}
+	//if (!FERScfg[brd]->DefaultSet) {
+	//	_SetDefaultConfig(brd);
+	//	FERScfg[brd]->DefaultSet = 1;
+	//}
 
 	if (token != NULL) {
 		sscanf(token, "%d", &ch);
@@ -609,7 +649,7 @@ int FERS_SetParam(int handle, const char *param_name, const char *value_original
 	// Some name replacement for back compatibility
 	char* str = NULL;
 	if (streq(before_str, "TriggerSource"))
-		str = j_strdup("BunchtrgSource");
+		str = j_strdup("BunchTrgSource");
 	else if (streq(before_str, "DwellTime"))
 		str = j_strdup("PtrgPeriod");
 	else if (streq(before_str, "Hit_HoldOff"))
@@ -622,6 +662,8 @@ int FERS_SetParam(int handle, const char *param_name, const char *value_original
 		str = j_strdup("QD_Mask1");
 	else if (streq(before_str, "Q_DiscrMask"))
 		str = j_strdup("QD_Mask");
+	//else if (streq(before_str, "StartRunMode"))
+	//	str = j_strdup("SyncMode");
 	else
 		str = j_strdup(before_str);
 
@@ -634,11 +676,10 @@ int FERS_SetParam(int handle, const char *param_name, const char *value_original
 	// -------------------------------------------------------------
 	// Raw Data Saving
 	// -------------------------------------------------------------
-	if (streq(str, "OF_RawData") && !FERS_Offline)		FERScfg[brd]->OF_RawData			= GetInt(value);
-	if (streq(str, "OF_LimitedSize"))		FERScfg[brd]->OF_LimitedSize		= GetInt(value);
-	if (streq(str, "MaxSizeOutputFile"))	FERScfg[brd]->MaxSizeDataOutputFile = GetFloat(value);
-	if (streq(str, "OF_RawDataPath"))		GetDatapath(value, FERScfg[brd]);
-
+	if (streq(str, "OF_RawData") && !FERS_Offline)		FERScfg[brd]->OF_RawData			= (uint8_t)GetInt(value);
+	if (streq(str, "OF_LimitedSize"))					FERScfg[brd]->OF_LimitedSize		= (uint8_t)GetInt(value);
+	if (streq(str, "MaxSizeDataOutputFile"))			FERScfg[brd]->MaxSizeDataOutputFile = GetFloat(value);
+	if (streq(str, "OF_RawDataPath"))					GetDatapath(value, FERScfg[brd]);
 	// -------------------------------------------------------------
 	// Generic Register Read/Write
 	// -------------------------------------------------------------
@@ -683,6 +724,7 @@ int FERS_SetParam(int handle, const char *param_name, const char *value_original
 			else if (streq(value, "WAVEFORM"))				FERScfg[brd]->AcquisitionMode = ACQMODE_WAVE;
 			else ValidParameterValue = 0;
 		} else if (FERS_Code(handle) == 5203) {
+			FERScfg[brd]->TestMode = 0;
 			if (streq(value, "TRG_MATCHING"))				FERScfg[brd]->AcquisitionMode = ACQMODE_TRG_MATCHING;
 			else if (streq(value, "COMMON_START"))			FERScfg[brd]->AcquisitionMode = ACQMODE_TIMING_CSTART;
 			else if (streq(value, "COMMON_STOP"))			FERScfg[brd]->AcquisitionMode = ACQMODE_TIMING_CSTOP;
@@ -693,11 +735,11 @@ int FERS_SetParam(int handle, const char *param_name, const char *value_original
 				FERScfg[brd]->AcquisitionMode = ACQMODE_COMMON_START;
 				FERScfg[brd]->TestMode = tn;
 			} else ValidParameterValue = 0;
-		} else if (FERS_Code(handle) == 5204) {
+		} else if ((FERS_Code(handle) == 5204) || (FERS_Code(handle) == 5205)) {
 			if (streq(value, "COUNTING"))					FERScfg[brd]->AcquisitionMode = ACQMODE_COUNT;
 			else if (streq(value, "SPECTROSCOPY"))			FERScfg[brd]->AcquisitionMode = ACQMODE_SPECT;
 			else if (streq(value, "SPECT_TIMING"))			FERScfg[brd]->AcquisitionMode = ACQMODE_TSPECT;
-			else if (streq(value, "TIMING_GATED"))			FERScfg[brd]->AcquisitionMode = ACQMODE_TIMING_GATED;
+			else if (streq(value, "TIMING_TRG_MATCHING"))	FERScfg[brd]->AcquisitionMode = ACQMODE_TIMING_TRG_MATCHING;
 			else if (streq(value, "TIMING_STREAMING"))		FERScfg[brd]->AcquisitionMode = ACQMODE_TIMING_STREAMING;
 			else if (streq(value, "WAVEFORM"))				FERScfg[brd]->AcquisitionMode = ACQMODE_WAVE;
 			else ValidParameterValue = 0;
@@ -705,14 +747,56 @@ int FERS_SetParam(int handle, const char *param_name, const char *value_original
 	}
 
 	if (streq(str, "StartRunMode")) {
-		if (streq(value, "MANUAL"))				FERScfg[brd]->StartRunMode = STARTRUN_ASYNC;  // keep "MANUAL" option for backward compatibility
-		else if (streq(value, "ASYNC"))			FERScfg[brd]->StartRunMode = STARTRUN_ASYNC;
-		else if (streq(value, "CHAIN_T0"))		FERScfg[brd]->StartRunMode = STARTRUN_CHAIN_T0;
-		else if (streq(value, "CHAIN_T1"))		FERScfg[brd]->StartRunMode = STARTRUN_CHAIN_T1;
-		else if (streq(value, "TDL"))			FERScfg[brd]->StartRunMode = STARTRUN_TDL;
+		if (streq(value, "MANUAL"))					StartRunMode = STARTRUN_ASYNC;  // keep "MANUAL" option for backward compatibility
+		else if (streq(value, "ASYNC"))				StartRunMode = STARTRUN_ASYNC;
+		else if (streq(value, "CHAIN_T0"))			StartRunMode = STARTRUN_CHAIN_T0;
+		else if (streq(value, "CHAIN_T1"))			StartRunMode = STARTRUN_CHAIN_T1;
+		else if (streq(value, "TDL"))				StartRunMode = STARTRUN_TDL;
+		else if (streq(value, "TDL_EXTRUN"))		StartRunMode = STARTRUN_TDL_EXTRUN;
+		else if (streq(value, "TDL_GPS"))			StartRunMode = STARTRUN_TDL_GPS;
 		else ValidParameterValue = 0;
+		if (FERScfg[brd] != NULL) FERScfg[brd]->StartRunMode = StartRunMode;  // set the StartRunMode in the config struct
 	}
 
+	if (streq(str, "ExtRunSource")) {
+		if (FERScfg[brd]->StartRunMode == STARTRUN_TDL_GPS) {
+			FERScfg[brd]->ExtRunSource = EXTRUN_GPS;
+			FERScfg[brd]->SyncSource = VR_IO_SYNCSOURCE_GPS_START;
+		} else if (streq(value, "SYNC-IN")) {
+			FERScfg[brd]->ExtRunSource = EXTRUN_SYNCIN;
+			FERScfg[brd]->SyncSource = VR_IO_SYNCSOURCE_ZERO; // Waiting for ABBA answer
+		} else if (streq(value, "LEMO_RA")) {
+			FERScfg[brd]->ExtRunSource = EXTRUN_LEMORA;
+			FERScfg[brd]->SyncSource = VR_IO_SYNCSOURCE_RA;
+		} else if (streq(value, "LEMO_RB")) {
+			FERScfg[brd]->ExtRunSource = EXTRUN_LEMORB;
+			FERScfg[brd]->SyncSource = VR_IO_SYNCSOURCE_RB;
+		} else if (streq(value, "LEMO_FA")) {
+			FERScfg[brd]->ExtRunSource = EXTRUN_LEMOFA;
+			FERScfg[brd]->SyncSource = VR_IO_SYNCSOURCE_FA;
+		} else if (streq(value, "LEMO_FB")) {
+			FERScfg[brd]->ExtRunSource = EXTRUN_LEMOFB;
+			FERScfg[brd]->SyncSource = VR_IO_SYNCSOURCE_FB;
+		} else ValidParameterValue = 0;
+	}
+
+	if (streq(str, "GPSTimeUTC")) {
+	//	uint64_t gps_time_set = 0;
+	//	FERS_ConvertUTCtoEpoch(value, &gps_time_set);
+	//	//uint64_t now = get_time();
+	//	if ((gps_time_set < get_time()) && (FERScfg[brd]->StartRunMode == STARTRUN_TDL_GPS)) {
+	//		FERS_LibMsg("[WARNING][BRD %02d] The selected GPS datetime (%s UTC) is in the past. Please select a future datetime\n ", brd, value);
+	//		_setLastLocalError("WARNING: The selected GPS datetime (%s UTC) is in the past. Please select a future datetime", value);
+	//		return FERSLIB_ERR_INVALID_PARAM_VALUE;
+	//	}
+		strcpy(FERScfg[brd]->GPSTimeUTC, value);
+	}
+
+	if (streq(str, "ExtRunLevel")) {
+		if (streq(value, "NIM"))				FERScfg[brd]->ExtRunLevel = VR_IO_STANDARD_IO_NIM;
+		else if (streq(value, "TTL"))			FERScfg[brd]->ExtRunLevel = VR_IO_STANDARD_IO_TTL;
+		else ValidParameterValue = 0;
+	}
 	if (streq(str, "StopRunMode")) {  
 		if (streq(value, "MANUAL"))				FERScfg[brd]->StopRunMode = STOPRUN_MANUAL;  
 		else if (streq(value, "PRESET_TIME"))	FERScfg[brd]->StopRunMode = STOPRUN_PRESET_TIME;
@@ -720,7 +804,7 @@ int FERS_SetParam(int handle, const char *param_name, const char *value_original
 		else ValidParameterValue = 0;
 	}
 
-	if (streq(str, "BunchTrgSource") || streq(str, "TriggerSource")) {
+	if (streq(str, "BunchTrgSource")) {
 		if (FERS_Code(handle) == 5202) {
 			if (streq(value, "SW_ONLY"))			FERScfg[brd]->TriggerMask = 0x1;
 			else if (streq(value, "T1-IN"))			FERScfg[brd]->TriggerMask = 0x3;
@@ -739,7 +823,7 @@ int FERS_SetParam(int handle, const char *param_name, const char *value_original
 			else if (streq(value, "EDGE_CONN_MB"))	FERScfg[brd]->TriggerMask = 0x41;
 			else if (streq(value, "EDGE_CONN_PB"))	FERScfg[brd]->TriggerMask = 0x81;
 			else if (strstr(value, "MASK"))			FERScfg[brd]->TriggerMask = GetHex32(trim(strtok(value, "MASK")));
-		} else if (FERS_Code(handle) == 5204) {
+		} else if ((FERS_Code(handle) == 5204) || (FERS_Code(handle) == 5205)) { 
 			if (streq(value, "SW_ONLY"))			FERScfg[brd]->TriggerMask = 0x1;
 			else if (streq(value, "T1-IN"))			FERScfg[brd]->TriggerMask = 0x3;
 			else if (streq(value, "OR-T1"))			FERScfg[brd]->TriggerMask = 0x5;
@@ -783,7 +867,7 @@ int FERS_SetParam(int handle, const char *param_name, const char *value_original
 			else if (streq(value, "ZERO"))			FERScfg[brd]->T0_outMask = 0x000;
 			else if (strstr(value, "MASK"))			FERScfg[brd]->T0_outMask = GetHex32(trim(strtok(value, "MASK")));
 			else ValidParameterValue = 0;
-		} else if (FERS_Code(handle) == 5204) {
+		} else if ((FERS_Code(handle) == 5204) || (FERS_Code(handle) == 5205)) {
 			if (streq(value, "T0-IN"))			FERScfg[brd]->T0_outMask = 0x0001;
 			else if (streq(value, "BUNCHTRG"))		FERScfg[brd]->T0_outMask = 0x0002;
 			else if (streq(value, "OR-TQ"))			FERScfg[brd]->T0_outMask = 0x0004;
@@ -834,7 +918,7 @@ int FERS_SetParam(int handle, const char *param_name, const char *value_original
 			else if (streq(value, "ZERO"))			FERScfg[brd]->T1_outMask = 0x000;
 			else if (strstr(value, "MASK"))			FERScfg[brd]->T1_outMask = GetHex32(trim(strtok(value, "MASK")));
 			else ValidParameterValue = 0;
-		} else if (FERS_Code(handle) == 5204) {
+		} else if ((FERS_Code(handle) == 5204) || (FERS_Code(handle) == 5205)) {
 			if (streq(value, "T1-IN"))			FERScfg[brd]->T1_outMask = 0x0001;
 			else if (streq(value, "BUNCHTRG"))		FERScfg[brd]->T1_outMask = 0x0002;
 			else if (streq(value, "OR-TQ"))			FERScfg[brd]->T1_outMask = 0x0004;
@@ -873,7 +957,7 @@ int FERS_SetParam(int handle, const char *param_name, const char *value_original
 			else if (streq(value, "PTRG"))			FERScfg[brd]->Tref_Mask = 0x10;
 			else if (strstr(value, "MASK"))			FERScfg[brd]->Tref_Mask = GetHex32(trim(strtok(value, "MASK")));
 			else ValidParameterValue = 0;
-		} else if (FERS_Code(handle) == 5204) {
+		} else if ((FERS_Code(handle) == 5204) || (FERS_Code(handle) == 5205)) {
 			// HACK CTIN Need this for A5204???
 		} else ValidParameterValue = 0;
 	}
@@ -919,7 +1003,7 @@ int FERS_SetParam(int handle, const char *param_name, const char *value_original
 		else if (streq(value, "ENABLED")) {
 			if (FERS_IsXROC(handle)) FERScfg[brd]->EnableServiceEvents = 3;
 			else FERScfg[brd]->EnableServiceEvents = 1;
-		} else FERScfg[brd]->EnableServiceEvents = GetInt(value);
+		} else FERScfg[brd]->EnableServiceEvents = GetUint(value);
 	}
 
 	if (streq(str, "En_Empty_Ev_Suppr")) {
@@ -930,22 +1014,21 @@ int FERS_SetParam(int handle, const char *param_name, const char *value_original
 
 	if (streq(str, "PtrgPeriod"))				FERScfg[brd]->PtrgPeriod = GetTime(value, "ns");
 	if (streq(str, "TrgHoldOff"))				FERScfg[brd]->TrgHoldOff = GetTime(value, "ns");
-	if (streq(str, "EnableChannelTrgout"))		FERScfg[brd]->EnableChannelTrgout = GetInt(value);
-	if (streq(str, "Enable_2nd_tstamp"))		FERScfg[brd]->Enable_2nd_tstamp = GetInt(value);
+	if (streq(str, "EnableChannelTrgout"))		FERScfg[brd]->EnableChannelTrgout = GetUint(value);
+	if (streq(str, "Enable_2nd_tstamp"))		FERScfg[brd]->Enable_2nd_tstamp = GetUint(value);
 
-	if (streq(str, "EnableToT"))				
-		FERScfg[brd]->EnableToT = GetInt(value);
+	if (streq(str, "EnableToT"))				FERScfg[brd]->EnableToT = GetUint(value);
 	if (streq(str, "GateWidth"))				FERScfg[brd]->GateWidth = GetTime(value, "ns");
 	if (streq(str, "TrefWindow"))				FERScfg[brd]->TrefWindow = GetTime(value, "ns");
 	if (streq(str, "TrefDelay"))				FERScfg[brd]->TrefDelay = GetTime(value, "ns");
-	if (streq(str, "WaveformLength"))			FERScfg[brd]->WaveformLength = GetInt(value);
+	if (streq(str, "WaveformLength"))			FERScfg[brd]->WaveformLength = GetUint(value);
 	if (streq(str, "Range_14bit")) {
-		FERScfg[brd]->Range_14bit = GetInt(value);
+		FERScfg[brd]->Range_14bit = GetUint(value);
 		FERS_SetEnergyBitsRange((uint16_t)FERScfg[brd]->Range_14bit);
 	}
-	if (streq(str, "EnableCntZeroSuppr"))		FERScfg[brd]->EnableCntZeroSuppr = GetInt(value);
-	if (streq(str, "ZS_Threshold_LG"))			SetChannelParam16(handle, FERScfg[brd]->ZS_Threshold_LG, (uint16_t)GetInt(value), ch);
-	if (streq(str, "ZS_Threshold_HG"))			SetChannelParam16(handle, FERScfg[brd]->ZS_Threshold_HG, (uint16_t)GetInt(value), ch);
+	if (streq(str, "EnableCntZeroSuppr"))		FERScfg[brd]->EnableCntZeroSuppr = GetUint(value);
+	if (streq(str, "ZS_Threshold_LG"))			SetChannelParam16(handle, FERScfg[brd]->ZS_Threshold_LG, (uint16_t)GetUint(value), ch);
+	if (streq(str, "ZS_Threshold_HG"))			SetChannelParam16(handle, FERScfg[brd]->ZS_Threshold_HG, (uint16_t)GetUint(value), ch);
 
 	// -------------------------------------------------------------
 	// Settings for Channel enabling
@@ -979,7 +1062,7 @@ int FERS_SetParam(int handle, const char *param_name, const char *value_original
 		int dp = 0;
 		if (streq(str, "DigitalProbe1")) dp = 1;
 		if (FERS_Code(handle) == 5202) {
-			if (streq(value, "OFF"))			FERScfg[brd]->DigitalProbe[dp] = DPROBE_OFF;
+			if (streq(value, "OFF"))				FERScfg[brd]->DigitalProbe[dp] = DPROBE_OFF;
 			else if (streq(value, "PEAK_LG"))		FERScfg[brd]->DigitalProbe[dp] = DPROBE_PEAK_LG;
 			else if (streq(value, "PEAK_HG"))		FERScfg[brd]->DigitalProbe[dp] = DPROBE_PEAK_HG;
 			else if (streq(value, "HOLD"))			FERScfg[brd]->DigitalProbe[dp] = DPROBE_HOLD;
@@ -1044,7 +1127,7 @@ int FERS_SetParam(int handle, const char *param_name, const char *value_original
 				sscanf(value + 2, "%x", &val);
 				FERScfg[brd]->DigitalProbe[dp] = 0x80000000 | val;
 			} else ValidParameterValue = 0;
-		} else if (FERS_Code(handle) == 5204) {  // HACK CTIN: set dprobe for 5203
+		} else if ((FERS_Code(handle) == 5204) || (FERS_Code(handle) == 5205)) {  // HACK CTIN: set dprobe for 5203
 			if (streq(value, "OFF"))			FERScfg[brd]->DigitalProbe[dp] = DPROBE_OFF;
 			else if (streq(value, "HOLD"))			FERScfg[brd]->DigitalProbe[dp] = DPROBE_HOLD;
 			else if (streq(value, "START_CONV"))	FERScfg[brd]->DigitalProbe[dp] = DPROBE_START_CONV;
@@ -1062,17 +1145,26 @@ int FERS_SetParam(int handle, const char *param_name, const char *value_original
 				sscanf(c + 1, "%d", &val);
 				FERScfg[brd]->DigitalProbe[dp] = 0x80010000 | val;
 			} else if (strstr(value, "DTBLD") != NULL) {
-				char* c = strchr(value, '_');
+				char *c = strchr(value, '_');
 				sscanf(c + 1, "%d", &val);
 				FERScfg[brd]->DigitalProbe[dp] = 0x80020000 | val;
+			} else if (strstr(value, "TDCIF") != NULL) {
+				char *c = strchr(value, '_');
+				sscanf(c + 1, "%d", &val);
+				FERScfg[brd]->DigitalProbe[dp] = 0x80030000 | val;
 			} else if (strstr(value, "TDL") != NULL) {
 				char* c = strchr(value, '_');
 				sscanf(c + 1, "%d", &val);
 				FERScfg[brd]->DigitalProbe[dp] = 0x80040000 | val;
-			} else if (strstr(value, "PMP") != NULL) {
+			}
+			else if (strstr(value, "PMP") != NULL) {
 				char* c = strchr(value, '_');
 				sscanf(c + 1, "%d", &val);
 				FERScfg[brd]->DigitalProbe[dp] = 0x80050000 | val;
+			} else if (strstr(value, "I2C") != NULL) {
+				char* c = strchr(value, '_');
+				sscanf(c + 1, "%d", &val);
+				FERScfg[brd]->DigitalProbe[dp] = 0x80060000 | val;
 			} else if ((value[0] == '0') && (tolower(value[1]) == 'x')) {
 				sscanf(value + 2, "%x", &val);
 				FERScfg[brd]->DigitalProbe[dp] = 0x80000000 | val;
@@ -1082,10 +1174,10 @@ int FERS_SetParam(int handle, const char *param_name, const char *value_original
 		if (streq(str, "DigitalProbe")) FERScfg[brd]->DigitalProbe[1] = FERScfg[brd]->DigitalProbe[0];
 	}
 
-	if (streq(str, "ProbeChannel0"))			FERScfg[brd]->ProbeChannel[0] = GetInt(value);
-	if (streq(str, "ProbeChannel1"))			FERScfg[brd]->ProbeChannel[1] = GetInt(value);
+	if (streq(str, "ProbeChannel0"))			FERScfg[brd]->ProbeChannel[0] = GetUint(value);
+	if (streq(str, "ProbeChannel1"))			FERScfg[brd]->ProbeChannel[1] = GetUint(value);
 	if (streq(str, "ProbeChannel")) {
-		int pch = GetInt(value);
+		uint32_t pch = GetUint(value);
 		FERScfg[brd]->ProbeChannel[0] = pch;
 		FERScfg[brd]->ProbeChannel[1] = pch;
 	}
@@ -1100,12 +1192,12 @@ int FERS_SetParam(int handle, const char *param_name, const char *value_original
 		if ((np == 4) && (cnc >= 0) && (cnc < FERSLIB_MAX_NCNC) && (chain >= 0) && (chain < 8) && (node >= 0) && (node < 16))
 			TDL_FiberDelayAdjust[cnc][chain][node] = length;
 	}
-	if (streq(str, "TdlClkPhase"))				FERScfg[brd]->TdlClkPhase = GetInt(value);
-	if (streq(str, "CncBufferSize"))			FERScfg[brd]->CncBufferSize = GetInt(value);
-	if (streq(str, "CncProbe_A"))				FERScfg[brd]->CncProbe_A = GetInt(value);
-	if (streq(str, "CncProbe_B"))				FERScfg[brd]->CncProbe_B = GetInt(value);
-	if (streq(str, "MaxPck_Block"))				FERScfg[brd]->MaxPck_Block = GetInt(value);
-	if (streq(str, "MaxPck_Train"))				FERScfg[brd]->MaxPck_Train = GetInt(value);	
+	if (streq(str, "TdlClkPhase"))				FERScfg[brd]->TdlClkPhase = GetUint(value);
+	if (streq(str, "CncBufferSize"))			FERScfg[brd]->CncBufferSize = GetUint(value);
+	if (streq(str, "CncProbe_A"))				FERScfg[brd]->CncProbe_A = GetUint(value);
+	if (streq(str, "CncProbe_B"))				FERScfg[brd]->CncProbe_B = GetUint(value);
+	if (streq(str, "MaxPck_Block"))				FERScfg[brd]->MaxPck_Block = GetUint(value);
+	if (streq(str, "MaxPck_Train"))				FERScfg[brd]->MaxPck_Train = GetUint(value);	
 
 
 	// -------------------------------------------------------------
@@ -1115,6 +1207,7 @@ int FERS_SetParam(int handle, const char *param_name, const char *value_original
 		if (streq(value, "OR64"))				FERScfg[brd]->TriggerLogic = 0;
 		else if (streq(value, "AND2_OR32"))		FERScfg[brd]->TriggerLogic = 1;
 		else if (streq(value, "OR32_AND2"))		FERScfg[brd]->TriggerLogic = 2;
+		else if (streq(value, "OR16_AND4"))		FERScfg[brd]->TriggerLogic = 3;
 		else if (streq(value, "MAJ64"))			FERScfg[brd]->TriggerLogic = 4;
 		else if (streq(value, "MAJ32_AND2"))	FERScfg[brd]->TriggerLogic = 5;
 		else ValidParameterValue = 0;
@@ -1125,7 +1218,7 @@ int FERS_SetParam(int handle, const char *param_name, const char *value_original
 	if (streq(str, "Tlogic_Mask"))				FERScfg[brd]->Tlogic_Mask = GetHex64(value);
 	if (streq(str, "ChTrg_Width"))				FERScfg[brd]->ChTrg_Width = GetTime(value, "ns");
 	if (streq(str, "Tlogic_Width"))				FERScfg[brd]->Tlogic_Width = GetTime(value, "ns");
-	if (streq(str, "MajorityLevel"))			FERScfg[brd]->MajorityLevel = GetInt(value);
+	if (streq(str, "MajorityLevel"))			FERScfg[brd]->MajorityLevel = GetUint(value);
 
 	// -------------------------------------------------------------
 	// Settings for XROC ASICs
@@ -1134,7 +1227,7 @@ int FERS_SetParam(int handle, const char *param_name, const char *value_original
 		if (streq(value, "ALL"))				FERScfg[brd]->TestPulseDestination = TEST_PULSE_DEST_ALL;
 		else if (streq(value, "EVEN"))			FERScfg[brd]->TestPulseDestination = TEST_PULSE_DEST_EVEN;
 		else if (streq(value, "ODD"))			FERScfg[brd]->TestPulseDestination = TEST_PULSE_DEST_ODD;
-		else if (streq(value, "NONE"))			FERScfg[brd]->TestPulseDestination = TEST_PULSE_DEST_NONE;
+		else if (streq(value, "NONE"))			FERScfg[brd]->TestPulseDestination = TEST_PULSE_DEST_NONE;  
 		else if (strstr(value, "CH") != NULL)	FERScfg[brd]->TestPulseDestination = GetInt(trim(strtok(value, "CH")));
 		else ValidParameterValue = 0;
 	}
@@ -1157,13 +1250,12 @@ int FERS_SetParam(int handle, const char *param_name, const char *value_original
 			else if ((st == 5) || (st == 25))		FERScfg[brd]->LG_ShapingTime = 5;
 			else if ((st == 6) || (st == 12.5))		FERScfg[brd]->LG_ShapingTime = 6;
 			else ValidParameterValue = 0;
-		} else if (FERS_Code(handle) == 5204) {
+		} else if ((FERS_Code(handle) == 5204) || (FERS_Code(handle) == 5205)) {   // HACK CTIN: manage long range (from 200 ns to 3 us with step = 200 ns)
 			float st_ns = GetTime(value, "ns");
-			uint16_t st_set = (uint16_t)(st_ns / 20);
-			if ((st_set < 0) || (st_set > 0xF) || ((float)(st_set * 20) != st_ns))
+			if ((st_ns < 20) || (st_ns > 3000))
 				ValidParameterValue = 0;
 			else
-				SetChannelParam16(handle, FERScfg[brd]->LG_ShapingTime_ind, st_set, ch);
+				SetChannelParamFloat(handle, FERScfg[brd]->LG_ShapingTime_ind, st_ns, ch);
 		} else ValidParameterValue = 0;
 	}
 
@@ -1178,13 +1270,12 @@ int FERS_SetParam(int handle, const char *param_name, const char *value_original
 			else if ((st == 5) || (st == 25))		FERScfg[brd]->HG_ShapingTime = 5;
 			else if ((st == 6) || (st == 12.5))		FERScfg[brd]->HG_ShapingTime = 6;
 			else ValidParameterValue = 0;
-		} else if (FERS_Code(handle) == 5204) {
+		} else if ((FERS_Code(handle) == 5204) || (FERS_Code(handle) == 5205)) {  // HACK CTIN: manage long range (from 200 ns to 3 us with step = 200 ns)
 			float st_ns = GetTime(value, "ns");
-			uint16_t st_set = (uint16_t)(st_ns / 20);
-			if ((st_set < 0) || (st_set > 0xF) || ((float)(st_set * 20) != st_ns))
+			if ((st_ns < 20) || (st_ns > 3000))
 				ValidParameterValue = 0;
 			else
-				SetChannelParam16(handle, FERScfg[brd]->HG_ShapingTime_ind, st_set, ch);
+				SetChannelParamFloat(handle, FERScfg[brd]->HG_ShapingTime_ind, st_ns, ch);
 		} else ValidParameterValue = 0;
 	}
 
@@ -1196,8 +1287,8 @@ int FERS_SetParam(int handle, const char *param_name, const char *value_original
 			else if (streq(value, "FAST"))				FERScfg[brd]->AnalogProbe[ap] = 1;
 			else if (streq(value, "SLOW_LG"))			FERScfg[brd]->AnalogProbe[ap] = 2;
 			else if (streq(value, "SLOW_HG"))			FERScfg[brd]->AnalogProbe[ap] = 3;
-			else if (streq(value, "PREAMP_LG"))			FERScfg[brd]->AnalogProbe[ap] = 4;
-			else if (streq(value, "PREAMP_HG"))			FERScfg[brd]->AnalogProbe[ap] = 5;
+			else if (streq(value, "PREAMP_HG"))			FERScfg[brd]->AnalogProbe[ap] = 4;
+			else if (streq(value, "PREAMP_LG"))			FERScfg[brd]->AnalogProbe[ap] = 5;
 			else ValidParameterValue = 0;
 		} else if (FERS_Code(handle) == 5204) {
 			if (streq(value, "OFF"))					FERScfg[brd]->AnalogProbe[ap] = 0;
@@ -1259,34 +1350,44 @@ int FERS_SetParam(int handle, const char *param_name, const char *value_original
 		else ValidParameterValue = 0;
 	}
 
-	if (streq(str, "TD1_FineThreshold"))		SetChannelParam16(handle, FERScfg[brd]->TD1_FineThreshold, (uint16_t)GetInt(value), ch);
-	if (streq(str, "TD2_FineThreshold"))		SetChannelParam16(handle, FERScfg[brd]->TD2_FineThreshold, (uint16_t)GetInt(value), ch);
-	if (streq(str, "TOTD_FineThreshold"))		SetChannelParam16(handle, FERScfg[brd]->TOTD_FineThreshold, (uint16_t)GetInt(value), ch);
-	if (streq(str, "QD_FineThreshold"))			SetChannelParam16(handle, FERScfg[brd]->QD_FineThreshold, (uint16_t)GetInt(value), ch);
-	if (streq(str, "TD_FineThreshold"))			SetChannelParam16(handle, FERScfg[brd]->TD_FineThreshold, (uint16_t)GetInt(value), ch);
-	if (streq(str, "HG_Gain"))					SetChannelParam16(handle, FERScfg[brd]->HG_Gain, (uint16_t)GetInt(value), ch);
-	if (streq(str, "LG_Gain"))					SetChannelParam16(handle, FERScfg[brd]->LG_Gain, (uint16_t)GetInt(value), ch);
-	if (streq(str, "T_Gain"))					SetChannelParam16(handle, FERScfg[brd]->T_Gain, (uint16_t)GetInt(value), ch);
-	if (streq(str, "HV_IndivAdj"))				SetChannelParam16(handle, FERScfg[brd]->HV_IndivAdj, (uint16_t)GetInt(value), ch);
-	if (streq(str, "QD_CoarseThreshold"))		FERScfg[brd]->QD_CoarseThreshold = (uint16_t)GetInt(value);
-	if (streq(str, "TD1_CoarseThreshold"))		FERScfg[brd]->TD1_CoarseThreshold = (uint16_t)GetInt(value);
-	if (streq(str, "TD2_CoarseThreshold"))		FERScfg[brd]->TD2_CoarseThreshold = (uint16_t)GetInt(value);
-	if (streq(str, "TOTD_CoarseThreshold"))		FERScfg[brd]->TOTD_CoarseThreshold = (uint16_t)GetInt(value);
-	if (streq(str, "TD_CoarseThreshold"))		FERScfg[brd]->TD_CoarseThreshold = (uint16_t)GetInt(value);
-	if (streq(str, "QD_CoarseThreshold"))		FERScfg[brd]->QD_CoarseThreshold = (uint16_t)GetInt(value);
+	if (streq(str, "TD_FineThreshold") || streq(str, "TD1_FineThreshold"))			SetChannelParam16(handle, FERScfg[brd]->TD_FineThreshold, (uint16_t)GetInt(value), ch);
+	if (streq(str, "TD2_FineThreshold"))		SetChannelParam16(handle, FERScfg[brd]->TD2_FineThreshold, (uint16_t)GetUint(value), ch);
+	if (streq(str, "TOTD_FineThreshold"))		SetChannelParam16(handle, FERScfg[brd]->TOTD_FineThreshold, (uint16_t)GetUint(value), ch);
+	if (streq(str, "QD_FineThreshold"))			SetChannelParam16(handle, FERScfg[brd]->QD_FineThreshold, (uint16_t)GetUint(value), ch);
+	if (streq(str, "TD_FineThreshold"))			SetChannelParam16(handle, FERScfg[brd]->TD_FineThreshold, (uint16_t)GetUint(value), ch);
+	if (streq(str, "HG_Gain"))					SetChannelParam16(handle, FERScfg[brd]->HG_Gain, (uint16_t)GetUint(value), ch);
+	if (streq(str, "LG_Gain"))					SetChannelParam16(handle, FERScfg[brd]->LG_Gain, (uint16_t)GetUint(value), ch);
+	if (streq(str, "T_Gain"))					SetChannelParam16(handle, FERScfg[brd]->T_Gain, (uint16_t)GetUint(value), ch);
+	if (streq(str, "PAQ_Gain"))					SetChannelParam16(handle, FERScfg[brd]->PAQ_Gain, (uint16_t)GetUint(value), ch);
+	if (streq(str, "PAQ_Comp"))					SetChannelParam16(handle, FERScfg[brd]->PAQ_Comp, (uint16_t)GetUint(value), ch);
+	if (streq(str, "HV_IndivAdj"))				SetChannelParam16(handle, FERScfg[brd]->HV_IndivAdj, (uint16_t)GetUint(value), ch);
+	if (streq(str, "QD_CoarseThreshold"))		FERScfg[brd]->QD_CoarseThreshold = (uint16_t)GetUint(value);
+	if (streq(str, "TD_CoarseThreshold") || streq(str, "TD1_CoarseThreshold"))		FERScfg[brd]->TD_CoarseThreshold = (uint16_t)GetUint(value);
+	if (streq(str, "TD2_CoarseThreshold"))		FERScfg[brd]->TD2_CoarseThreshold = (uint16_t)GetUint(value);
+	if (streq(str, "TOTD_CoarseThreshold"))		FERScfg[brd]->TOTD_CoarseThreshold = (uint16_t)GetUint(value);
+	if (streq(str, "QD_CoarseThreshold"))		FERScfg[brd]->QD_CoarseThreshold = (uint16_t)GetUint(value);
+	if (streq(str, "InputPolarity"))			SetChannelParam16(handle, FERScfg[brd]->InputPolarity, (uint16_t)GetUint(value), ch);
 
-	if (streq(str, "Enable_HV_Adjust"))			FERScfg[brd]->Enable_HV_Adjust = GetInt(value);
+	if (streq(str, "Enable_HV_Adjust"))			FERScfg[brd]->Enable_HV_Adjust = GetUint(value);
 	if (streq(str, "HoldDelay"))				FERScfg[brd]->HoldDelay = GetTime(value, "ns");
-	if (streq(str, "EnableQdiscrLatch"))		FERScfg[brd]->EnableQdiscrLatch = GetInt(value);
+	if (streq(str, "EnableQdiscrLatch"))		FERScfg[brd]->EnableQdiscrLatch = GetUint(value);
 	if (streq(str, "MuxClkPeriod"))				FERScfg[brd]->MuxClkPeriod = GetTime(value, "ns");
-	if (streq(str, "Pedestal"))					FERScfg[brd]->Pedestal = (uint16_t)GetInt(value);
+	if (streq(str, "Pedestal"))					FERScfg[brd]->Pedestal = (uint16_t)GetUint(value);
 	if (streq(str, "QD_Mask0"))					FERScfg[brd]->QD_Mask = FERScfg[brd]->QD_Mask & 0xFFFFFFFF00000000 | (uint64_t)GetHex32(value);
 	if (streq(str, "QD_Mask1"))					FERScfg[brd]->QD_Mask = FERScfg[brd]->QD_Mask & 0x00000000FFFFFFFF | ((uint64_t)GetHex32(value) << 32);
 	if (streq(str, "QD_Mask"))					FERScfg[brd]->QD_Mask = GetHex64(value);
-	if (streq(str, "TD1_Mask"))					FERScfg[brd]->TD1_Mask = GetHex64(value);
+	if (streq(str, "TD_Mask") || streq(str, "TD1_Mask"))	FERScfg[brd]->TD_Mask = GetHex64(value);
 	if (streq(str, "TD2_Mask"))					FERScfg[brd]->TD2_Mask = GetHex64(value);
-	if (streq(str, "TD_Mask"))					FERScfg[brd]->TD_Mask = GetHex64(value);
 	if (streq(str, "TOTD_Mask"))				FERScfg[brd]->TOTD_Mask = GetHex64(value);
+	if (streq(str, "TD_ChEnable") || streq(str, "TD1_ChEnable")) {
+		int en = 0;
+		uint64_t en_bit = 0;
+		sscanf(value, "%d", &en);
+		if ((ch >= 0) && (ch < 64)) {
+			if (en) en_bit = (uint64_t)1 << ch;
+			FERScfg[brd]->TD_Mask = (FERScfg[brd]->TD_Mask & ~((uint64_t)1 << ch)) | en_bit;
+		}
+	}
 
 
 	// -------------------------------------------------------------
@@ -1301,7 +1402,7 @@ int FERS_SetParam(int handle, const char *param_name, const char *value_original
 		else if (streq(value, "SW-CMD"))	FERScfg[brd]->TestPulseSource = TEST_PULSE_SOURCE_SW_CMD;
 		else ValidParameterValue = 0;
 	}
-	if (streq(str, "TestPulseAmplitude"))		FERScfg[brd]->TestPulseAmplitude = GetInt(value);
+	if (streq(str, "TestPulseAmplitude"))		FERScfg[brd]->TestPulseAmplitude = GetUint(value);
 
 
 	// -------------------------------------------------------------
@@ -1344,6 +1445,7 @@ int FERS_SetParam(int handle, const char *param_name, const char *value_original
 		else if (streq(value, "LEAD_TRAIL"))	FERScfg[brd]->MeasMode = MEASMODE_LEAD_TRAIL;
 		else if (streq(value, "LEAD_TOT8"))		FERScfg[brd]->MeasMode = MEASMODE_LEAD_TOT8;
 		else if (streq(value, "LEAD_TOT11"))	FERScfg[brd]->MeasMode = MEASMODE_LEAD_TOT11;
+		else if (streq(value, "LEAD_TOT"))		FERScfg[brd]->MeasMode = MEASMODE_LEAD_TOT;
 		else ValidParameterValue = 0;
 	}
 
@@ -1381,14 +1483,14 @@ int FERS_SetParam(int handle, const char *param_name, const char *value_original
 		else ValidParameterValue = 0;
 	}
 
-	if (streq(str, "GlitchFilterDelay"))		FERScfg[brd]->GlitchFilterMode = GetInt(value);
-	if (streq(str, "TriggerBufferSize"))		FERScfg[brd]->TriggerBufferSize = GetInt(value);
-	if (streq(str, "HeaderField0"))				FERScfg[brd]->HeaderField0 = GetInt(value);
-	if (streq(str, "HeaderField1"))				FERScfg[brd]->HeaderField1 = GetInt(value);
-	if (streq(str, "LeadTrail_LSB"))			FERScfg[brd]->LeadTrail_LSB = GetInt(value);
-	if (streq(str, "ToT_LSB"))					FERScfg[brd]->ToT_LSB = GetInt(value);
-	if (streq(str, "ToT_reject_low_thr"))		FERScfg[brd]->ToT_reject_low_thr = (uint16_t)GetInt(value);
-	if (streq(str, "ToT_reject_high_thr"))		FERScfg[brd]->ToT_reject_high_thr = (uint16_t)GetInt(value);
+	if (streq(str, "GlitchFilterDelay"))		FERScfg[brd]->GlitchFilterDelay = GetUint(value);
+	if (streq(str, "TriggerBufferSize"))		FERScfg[brd]->TriggerBufferSize = GetUint(value);
+	if (streq(str, "HeaderField0"))				FERScfg[brd]->HeaderField0 = GetUint(value);
+	if (streq(str, "HeaderField1"))				FERScfg[brd]->HeaderField1 = GetUint(value);
+	if (streq(str, "LeadTrail_LSB"))			FERScfg[brd]->LeadTrail_LSB = GetUint(value);
+	if (streq(str, "ToT_LSB"))					FERScfg[brd]->ToT_LSB = GetUint(value);
+	if (streq(str, "ToT_reject_low_thr"))		FERScfg[brd]->ToT_reject_low_thr = (uint16_t)GetUint(value);
+	if (streq(str, "ToT_reject_high_thr"))		FERScfg[brd]->ToT_reject_high_thr = (uint16_t)GetUint(value);
 	if (streq(str, "TrgWindowWidth"))			FERScfg[brd]->TrgWindowWidth = GetTime(value, "ns");
 	if (streq(str, "TrgWindowOffset"))			FERScfg[brd]->TrgWindowOffset = GetTime(value, "ns");
 	if (streq(str, "TDCpulser_Width"))			FERScfg[brd]->TDCpulser_Width = GetTime(value, "ns");
@@ -1423,8 +1525,8 @@ int FERS_SetParam(int handle, const char *param_name, const char *value_original
 	// Generic Lib Settings  
 	// -------------------------------------------------------------
 	//if (streq(str, "EnableDumpLibCfg"))			DebugLogs |= (DBLOG_PARAMS * GetInt(value));  // keep EnableDumpLibCfg for backward compatibility. Better to use DebugLogMask 
-	if (streq(str, "DebugLogMask"))				DebugLogs = GetHex32(value);
-
+	if (streq(str, "DebugLogMask"))				
+		DebugLogs = GetHex32(value);
 
 
 	// -------------------------------------------------------------
@@ -1472,7 +1574,7 @@ int FERS_SetParam(int handle, const char *param_name, const char *value_original
 // Outputs:		-
 // Return:		0=OK, -1=error
 // ---------------------------------------------------------------------------------
-int FERS_GetParam(int handle, char *param_name, char *value) {
+int FERS_GetParam(int handle, const char *param_name, char *value) {
 	int8_t brd = -1, ch = -1, node = -1;
 	char* str_to_split = j_strdup(param_name);
 	const char* delim = "[]";
@@ -1514,19 +1616,21 @@ int FERS_GetParam(int handle, char *param_name, char *value) {
 	if (streq(str, "ChEnableMask3"))			sprintf(value, "%" PRIu64, (FERScfg[brd]->ChEnableMask_e & 0xFFFFFFFF00000000) >> 32);
 	if (streq(str, "Tlogic_Mask"))				sprintf(value, "%" PRIu64, FERScfg[brd]->Tlogic_Mask);
 	if (streq(str, "QD_Mask"))					sprintf(value, "%" PRIu64, FERScfg[brd]->QD_Mask);
-	if (streq(str, "TD1_Mask"))					sprintf(value, "%" PRIu64, FERScfg[brd]->TD1_Mask);
+	if (streq(str, "TD_Mask"))					sprintf(value, "%" PRIu64, FERScfg[brd]->TD_Mask);
 	if (streq(str, "TD2_Mask"))					sprintf(value, "%" PRIu64, FERScfg[brd]->TD2_Mask);
-	if (streq(str, "DebugLogMask"))				sprintf(value, "%x", DebugLogs);
-	if (streq(str, "TriggerMask")	|| streq(str, "TriggerSource"))		sprintf(value, "%x", FERScfg[brd]->TriggerMask);
-	if (streq(str, "T0_outMask")	|| streq(str, "T0_Out"))			sprintf(value, "%x", FERScfg[brd]->T0_outMask);
-	if (streq(str, "T1_outMask")	|| streq(str, "T1_Out"))			sprintf(value, "%x", FERScfg[brd]->T1_outMask);
-	if (streq(str, "Tref_Mask")		|| streq(str, "TrefSource"))		sprintf(value, "%x", FERScfg[brd]->Tref_Mask);
-	if (streq(str, "Veto_Mask")		|| streq(str, "VetoSource"))		sprintf(value, "%x", FERScfg[brd]->Veto_Mask);
-	if (streq(str, "Validation_Mask"))			sprintf(value, "%x", FERScfg[brd]->Validation_Mask);
-
+	if (streq(str, "DebugLogMask"))				sprintf(value, "%" PRIu32, DebugLogs);
+	if (streq(str, "TriggerMask")	|| streq(str, "TriggerSource") || streq(str, "BunchTrgSource"))		sprintf(value, "%" PRIu32, FERScfg[brd]->TriggerMask);
+	if (streq(str, "T0_outMask")	|| streq(str, "T0_Out"))			sprintf(value, "%" PRIu32, FERScfg[brd]->T0_outMask);
+	if (streq(str, "T1_outMask")	|| streq(str, "T1_Out"))			sprintf(value, "%" PRIu32, FERScfg[brd]->T1_outMask);
+	if (streq(str, "Tref_Mask")		|| streq(str, "TrefSource"))		sprintf(value, "%" PRIu32, FERScfg[brd]->Tref_Mask);
+	if (streq(str, "Veto_Mask")		|| streq(str, "VetoSource"))		sprintf(value, "%" PRIu32, FERScfg[brd]->Veto_Mask);
+	if (streq(str, "Validation_Mask"))			sprintf(value, "%" PRIu32, FERScfg[brd]->Validation_Mask);
 	if (streq(str, "FiberDelayAdjust"))			sprintf(value, "%f", TDL_FiberDelayAdjust[brd][ch][node]);  // CTIN: are link and node correct? Maybe better to make a string with all values (8x16)
 
-	if (streq(str, "StartRunMode"))				sprintf(value, "%d", (int)FERScfg[brd]->StartRunMode);
+	if (streq(str, "SyncMode") || streq(str, "StartRunMode"))			sprintf(value, "%d", (int)FERScfg[brd]->StartRunMode);
+	if (streq(str, "ExtRunSource"))				sprintf(value, "%d", (int)FERScfg[brd]->ExtRunLevel);
+	if (streq(str, "ExtRunLevel"))				sprintf(value, "%d", (int)FERScfg[brd]->ExtRunLevel);
+	if (streq(str, "GPSTimeUTC"))				strcpy(value, FERScfg[brd]->GPSTimeUTC);
 	if (streq(str, "StopRunMode"))				sprintf(value, "%d", (int)FERScfg[brd]->StopRunMode);
 	if (streq(str, "AcquisitionMode"))			sprintf(value, "%d", (int)FERScfg[brd]->AcquisitionMode);
 	if (streq(str, "TdlClkPhase"))				sprintf(value, "%d", (int)FERScfg[brd]->TdlClkPhase);
@@ -1564,7 +1668,6 @@ int FERS_GetParam(int handle, char *param_name, char *value) {
 	if (streq(str, "Range_14bit"))				sprintf(value, "%d", (int)FERScfg[brd]->Range_14bit);
 	if (streq(str, "QD_CoarseThreshold"))		sprintf(value, "%d", (int)FERScfg[brd]->QD_CoarseThreshold);
 	if (streq(str, "TD_CoarseThreshold"))		sprintf(value, "%d", (int)FERScfg[brd]->TD_CoarseThreshold);
-	if (streq(str, "TD1_CoarseThreshold"))		sprintf(value, "%d", (int)FERScfg[brd]->TD1_CoarseThreshold);
 	if (streq(str, "TD2_CoarseThreshold"))		sprintf(value, "%d", (int)FERScfg[brd]->TD2_CoarseThreshold);
 	if (streq(str, "HG_ShapingTime"))			sprintf(value, "%d", (int)FERScfg[brd]->HG_ShapingTime);
 	if (streq(str, "LG_ShapingTime"))			sprintf(value, "%d", (int)FERScfg[brd]->LG_ShapingTime);
@@ -1587,7 +1690,6 @@ int FERS_GetParam(int handle, char *param_name, char *value) {
 	if (streq(str, "HG_Gain")) 					sprintf(value, "%d", (int)FERScfg[brd]->HG_Gain[ch]);
 	if (streq(str, "LG_Gain")) 					sprintf(value, "%d", (int)FERScfg[brd]->LG_Gain[ch]);
 	if (streq(str, "HV_IndivAdj")) 				sprintf(value, "%d", (int)FERScfg[brd]->HV_IndivAdj[ch]);
-	if (streq(str, "TD1_FineThreshold")) 		sprintf(value, "%d", (int)FERScfg[brd]->TD1_FineThreshold[ch]);
 	if (streq(str, "TD2_FineThreshold")) 		sprintf(value, "%d", (int)FERScfg[brd]->TD2_FineThreshold[ch]);
 	if (streq(str, "HG_ShapingTime_ind"))		sprintf(value, "%d", (int)FERScfg[brd]->HG_ShapingTime_ind[ch]);
 	if (streq(str, "LG_ShapingTime_ind"))		sprintf(value, "%d", (int)FERScfg[brd]->LG_ShapingTime_ind[ch]);

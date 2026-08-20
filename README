@@ -27,10 +27,10 @@ A. SYSTEM REQUIREMENTS
     - Python 3.8 or higher (for development or debugging purposes)
     - Tkinter
     - Pillow (with Tkinter support)
-    - Visual C++ runtime libraries
+	- Visual C++ runtime libraries
 
   - **On Linux**:
-    - g++
+    - g++ with C++17 support
 	- make
 	- libusb-1.0
 	- pkg-config
@@ -38,8 +38,7 @@ A. SYSTEM REQUIREMENTS
     - Python 3.8 or higher
     - Tkinter
     - Pillow (with Tkinter support)
-    - Superuser permissions to run `sudo`
-
+	- Superuser permissions to run `sudo` for missing package and USB rule
 
 B. INSTALLATION
 ----------------
@@ -54,17 +53,20 @@ B. INSTALLATION
         Run `JanusC.exe`
 
 ### Linux:
-*********************************************************************************************
-**Note**: Janus self-installation is supported only on Debian-based and Fedora distributions.
-However, you can still run `Janus_Install.bash` as root. It provides a short guide on how to 
-install Janus step by step on unsupported distributions and sets the USB rules for USB connections.
-*********************************************************************************************
-
  1. **Installation**:
-	sudo bash Janus_Install.bash
-    - Check if any required packages are missing and install them manually if the Linux distribution is not supported by the Janus Installer.
+	./Janus_Install.bash
+    - The installation wizard provides four options:
+	  0. Full installation 				 
+	     (Suggested for Debian-based and Fedora, or when all the requirements are already satisfied. 
+		 This option may require sudo privileges)
+	  1. Check installation requirements 
+	     (Checking packages installation is strongly recommended. Automatically installation of missing packages
+		 required sudo and is guaranteed only in Debian-based and Fedora distributions)
+	  2. Install FERSlib and Janus 		 
+	     (Available on all Linux platform)
+	  3. Configure USB permission rules  
+	     (Available on all Linux platform. This option may require sudo privileges)
      
-
  2. **Run**:
     - **For GUI mode**:
         cd gui

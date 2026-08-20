@@ -104,7 +104,7 @@ int main(int argc, char* argv[])
     uint8_t next_p = 1;
     uint8_t force_ns = 0;
     std::streampos begin, end, mb;
-    std::streamoff totsize, read_size;
+    std::streamoff totsize, read_size, evts_size;
     int8_t res = 0;
 
     std::vector<std::string> filenames;
@@ -150,7 +150,10 @@ int main(int argc, char* argv[])
         exit(-1);
     }
 
-    //filenames.push_back("Run1.0_list.dat");
+    //// For debug purpose only
+    //filenames.push_back("Run25_list_TimeCStop.dat");
+    //filenames.push_back("C:\\Users\\dninci\\Downloads\\dat.dat"); //\\Run4_list.dat");
+    //force_ns = 1;
 
     // Define the binfile to convert and the csvfile
     std::ifstream to_convert;
@@ -176,7 +179,7 @@ int main(int argc, char* argv[])
             if (!fname_token.empty()) {
                 // Create new string till the SubRun number
                 for (int j = 0; j < fname_token.size() - 2; ++j) {
-                    new_fname += new_fname + fname_token.at(j) + ".";
+                    new_fname += fname_token.at(j) + ".";   
                 }
             } else {
                 std::cout << "File " << filenames.at(i) << " cannot be tagged as part of subrun files.\n";
@@ -205,7 +208,7 @@ int main(int argc, char* argv[])
         //////////////////////////////////////////////////////////
     }
 
-    // cicle over the vector of filenames vector
+    // Cycle over the vector of filenames vector
     for (int i = 0; i < filenames.size(); ++i) {
         // The initialization of mdata must be done here
         // Class initialization. Should be destroyed? It is not a pointer, so no ... correct?  
@@ -222,7 +225,7 @@ int main(int argc, char* argv[])
             } else
                 std::cout << "Opening file " << subrun_filenames.at(i).at(j) << std::endl; // "\n" << std::flush;;
 
-            csv_file_name = subrun_filenames.at(i).at(j).substr(0, subrun_filenames.at(i).at(j).find_last_of('.')) + ".csv";   // The converted file will be saved in the same folder of the binfile
+            csv_file_name = subrun_filenames.at(i).at(j).substr(0, subrun_filenames.at(i).at(j).find_last_of('.')) + "_bintocsv.csv";   // The converted file will be saved in the same folder of the binfile
             f_converted.open(csv_file_name);
             if (!f_converted.is_open()) {
                 std::cout << "File " << csv_file_name << " cannot be created!\nMove to the next one ...\n";
@@ -237,24 +240,26 @@ int main(int argc, char* argv[])
                 mdata.ComputeBinfileSizeFERS(to_convert);
             }
 
-            totsize = mdata.GetEventsSize();
-            read_size = mdata.GetEventsBegin(); // These two values are computed in ComputeBinfileSizeFERS
-            uint64_t onepercent = (uint64_t)(totsize / 100.);
+			totsize = mdata.GetFileSize();
+            evts_size = mdata.GetEventsSize();
+            read_size = 0;
+
+            uint64_t onepercent = (uint64_t)(evts_size / 100.);
             std::cout << "File Size: " << totsize << " Bytes\n";
 
-            while (!to_convert.eof() && read_size < totsize) { // DNIN: is it possible to save each event in a queue or a vector
+            while (!to_convert.eof() && read_size < evts_size) { // It is possible to save each event in a queue or a vector
                 mdata.ReadTmpEvtFERS(to_convert);
                 mdata.WriteTmpEvtFERS(f_converted);
 
                 mb = to_convert.tellg();
-                read_size = mb - begin;
+                read_size = mb - mdata.GetEventsBegin();
                 if ((uint32_t)read_size > next_p * onepercent) {
-                    std::cout << "\r" << "---> Processing: " << read_size << "/" << totsize << "(" << 100 * (read_size) / totsize << "%)" << std::flush;    // DNIN: Why it does not flush with > 1 file?
+                    std::cout << "\r" << "---> Processing: " << read_size << "/" << evts_size << "(" << 100 * (read_size) / evts_size << "%)" << std::flush;    // DNIN: Why it does not flush with > 1 file?
                     ++next_p;
                 }
             }
 
-            std::cout << "\r" << "---> Processing: " << totsize << "/" << totsize << " (" << 100 << "%)\n" << std::flush;
+            std::cout << "\r" << "---> Processing: " << evts_size << "/" << evts_size << " (" << 100 << "%)\n" << std::flush;
             std::cout << "File " << filenames.at(i) << " converted to " << csv_file_name << " \n" << std::endl;
 
             to_convert.close();

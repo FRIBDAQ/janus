@@ -27,20 +27,7 @@
 #include <ctime>
 #include <time.h>
 
-#include "BinaryData_5203.h"
-
-#define ACQMODE_COMMONSTART 0x02
-#define ACQMODE_COMMONSTOP  0x12
-#define ACQMODE_STREAMING   0x22
-#define ACQMODE_TRGMATCHING 0x32
-
-#define MEASMODE_LEADONLY   0x01
-#define MEASMODE_LEADTRAIL  0x03
-#define MEASMODE_LEADTOT8   0x05
-#define MEASMODE_LEADTOT11  0x09
-
-#define OUTLSB  0
-#define OUTNS   1
+#include "BinaryDataFERS.h"
 
 
 t_BinaryData_5203::t_BinaryData_5203(uint8_t force_ns, uint8_t mode) {
@@ -141,7 +128,7 @@ void t_BinaryData_5203::ComputeBinfileSize(std::ifstream& binfile) {
     binfile.seekg(0, std::ios::end);
     end = binfile.tellg();
     binfile.seekg(t_BinaryData_5203::t_begin, std::ios::beg);
-    t_BinaryData_5203::t_totsize = end - t_BinaryData_5203::t_begin;
+    t_BinaryData_5203::t_evts_size = end - t_BinaryData_5203::t_begin;
     //t_read_size = t_begin;
 }
 
@@ -159,6 +146,10 @@ std::string t_BinaryData_5203::WriteMeasMode() {
 }
 
 std::string t_BinaryData_5203::WriteAcqMode() {
+    if (t_BinaryData_5203::t_acq_mode == 0x01) {
+        t_BinaryData_5203::t_acq_mode = 0x02;    // TestMode contains Common Start data
+        return "AcqMode: Test Mode";
+    }
     if (t_BinaryData_5203::t_acq_mode == 0x02)
         return "AcqMode: Common Start";
     if (t_BinaryData_5203::t_acq_mode == 0x12)
@@ -183,22 +174,25 @@ void t_BinaryData_5203::WriteCsvHeader(std::ofstream& csvfile) {
     if (t_brd_ver) {
         csvfile << "//Board:" << t_brd_ver << "\n//File_Format_Version:" << t_s_data_version << "\n//Janus_Release " << t_s_sw_version << "\n";
     } else {
-        csvfile << "//Janus Release " << t_s_sw_version << "\n";
-        csvfile << "//File Format Version " << t_s_data_version << "\n";
+        csvfile << "//Janus_Release " << t_s_sw_version << "\n";
+        csvfile << "//File_Format_Version " << t_s_data_version << "\n";
     }
     csvfile << "//Acquisition_Mode:" << t_BinaryData_5203::WriteAcqMode() << " \n";
     csvfile << "//Measurement_Mode:" << t_BinaryData_5203::WriteMeasMode() << " \n";
-    csvfile << "//Time unit:" << t_BinaryData_5203::t_unit[time_unit] << " \n";
-    csvfile << "//TStamp unit:" << t_BinaryData_5203::t_unit_tstamp[time_unit] << " \n";
-    csvfile << "//ToA LSB value_ps:" << t_ToA_LSB_ns * 1e3 << "\n";
-    csvfile << "//ToT LSB value_ps:" << t_ToT_LSB_ns * 1e3 << "\n";
-    csvfile << "//TStamp LSB value_ns:" << t_Tstamp_LSB_ns * 1e3 << "\n";
+    csvfile << "//Time_unit:" << t_BinaryData_5203::t_unit[time_unit] << " \n";
+    csvfile << "//TStamp_unit:" << t_BinaryData_5203::t_unit_tstamp[time_unit] << " \n";
+    csvfile << "//ToA_LSB_value_ps:" << t_ToA_LSB_ns * 1e3 << "\n";
+    csvfile << "//ToT_LSB_value_ps:" << t_ToT_LSB_ns * 1e3 << "\n";
+    csvfile << "//TStamp_LSB_value_ns:" << t_Tstamp_LSB_ns * 1e3 << "\n";
     csvfile << "//Run#:" << t_run_num << "\n";
-    csvfile << "//Start_Time_Epoch:" << t_start_run << "\nStart_Time_DateTime:" << date << "\n";
+    csvfile << "//Start_Time_Epoch:" << t_start_run << "\n//Start_Time_DateTime:" << date << "\n";
     csvfile << "//************************************************\n";
     if (t_acq_mode == ACQMODE_COMMONSTART || t_acq_mode == ACQMODE_COMMONSTOP)
-        csvfile << "TStamp_" << t_BinaryData_5203::t_unit_tstamp[time_unit] << ",Trigger_ID,Entries,Board_Id,Ch_Id,deltaT_" << t_BinaryData_5203::t_unit[time_unit];
-    else csvfile << "TStamp_" << t_BinaryData_5203::t_unit_tstamp[time_unit] << ",Trigger_ID,Entries,Board_Id,Ch_Id,Edge,ToA_" << t_BinaryData_5203::t_unit[time_unit];
+        csvfile << "TStamp_" << t_BinaryData_5203::t_unit_tstamp[time_unit] << ",Trg_Id,Board_Id,Num_hits,Ch_Id,deltaT_" << t_BinaryData_5203::t_unit[time_unit];
+    else if (t_acq_mode == ACQMODE_TRGMATCHING) 
+        csvfile << "TStamp_" << t_BinaryData_5203::t_unit_tstamp[time_unit] << ",Trg_Id,Board_Id,Num_hits,Ch_Id,Edge,ToA_" << t_BinaryData_5203::t_unit[time_unit];
+	else if (t_acq_mode == ACQMODE_STREAMING) 
+        csvfile << "TStamp_" << t_BinaryData_5203::t_unit_tstamp[time_unit] << ",Board_Id,Num_hits,Ch_Id,Edge,ToA_" << t_BinaryData_5203::t_unit[time_unit];
     //std::cout << "TStamp unit: " << t_unit_tstamp[time_unit] << std::endl;
     
     if (t_meas_mode != MEASMODE_LEADONLY)
@@ -293,6 +287,7 @@ uint16_t t_BinaryData_5203::ReadCStartTMatchEvent(std::ifstream& binfile) {
     uint16_t mysize = 0;
     uint8_t tmp_u8;
     uint16_t tmp_u16;
+    uint16_t tmp_i16;
     uint32_t tmp_u32;
     float tmp_f;
 
@@ -307,13 +302,19 @@ uint16_t t_BinaryData_5203::ReadCStartTMatchEvent(std::ifstream& binfile) {
         mysize += 1;
     }
 
-    if (t_BinaryData_5203::t_time_unit) {
+    if (t_BinaryData_5203::t_time_unit) {  // time in ns, as a float
         binfile.read((char*)&tmp_f, sizeof(float));
         t_ToA_f.push_back(tmp_f);
         mysize += 4;
         if (t_BinaryData_5203::t_meas_mode != MEASMODE_LEADONLY) {
             binfile.read((char*)&tmp_f, sizeof(float));
-            if (t_BinaryData_5203::t_meas_mode == MEASMODE_LEADTOT8) tmp_u16 = 0xFF & tmp_u16;
+
+            float full_scale = 0;
+			if (t_BinaryData_5203::t_meas_mode == MEASMODE_LEADTRAIL) full_scale = static_cast<float>(0xFFFF * t_ToT_LSB_ns);
+            else if (t_BinaryData_5203::t_meas_mode == MEASMODE_LEADTOT11) full_scale = static_cast<float>(0x7FF * t_ToT_LSB_ns);
+			else if (t_BinaryData_5203::t_meas_mode == MEASMODE_LEADTOT8) full_scale = static_cast<float>(0xFF * t_ToT_LSB_ns);
+			if (std::abs(tmp_f - full_scale) < (t_ToT_LSB_ns * 0.5)) tmp_f = -1;  // Limit ToT to the full scale value, tolleranze of half of LSB
+
             t_ToT_f.push_back(tmp_f);
             mysize += 4;
         }
@@ -323,7 +324,18 @@ uint16_t t_BinaryData_5203::ReadCStartTMatchEvent(std::ifstream& binfile) {
         mysize += 4;
         if (t_BinaryData_5203::t_meas_mode != MEASMODE_LEADONLY) {
             binfile.read((char*)&tmp_u16, sizeof(uint16_t));
-            if (t_BinaryData_5203::t_meas_mode == MEASMODE_LEADTOT8) tmp_u16 = 0xFF & tmp_u16;
+            float full_scale = 0;
+            if (t_BinaryData_5203::t_meas_mode == MEASMODE_LEADTRAIL) {
+                full_scale = 0xFFFF;
+            } else if (t_BinaryData_5203::t_meas_mode == MEASMODE_LEADTOT11) {
+                full_scale = 0x7FF;
+				tmp_u16 = 0x7FF & tmp_u16;
+            } else if (t_BinaryData_5203::t_meas_mode == MEASMODE_LEADTOT8) {
+                full_scale = 0xFF;
+                tmp_u16 = 0xFF & tmp_u16;
+            }
+			tmp_i16 = tmp_u16 == full_scale ? -1 : (int16_t)tmp_u16;  // Limit ToT to the full scale value
+
             t_ToT_i.push_back(tmp_u16);
             mysize += 2;
         }
@@ -341,11 +353,11 @@ void t_BinaryData_5203::WriteTmpEvt(std::ofstream& csvfile) {
     evt_header += "," + std::to_string(t_trigger_ID);
     //std::string evt_header = std::to_string(t_brd) + "," + std::to_string(t_tstamp);
 
-    // Write Data: brd, ch, edge (Not in CStart/CStep), ToA, ToT
-    for (uint32_t i = 0; i < t_ch_id.size(); ++i) {
+    // Write Data: brd, num_hits, ch, edge (Not in CStart/CStep), ToA, ToT
+	for (uint32_t i = 0; i < t_ch_id.size(); ++i) {  // Equivalent to num_of_hits, t_ch_id should be long as num_of_hits, but is better doing a check
         std::string s_data;
 
-        s_data += std::to_string(t_num_of_hit) + ',' + std::to_string(t_brd_id.at(i)) + "," + std::to_string(t_ch_id.at(i));
+        s_data += std::to_string(t_brd_id.at(i)) + "," + std::to_string(t_num_of_hit) + ',' + std::to_string(t_ch_id.at(i));
         if (t_acq_mode != ACQMODE_COMMONSTART && t_acq_mode != ACQMODE_COMMONSTOP)
             s_data += "," + std::to_string(t_edge.at(i));
 

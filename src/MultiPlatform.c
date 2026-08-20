@@ -109,4 +109,119 @@ int GetFileUpdateTime(char *fname, uint64_t *ftime)
     return 0;
 }
 
+// creates a timespec representing time NOW+ms from epoch
+static struct timespec _getTimeSpecFromNow(uint32_t ms) {
+	struct timespec ts;
+	uint32_t sec = (ms / 1000);
+	uint32_t nsec = (ms - sec * 1000) * 1000000;
+	clock_gettime(CLOCK_REALTIME, &ts);
+	ts.tv_sec += sec;
+	ts.tv_nsec += nsec;
+	//tv_nsec can be now higher than 1e9
+	ts.tv_sec += ts.tv_nsec / 1000000000;
+	ts.tv_nsec = ts.tv_nsec % 1000000000;
+	return ts;
+}
+
 #endif
+
+// ***********************************************
+// Semaphore functions
+// ***********************************************
+// Initialized a semaphore
+int j_sem_init(j_sem_t* s) {
+	if (s == NULL)
+		return -1;
+	int32_t ret = 0;
+#ifndef _WIN32
+	if (sem_init(s, 0, 0) != 0)
+		ret = -1;
+#else
+	const HANDLE sem = CreateSemaphoreA(NULL, 0, 1, NULL);
+	if (sem == NULL)
+		ret = -1;
+	else
+		*s = sem;
+#endif
+	return ret;
+}
+
+// Destroy a semaphore
+int32_t j_sem_destroy(j_sem_t* s) {
+	if (s == NULL)
+		return -1;
+	int32_t ret = 0;
+#ifndef _WIN32
+	if (sem_destroy(s) != 0)
+		ret = -1;
+#else
+	if (!CloseHandle(*s))
+		ret = -1;
+#endif
+	return ret;
+}
+
+
+// Wait on a semaphore
+int32_t j_sem_wait(j_sem_t* s, int32_t ms) {
+	if (s == NULL)
+		return -1;
+	int32_t ret = 0;
+#ifndef _WIN32
+	int r;
+	switch (ms) {
+	case 0: {
+		struct timespec ts = { 0 };
+		r = (sem_timedwait(s, &ts) == 0) ? 0 : errno;
+		break;
+	}
+	case INFINITE:
+		r = (sem_wait(s) == 0) ? 0 : errno;
+		break;
+	default: {
+		const struct timespec ts = _getTimeSpecFromNow(ms);
+		r = (sem_timedwait(s, &ts) == 0) ? 0 : errno;
+		break;
+	}
+	}
+	switch (r) {
+	case 0:
+		break;
+	case ETIMEDOUT:
+		ret = -1;
+		break;
+	default:
+		ret = -1;
+		break;
+	}
+#else
+	const DWORD r = WaitForSingleObjectEx(*s, (DWORD)ms, FALSE);
+	switch (r) {
+	case WAIT_OBJECT_0:
+		break;
+	case WAIT_TIMEOUT:
+		ret = -1;
+		break;
+	default:
+		ret = -1;
+		break;
+	}
+#endif
+	return ret;
+}
+
+
+// Post on a semaphore
+int32_t j_sem_post(j_sem_t* s) {
+	if (s == NULL)
+		return -1;
+	int32_t ret = 0;
+#ifndef _WIN32
+	if (sem_post(s) != 0)
+		ret = -1;
+#else
+	if (!ReleaseSemaphore(*s, 1, NULL))
+		ret = -1;
+#endif
+	return ret;
+}

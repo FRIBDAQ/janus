@@ -5,6 +5,90 @@
 *************************************************************************************************************************
 
 -------------------------------------------------------------------------------------------------------------------------
+Release 5.0.1 - 21/07/2026
+-------------------------------------------------------------------------------------------------------------------------
+- Bug fix for macro parsing
+
+-------------------------------------------------------------------------------------------------------------------------
+Release 5.0.0 - 13/07/2026
+-------------------------------------------------------------------------------------------------------------------------
+- Updated FERSlib to version 2: introduced support for synchronization between multiple concentrators and with an external master unit
+- Added options to StartRunMode and parameters to manage the concentrator synchronization options
+- Added message to notify if the board is in TDL debug Mode (starting from FW rev 8.0)
+- Updated TDL initialization procedure
+- Added information on Master/Slave status of concentrators and on HV module (A7585D) firmware version during opening process
+- Set minimum number of points for mean computation in HoldDelay Scan
+- Added generic I2C support
+- Added Janus path check during installation in Linux platform
+- Added DateCalendar.py to manage GPS start time settings
+- Added Restarting Janus state when Janus restarts after a parameter change in Janus_Config.txt file
+- Increased to 32 the max number of boards handled by GUI
+- Added support for enabling HV on all boards simultaneously
+- Added A7585 module FW revision in RunInfo file
+- Fixed and improved readout error handling in the GUI
+- Disalbed RunNumber spinbox during acquisition
+- Added an HV OFF message for voltages below 30% of Vset
+- Improved Tcl/Tk compatibility for variable trace handling
+- Added automatic saving of the RunInfo file with the Raw Data
+- Removed WAVEFORM acquisition mode in GUI basic mode
+- Disabled output files saving when WAVEFORM acquisition mode is selected
+- Improved handling of empty fields in the GUI
+- Minor fixes in GUI pop-up notification
+- Bug fix in HV monitor for console mode
+- Bug fix in messages shown in the GUI message box dialog
+- Bug fix in plot update when changing the displayed channel while data acquisition is stopped
+- Bug fix in readout error handling from the GUI
+- Bug fix in offline mode for reprocessing data acquired over USB
+- Bug fix in reading RunVars with GUI
+- Bug fix in setting new parameter value from JanusC to GUI
+- Bug fix in parameters loading for Hold Delay and Threshold scan in GUI
+
+-------------------------------------------------------------------------------------------------------------------------
+Release 4.3.0 - 14/01/2026
+-------------------------------------------------------------------------------------------------------------------------
+- Updated output list file to version 3.4 adding the Tref timestamp in SpectTiming mode and the per-event channel count 
+  (number of channels containing data and written to the event) in all acquisition modes
+- Updated FERSlib to v1.3.0
+- Removed the functions FERS_GetParam_Hex and FERS_GetParam_Hex64 
+- Added a warning for asnchronous StartRun modes (ASYNC, CHAIN_T0, CHIAN_T1) when used with a TDL connection
+- Forced Trigger and Tref to use the same source in SpectTiming mode
+- Improved service event checks on USB connection
+- Added the RunTimeCmd 'n' to change the run number in console mode
+- Enable statistics updates even when the Statistics tab is not in focus
+- Fixed typos in ASCII and CSV output headers
+- Updated BinToCsv for compatibility with Janus list file version 3.4
+- Improved Janus installation on Linux platforms
+- Minor bug fixes in BinToCsv
+- Bug fix when Janus closes with boards still connected
+- Bug fix in StopMode PRESET_COUNT
+
+-------------------------------------------------------------------------------------------------------------------------
+Release 4.2.4 - 07/10/2025
+-------------------------------------------------------------------------------------------------------------------------
+- Updated FERSlib to v1.2.3, which includes documentation in the Linux package
+- Bug fix in binary file output for Spect/SpectTiming mode: channel ID is now correctly stored as uint8_t instead of int
+- Bug fix in HV monitor for console mode with multiple boards
+
+-------------------------------------------------------------------------------------------------------------------------
+Release 4.2.3 - 16/09/2025
+-------------------------------------------------------------------------------------------------------------------------
+- Bug fix on ASCII and CSV file in spect timing acquisition mode
+- Bug fix on correct assignment of PREAMP_LG and PREAMP_HG analog probes
+
+-------------------------------------------------------------------------------------------------------------------------
+Release 4.2.2 - 10/09/2025
+-------------------------------------------------------------------------------------------------------------------------
+- Updated FERSlib to v1.2.2, fixing a bug in Threshold and Hold Delay scan
+- Added EnableListZeroSuppr parameter to skip list events with 0 hits in timing mode
+- Bug fix when setting Max Size List output file in paramparser.c
+
+-------------------------------------------------------------------------------------------------------------------------
+Release 4.2.1 - 10/07/2025
+-------------------------------------------------------------------------------------------------------------------------
+- Improved missing service event check
+- Bug fix when saving configuration file for a specific run
+
+-------------------------------------------------------------------------------------------------------------------------
 Release 4.2.0 - 06/06/2025
 -------------------------------------------------------------------------------------------------------------------------
 - Improved Janus installation instruction on linux
@@ -65,7 +149,7 @@ Release 4.0.0 - 31/01/25
 - Bug fix on Event Building
 - Bug fix on HV individual maximum range, can be set to 2.5 V
 - Bug fix on OpenDevice in Linux with tdl connection
-- Bug fix on output list file ascii in counting mode
+- Bug fix on output list file ASCII in counting mode
 - Bug fix on HV individual adjust configuration
 - Bug fix on turining HV off when Janus GUI closes connection
 - Bug fix on gnuplot live histogram in linux distribution with wayland
@@ -216,7 +300,7 @@ Release 2.2.9 - 8/03/22
 - Added option for saving in the list_files the ToA and ToT as float ('ns') or int ('LSB') in "RunCtrl" tabs, through the param "OF_OutFileUnit"
 - Data format version 3.1: fixed the event size in timing mode. Added the EnHistoNbin, time unit, time LSB value in the Header file list. ToA and ToT can be float or int
 - Macro BinToCsv updated to the data format 3.1
-- Bug fix: list Ascii saving restored
+- Bug fix: list ASCII saving restored
 
 -------------------------------------------------------------------------------------------------------------------------
 Release 2.2.8 - 11/02/22

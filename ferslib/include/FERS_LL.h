@@ -34,6 +34,7 @@ extern "C" {
 
 extern mutex_t FERS_RoMutex;		// Mutex for the access to FERS_ReadoutStatus
 extern f_sem_t FERS_StartRunSemaphore[FERSLIB_MAX_NBRD];	// Semaphore for sync the start of the run with the data receiver thread
+extern int SyncCnc_Completed;
 
 // TDL fiber delay setting
 #define FIBER_DELAY(length_m) (22.f + 0.781f * (length_m))  // Delay ~= 22 + 0.781 * length (in m)
@@ -45,7 +46,8 @@ extern f_sem_t FERS_StartRunSemaphore[FERSLIB_MAX_NBRD];	// Semaphore for sync t
 // -----------------------------------------------------------------------------------
 int LLtdl_OpenDevice(char *board_ip_addr, int cindex);
 int LLtdl_CloseDevice(int cindex);
-int LLtdl_InitTDLchains(int cindex, float DelayAdjust[FERSLIB_MAX_NTDL][FERSLIB_MAX_NNODES]);
+int LLtdl_EnumerateTDLChains(int cindex, float DelayAdjust[FERSLIB_MAX_NTDL][FERSLIB_MAX_NNODES]);
+int LLtdl_SyncTDLchains(int* cnchandle, uint32_t StartRunMode);
 bool LLtdl_TDLchainsInitialized(int cindex);
 int LLtdl_ControlChain(int cindex, int chain, bool enable, uint32_t token_interval);
 int LLtdl_GetChainInfo(int cindex, int chain, FERS_TDL_ChainInfo_t *tdl_info);
@@ -68,6 +70,9 @@ int LLtdl_WriteRegister(int cindex, int chain, int node, uint32_t address, uint3
 int LLtdl_ReadRegister(int cindex, int chain, int node, uint32_t address, uint32_t *data);
 int LLtdl_SendCommand(int cindex, int chain, int node, uint32_t cmd, uint32_t delay);
 int LLtdl_SendCommandBroadcast(int cindex, uint32_t cmd, uint32_t delay);
+int LLtdl_SendDCommandBroadcast(int* cnchandle, uint32_t cmd, uint32_t delay);
+int LLtdl_SetDCommandBroadcast(int cindex, uint32_t cmd, uint32_t delay);
+
 int LLtdl_CncWriteRegister(int cindex, uint32_t address, uint32_t data);
 int LLtdl_CncReadRegister(int cindex, uint32_t address, uint32_t *data);
 int LLtdl_GetCncInfo(int cindex, FERS_CncInfo_t *CncInfo);
@@ -88,7 +93,7 @@ int LLusb_ReadRegister(int bindex, uint32_t address, uint32_t *data);
 int LLtdl_ReadData(int cindex, char *buff, int size, int *nb);
 int LLeth_ReadData(int bindex, char *buff, int size, int *nb);
 int LLusb_ReadData(int bindex, char *buff, int size, int *nb);
-int LLtdl_ReadData_File(int cindex, char* buff, int size, int* nb, int flushing);
+int LLtdl_ReadData_File(int cindex, char* buff, int64_t size, int* nb, int flushing);
 int LLeth_ReadData_File(int bindex, char* buff, int size, int* nb, int flushing);
 int LLusb_ReadData_File(int bindex, char* buff, int size, int* nb, int flushing);
 int LLtdl_Flush(int cindex);
@@ -100,7 +105,7 @@ int LLeth_OpenRawOutputFile(int handle);
 int LLeth_CloseRawOutputFile(int handle);
 int LLusb_OpenRawOutputFile(int handle);
 int LLusb_CloseRawOutputFile(int handle);
-int LLtdl_OpenRawOutputFile(int *handle);
+int LLtdl_OpenRawOutputFile(int *handle, int cindex);
 int LLtdl_CloseRawOutputFile(int handle);
 
 #ifdef __cplusplus

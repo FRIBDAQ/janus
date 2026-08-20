@@ -23,7 +23,7 @@
 #define PARSEMODE_FIRST_CALL		0x01
 #define PARSEMODE_PARSE_CONNECTION	0x02
 #define PARSEMODE_PARSE_ALL			0x04
-
+#define PARSEMODE_RESET				0x08
 //****************************************************************************
 // Function prototypes
 //****************************************************************************

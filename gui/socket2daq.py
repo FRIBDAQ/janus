@@ -2,7 +2,7 @@ import socket
 from threading import Thread, Lock
 import time
 
-import shared as sh
+import janus_shared as sh
 
 class socket2daq:
 	def __init__(self, host='', port=50017):
@@ -35,13 +35,33 @@ class socket2daq:
 		self.s.listen(1)
 		self.s.settimeout(5.0)
 		self.conn, self.addr = self.s.accept()
+		# Ensure the RX thread can exit promptly (recv must not block forever).
+		try:
+			self.conn.settimeout(0.5)
+		except Exception:
+			pass
 
 
 	def dismiss(self):
-		self.s.close()
 		self.stopthread = True
 		self.rxrdy = 0
-		if self.t.is_alive(): self.t.join()
+		try:
+			self.conn.shutdown(socket.SHUT_RDWR)
+		except Exception:
+			pass
+		try:
+			self.conn.close()
+		except Exception:
+			pass
+		try:
+			self.s.close()
+		except Exception:
+			pass
+		try:
+			if self.t.is_alive():
+				self.t.join(timeout=1.0)
+		except Exception:
+			pass
 			
 
 	def RX_thread(self):
@@ -58,13 +78,24 @@ class socket2daq:
 			else:
 				self.mutex.release()
 			if len(rxbuff) <= 1 or len(rxbuff) < msize:
-				self.s.settimeout(5.0)
 				try:
 					datain = self.conn.recv(1024)
+				except socket.timeout:
+					continue
 				except socket.error as msg:
 					self.error = True
 					print(msg)
-					self.s.close()
+					try:
+						self.conn.close()
+					except Exception:
+						pass
+					try:
+						self.s.close()
+					except Exception:
+						pass
+					break
+				if not datain:
+					# Peer closed the connection.
 					break
 				rxbuff += datain
 			if  wait_for_size and len(rxbuff) > 1:
@@ -133,7 +164,19 @@ def GetString():
 	if not SckConnected: return ''
 	cmsg = sock.recv_data()
 	SckError = sock.error
-	return cmsg.decode('utf-8')
+
+	#1) UTF-8 strict
+	try:
+		return cmsg.decode('utf-8')
+	except UnicodeDecodeError: 
+		# 2) Common fallback into cp1252 or latin-1
+		for enc in ("cp1252", "latin-1"):
+			try:
+				return cmsg.decode(enc)
+			except UnicodeDecodeError:
+				pass
+		# 3) Last resort: decode with replacement characters for undecodable bytes
+		return cmsg.decode('utf-8', errors='replace')
 
 def GetData():
 	global sock, SckConnected, SckError
@@ -142,7 +185,7 @@ def GetData():
 
 def Close():
 	global sock, SckConnected, SckError
-	#if not SckConnected: return	# DNIN: should it been commented
+	#if not SckConnected: return	
 	sock.dismiss()
 	SckConnected = False
 

@@ -14,9 +14,7 @@
 * software, documentation and results solely at his own risk.
 ****************************************************************************** */
 
-#ifdef Win32
 #pragma once
-#endif
 
 #include <cstdint>
 #include <cstdio>
@@ -29,20 +27,11 @@
 #include <vector>
 #include <array>
 
-#ifdef _WIN32
-#include <windows.h>
-#define my_sprintf sprintf_s
-#else
-#define  my_sprintf sprintf
-#include <unistd.h>
-#define Sleep(x) usleep((x)*1000)
-#endif
-
 class t_BinaryData_5203
 {
     private:
         std::streampos                      t_begin, end, mb;   
-        std::streamoff                      t_totsize;      // dimension of the binary file in input
+        std::streamoff                      t_evts_size;      // dimension of the binary file in input
         std::array<std::string, 2>          t_unit;   // = { "LSB", "ns" };    // time unit in the csv file header
         std::array<std::string, 2>          t_unit_tstamp;    // = { "LSB", "us" };  // time unit in the csv file header for timestamp
         uint8_t                             t_force_ns;     // force the conversion of time in ns (if is in LSB)
@@ -88,7 +77,7 @@ class t_BinaryData_5203
 
         void ReadHeaderBinfile(std::ifstream & binfile);
         void ComputeBinfileSize(std::ifstream & binfile);
-        std::streamoff GetEventsSize() { return t_BinaryData_5203::t_totsize; };  // Return the size of the bin file containing the Events
+        std::streamoff GetEventsSize() { return t_BinaryData_5203::t_evts_size; };  // Return the size of the bin file containing the Events
         std::streamoff GetEventsBegin() { return std::streamoff(t_BinaryData_5203::t_begin); };  // Return the file position where the Events start
         void WriteCsvHeader(std::ofstream & csvfile);
 

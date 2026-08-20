@@ -12,16 +12,16 @@ CAEN FERS Library Readme
 
  Content
  -----------------------------------------------------------------------------
- README				: This file.
- ReleaseNotes		: Revision History and notes.
- src				: source files.
- include			: header files.
+ README				: this file
+ ReleaseNotes		: revision History and notes
+ src				: source files
+ include			: header files
  FERSlibDemo		: C demo showing how to use the main FERSlib functionalities
 
 
  SYSTEM REQUIREMENTS
  -----------------------------------------------------------------------------
- - A compiler supporting C99 or C11/C17.
+ - g++ with C++17 support
   
 
  INSTALLATION
@@ -32,10 +32,16 @@ CAEN FERS Library Readme
     $ sudo make install
     $ sudo ldconfig
 
-  Library and headers will be installed in /usr/local/lib and /usr/local/include
-  respectively. In case you want to use a different installation path:
+  The library and header files will be installed in /usr/local/lib and /usr/local/include,
+  respectively. 
+  
+  If you want to use a different installation path, run:
    $ ./configure --prefix=YOUR_LIB_PATH
-  In this case, add then the library path to LD_LIBRARY_PATH
+  Then, add then the library path to LD_LIBRARY_PATH variable
+  
+  If you want to use a specific compiler version, run:
+   $ ./configure CXX=/pathToExe/g++-VV
+  where VV is the desired g++ version
 
 
  SUPPORT   

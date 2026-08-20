@@ -40,15 +40,8 @@ t_BinaryDataFERS::t_BinaryDataFERS(uint8_t force_ns, uint8_t mode) {
 
 t_BinaryDataFERS::t_BinaryDataFERS(std::ifstream& binfile, std::ofstream& csvfile, uint8_t force_ns) {
     // binfile is already opened
-    // Which values need to be set?
-    t_BinaryDataFERS::InitFERS(force_ns, 0);    // 
-    t_BinaryDataFERS::ComputeBinfileSizeFERS(binfile);
-    t_BinaryDataFERS::ReadHeaderBinfileFERS(binfile);
-    binfile.seekg(t_BinaryDataFERS::t_begin, std::ios::beg);
-    if (t_brd_ver == 5202)
-        t_data_5202 = t_BinaryData(binfile, csvfile, force_ns);
-    else if (t_brd_ver == 5203)
-        t_data_5203 = t_BinaryData_5203(binfile, csvfile, force_ns);
+    t_BinaryDataFERS::InitFERS(force_ns, 0);
+    t_BinaryDataFERS::InitAnalisys(binfile, csvfile, force_ns);
 }
 
 void t_BinaryDataFERS::InitFERS(uint8_t force_ns, uint8_t mode) {
@@ -56,25 +49,31 @@ void t_BinaryDataFERS::InitFERS(uint8_t force_ns, uint8_t mode) {
     t_BinaryDataFERS::t_s_sw_version = "";
     t_brd_ver = 0;
     t_data_format = 0;
+    t_filesize = 0;
 }
 
 void t_BinaryDataFERS::InitAnalisys(std::ifstream& binfile, std::ofstream& csvfile, uint8_t force_ns) {
     t_BinaryDataFERS::ComputeBinfileSizeFERS(binfile);
     t_BinaryDataFERS::ReadHeaderBinfileFERS(binfile);
     binfile.seekg(t_BinaryDataFERS::t_begin, std::ios::beg);
-    if (t_brd_ver == 5202)
+    if (t_brd_ver == 5202) {
         t_data_5202 = t_BinaryData(binfile, csvfile, force_ns);
-    else if (t_brd_ver == 5203)
+        t_evts_size = t_data_5202.GetEventsSize();
+        t_begin = std::streampos(t_data_5202.GetEventsBegin());
+    } else if (t_brd_ver == 5203) {
         t_data_5203 = t_BinaryData_5203(binfile, csvfile, force_ns);
+        t_evts_size = t_data_5203.GetEventsSize();
+        t_begin = std::streampos(t_data_5203.GetEventsBegin());
+    }
 }
 
 void t_BinaryDataFERS::ComputeBinfileSizeFERS(std::ifstream& binfile) {
     t_BinaryDataFERS::t_begin = binfile.tellg();    // Position of the reading pointer after the binfile Header
     binfile.seekg(0, std::ios::end);
     end = binfile.tellg();
+    t_BinaryDataFERS::t_filesize = end;
     binfile.seekg(t_BinaryDataFERS::t_begin, std::ios::beg);
-    t_BinaryDataFERS::t_totsize = end - t_BinaryDataFERS::t_begin;
-    //t_read_size = t_begin;
+    t_BinaryDataFERS::t_evts_size = end - t_BinaryDataFERS::t_begin;
 }
 
 void t_BinaryDataFERS::ReadHeaderBinfileFERS(std::ifstream& binfile) {

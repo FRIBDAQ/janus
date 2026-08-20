@@ -22,7 +22,7 @@ HV_Adjust_Range					"4.5"				g		c		# DAC range for the individual HV adjust.
 	- "DISABLED"
 HV_IndivAdj						128					c		d		# DAC setting for the Individual HV Adjust. Range from 0 to 255
 Vnom							128					c		m		# Estimated Vbias = ~(HV_Vbias - HV_IndivAdj)
-TempSensType					"TMP37"				g		c		# Temperature Sensor Type (or generic coefficients in the form "c0 c1 c2")
+TempSensType					"TMP37"				g		c		# Temperature Sensor Type (or generic coefficients in the form "c0 c1 c2", T = V*V*c2 + V*c1 + c0)
 	- "TMP37"
 	- "LM94021_G11"
 	- "LM94021_G00"
@@ -32,11 +32,22 @@ EnableTempFeedback				0					g	 	b		# Enable Vbias Temperature Feedback
 #---------------------------------------------------------------------------------------
 [RunCtrl]
 #---------------------------------------------------------------------------------------
-StartRunMode					ASYNC				g		c		# Start of Run mode 
+StartRunMode						ASYNC				g		c		# Start of Run mode 
 	- ASYNC
+	- TDL
+	- TDL_EXTRUN
+	- TDL_GPS
 	- CHAIN_T0
 	- CHAIN_T1
-	- TDL
+
+ExtRunSource					SYNC-IN				g		c		# External source for Start Run signal of the DT5215 master
+	- SYNC-IN
+	- LEMO_RA
+	- LEMO_RB
+	- LEMO_FA
+	- LEMO_FB
+
+GPSTimeUTC						"2030-06-20 9:10:15"					g		s		# GPS Time in UTC format ISO 8601 (YYYY-MM-DD HH:MM:SS) to be used for the start run signal
 
 StopRunMode						MANUAL				g		c		# Run Stop Mode
 	- MANUAL
@@ -95,6 +106,8 @@ AcquisitionMode					SPECTROSCOPY		g		c		# Acquisition mode
 	- WAVEFORM					
 	
 EnableToT						1					g	 	b		# Enable ToT in timing mode (Enabled: ToA = 16 bits, ToT = 9 bits; Disabled: ToA = 25 bits)
+
+EnableListZeroSuppr				0					g		b		# Enable suppression of event with 0 hits in Timing mode for output list files
 	
 BunchTrgSource					T-OR				g		c		# Bunch Trigger source (for spectroscopy and counting modes)
 	- T0-IN
@@ -136,9 +149,9 @@ TriggerLogic					OR64				g		c		# Trigger Logic (Combinatorial network with 64 se
 	- OR64
 	- AND2_OR32
 	- OR32_AND2
+	- OR16_AND4
 	- MAJ64
 	- MAJ32_AND2
-	- OR_QUAD
 	
 Tlogic_Width					"0 ns"				g		du		# TriggerLogic output width (0=linear)
 
@@ -154,9 +167,9 @@ TrefSource						T0-IN				g		c		# Tref source for timing mode (common start/stop)
 	- PTRG
 	- TLOGIC
 
-TrefWindow						"100 ns"			g		du		# Tref window (gate) in timing mode (common start/stop)
+TrefWindow						"100 ns"			g		du		# Tref window (gate) in timing mode (common start/stop). Sampled in 8 ns steps
 
-TrefDelay						"0 ns"				g		du		# Tref delay in timing mode (can be negative)
+TrefDelay						"0 ns"				g		du		# Tref delay in timing mode (can be negative). Sampled in 8 ns steps
 
 T0_Out							T-OR				g		c		# T0_Out assignment
 	- T0-IN
@@ -322,7 +335,7 @@ DigitalProbe0					OFF					g		c		# Select the signal connected to the digital pro
 	- T_OR
 	- Q_OR
 	
-ProbeChannel0				0					g		d		# Select the channel connected to the analog and digital probes0
+ProbeChannel0				0					g		d		# Select the channel connected to the analog and digital probes0. Channels 0-31
 	
 
 AnalogProbe1					OFF					g		c		# Select the signal connected to the analog probe1 
@@ -346,7 +359,7 @@ DigitalProbe1					OFF					g		c		# Select the signal connected to the digital pro
 	- T_OR
 	- Q_OR
 
-ProbeChannel1					0					g		d		# Select the channel connected to the analog and digital probes1
+ProbeChannel1					32					g		d		# Select the channel connected to the analog and digital probes1. Channels 32-63
 
 _BLANK 							-					-		-
 
@@ -358,7 +371,7 @@ TestPulseSource					EXT					g		c		# Select the source for the test pulse signal
 	- PTRG
 	- SW-CMD
 	
-TestPulseAmplitude				3000				g		d		# DAC setting for the internal test pulser (12 bit)
+TestPulseAmplitude				300				g		d		# DAC setting for the internal test pulser (12 bit)
 TestPulseDestination			ALL					g		c 		# Select which channels are connected to the test pulse input
 	- NONE
 	- ALL

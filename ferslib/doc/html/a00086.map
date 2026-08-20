@@ -1,0 +1,18 @@
+<map id="Macros" name="Macros">
+<area shape="rect" id="Node000016" href="$a00102.html" title="A5256 macros." alt="" coords="153,5,258,33"/>
+<area shape="rect" id="Node000005" href="$a00091.html" title="Acquisition modes." alt="" coords="141,57,271,85"/>
+<area shape="rect" id="Node000003" href="$a00089.html" title="FERS board family constants." alt="" coords="146,109,266,137"/>
+<area shape="rect" id="Node000014" href="$a00100.html" title="Configuration Mode." alt="" coords="132,161,280,189"/>
+<area shape="rect" id="Node000007" href="$a00093.html" title="Clock and TDL delay definitions." alt="" coords="148,213,264,241"/>
+<area shape="rect" id="Node000004" href="$a00090.html" title="Debug Log bitmask values." alt="" coords="137,265,274,293"/>
+<area shape="rect" id="Node000006" href="$a00092.html" title="Data Qualifier." alt="" coords="155,317,256,345"/>
+<area shape="rect" id="Node000011" href="$a00097.html" title="EEPROM A5256 constants." alt="" coords="118,369,294,397"/>
+<area shape="rect" id="Node000002" href="$a00088.html" title="Macros to define the library version." alt="" coords="152,421,260,449"/>
+<area shape="rect" id="Node000012" href="$a00098.html" title="FERS Flash constants." alt="" coords="131,473,281,501"/>
+<area shape="rect" id="Node000013" href="$a00099.html" title="Handles and indexing." alt="" coords="130,525,282,553"/>
+<area shape="rect" id="Node000010" href="$a00096.html" title="Measurement modes for 5203." alt="" coords="132,577,280,605"/>
+<area shape="rect" id="Node000001" title="Common macros." alt="" coords="5,369,70,397"/>
+<area shape="rect" id="Node000008" href="$a00094.html" title="Configuration contants for TDC operations (5203 only)" alt="" coords="151,629,260,657"/>
+<area shape="rect" id="Node000009" href="$a00095.html" title="Configuration contants for TDC operations in XROC boards (5204, 5205, etc...)" alt="" coords="125,681,286,726"/>
+<area shape="rect" id="Node000015" href="$a00101.html" title="Re&#45;define of Max and min11." alt="" coords="170,749,242,777"/>
+</map>

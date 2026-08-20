@@ -1,6 +1,6 @@
 #	Copyright (C) 2020-2023 CAEN SpA
 #
-#	This file is part of the CAEN Dig2 Low Level Library. PTHREAD_LIBS
+#	This file is part of the CAEN FERS Low Level Library. PTHREAD_LIBS
 
 lib_LTLIBRARIES = libcaenferslib.la
 libcaenferslib_la_SOURCES = \

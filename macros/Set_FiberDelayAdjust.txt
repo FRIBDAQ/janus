@@ -11,4 +11,4 @@
 # 2. For a daisy chain configuration, where the fiber to board 1 is 5 meters longer than to board 0:
 #    Set the delay of board 1 (chain 0, node 1) to 5 meters: FiberDelayAdjust 0 0 1 5
 
-FiberDelayAdjust	0 0 0 0				# Cnc Chain Node FiberLength (in meters)
+FiberDelayAdjust	0 0 0 0			# Cnc Chain Node FiberLength (in meters)

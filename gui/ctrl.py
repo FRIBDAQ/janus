@@ -13,7 +13,7 @@ from tkinter.filedialog import askopenfilename, asksaveasfilename, askdirectory
 from tkinter.ttk import Combobox, Progressbar
 #from tkinter.ttk import *
 
-import shared as sh
+import janus_shared as sh
 import cfgfile_rw as cfg
 import socket2daq as comm
 import leds as leds
@@ -22,20 +22,15 @@ import tooltips as tt
 params = sh.params
 sections = sh.sections
 
-#def resource_path(relative_path):
-#        if hasattr(sys, '_MEIPASS'):
-#            return os.path.join(sys._MEIPASS, relative_path)
-#        return os.path.join(os.path.abspath("."), relative_path)
 
 # *******************************************************************************
-# Control Panel
-# *******************************************************************************
 class CtrlPanel():
+	# *******************************************************************************
+	# Control Panel
+	# *******************************************************************************
 	def __init__(self):
 
 		# images and logos
-		if sys.platform.find('win') < 0:
-			sh.ImgPath = '../img/'
 		self.img_CAENlogo   = PhotoImage(file=sh.ImgPath + "CAENlogo.png"   ).subsample(3, 3)
 		self.img_FERSlogo   = PhotoImage(file=sh.ImgPath + "FERSlogo.png"   ).subsample(3, 3)
 		self.img_plug       = PhotoImage(file=sh.ImgPath + "plug.png"       ).subsample(3, 3)
@@ -72,7 +67,6 @@ class CtrlPanel():
 		self.prev_brd = [0, 0] # enter in Ramping, board
 
 		self.PlotTraceSel = ["0 0 B", "", "", "", "", "", "", ""]
-		# self.PlotTraceSel = ["", "", "", "", "", "", "", ""]
 		self.StaircaseSettings = ""
 		self.HoldScanSettings = ""
 
@@ -81,8 +75,7 @@ class CtrlPanel():
 
 		self.active_board = StringVar()
 		self.active_board.set(0)
-		self.active_board.trace('w', lambda name, index, mode: self.SaveRunVars())
-
+		sh.trace_bind(self.active_board, 'write', lambda name, index, mode: self.SaveRunVars())
 		self.Xcalib = IntVar()
 		self.Xcalib.set(0)
 
@@ -108,17 +101,18 @@ class CtrlPanel():
 
 		self.guimode = StringVar()
 		self.guimode.set('b')
-		self.guimode.trace('w', lambda name, index, mode: self.SaveRunVars())
-
+		sh.trace_bind(self.guimode, 'write', lambda name, index, mode: self.SaveRunVars())
 		self.time_unit = IntVar()
 		self.time_unit.set(0)
 		self.list_of_bfile = IntVar()
 		self.list_of_bfile.set(0)
 
+
 	def validate_RunNumber(self, new_value):
-		if new_value.isdigit(): return int(new_value) < 10000
+		if new_value.isdigit(): return int(new_value) < 100000
 		elif not new_value: return True
 		else: return False
+
 
 	def OpenControlPanel(self, parent):
 		# ------------------------------------------------------------
@@ -127,9 +121,12 @@ class CtrlPanel():
 		y0 = 1
 		Label(parent, image=self.img_FERSlogo).place(relx=float(5)/sh.Win_Ctrl_W, rely=float(y0-1.1)/sh.Win_Ctrl_H, relwidth=225./sh.Win_Ctrl_W, relheight=8./sh.Win_Ctrl_H)  #  x = 5, y = y0)
 		Label(parent, image=self.img_CAENlogo).place(relx=float(520)/sh.Win_Ctrl_W, rely=float(y0-0.9)/sh.Win_Ctrl_H)  #  x = 520, y = y0)
-		Label(parent, text="JANUS", font=("Arial Bold", 20), fg = 'steelblue').place(relx=float(320)/sh.Win_Ctrl_W, rely=float(y0-1.6)/sh.Win_Ctrl_H)  #   x = 320, y = y0-5)
-		Label(parent, text="Ver. " + sh.Version + " - Rel." + sh.Release, font=("Arial", 8), fg = 'steelblue').place(relx=float(280)/sh.Win_Ctrl_W, rely=float(y0+3.1)/sh.Win_Ctrl_H)  #  x = 280, y = y0+25)
-
+		self.JanusLabel = Label(parent, text="JANUS", font=("Arial Bold", 20), fg = 'steelblue')
+		self.JanusLabel.place(relx=float(320)/sh.Win_Ctrl_W, rely=float(y0-1.6)/sh.Win_Ctrl_H)  #   x = 320, y = y0-5)
+		self.ReleaseLabel = Label(parent, text="Ver. " + sh.Version + " - Rel." + sh.Release, font=("Arial", 8), fg = 'steelblue')
+		self.ReleaseLabel.place(relx=float(280)/sh.Win_Ctrl_W, rely=float(y0+3.1)/sh.Win_Ctrl_H)  #  x = 280, y = y0+25)
+		self.TdlDebugLabel = Label(parent, text="TDL DEBUG MODE ON", font=("Arial Bold", 15), fg = 'orange', bg = '#0B1C2D')
+		
 		# ------------------------------------------------------------
 		# Run Ctrl Buttons and Run Status
 		# ------------------------------------------------------------
@@ -204,11 +201,10 @@ class CtrlPanel():
 		x0 = 570
 		Label(parent, text="Run#", font=("Arial Bold", 12)).place(relx=float(x0)/sh.Win_Ctrl_W, rely=float(y0+7)/sh.Win_H, relwidth=50./sh.Win_Ctrl_W, relheight=23./sh.Win_H) # , relwidth=float(45)/sh.Win_Ctrl_W, relheight=float(25)/sh.Win_H)  #x=x0, y = y0+7)
 		self.RunNumber = StringVar()
-		self.RunNumber.trace('w', lambda name, index, mode: self.SaveRunVars())
 		vcmd = (parent.register(self.validate_RunNumber), '%P')  #  , width=4
-		Spinbox(parent, textvariable=self.RunNumber, from_=0, to=10000, font=("Arial Bold", 12), validate='key', validatecommand=vcmd).place(relx=float(x0+50)/sh.Win_Ctrl_W, rely=float(y0+7)/sh.Win_H, relwidth=53./sh.Win_Ctrl_W, relheight=23./sh.Win_H)#x = x0+50, y = y0+7)
-
-		# ------------------------------------------------------------
+		self.RunNumSpinbox = Spinbox(parent, textvariable=self.RunNumber, from_=0, to=10000, font=("Arial Bold", 12), validate='key', validatecommand=vcmd)
+		self.RunNumSpinbox.place(relx=float(x0+50)/sh.Win_Ctrl_W, rely=float(y0+7)/sh.Win_H, relwidth=53./sh.Win_Ctrl_W, relheight=23./sh.Win_H)#x = x0+50, y = y0+7)
+		sh.trace_bind(self.RunNumber, 'write', lambda name, index, mode: self.SaveRunVars())# ------------------------------------------------------------
 		# Cfg, plot and Stats Buttons
 		# ------------------------------------------------------------
 		y0 = 110
@@ -218,17 +214,17 @@ class CtrlPanel():
 		self.combobox_writing.set(0)
 
 		Label(parent, text="Plot Type").place(relx=float(x0)/sh.Win_W, rely=float(y0)/sh.Win_H)  #  x=x0, y = y0)
-		self.plot_options_v = ['Spect LG','Spect HG','Spect ToA', 'Spect ToT', 'TrgRate-Ch', 'MultiCh Scaler', 'Waveform','2D-TrgRate','2D-Charge LG', '2D-Charge HG', 'Staircase', 'HoldDelay-Scan']
-		self.plot_options = ['Spect LG','Spect HG','Spect ToA', 'Spect ToT', 'TrgRate-Ch','Waveform','2D-TrgRate','2D-Charge LG', '2D-Charge HG', 'Staircase', 'HoldDelay-Scan', 'MultiCh Scaler']
-		self.plot_type = StringVar()
-		self.plot_type.trace('w', lambda name, index, mode: self.SaveRunVars())  #  , width=15
+		self.plot_options_v = ['PHA LG','PHA HG', 'ToA', 'ToT', 'TrgRate-Ch', 'MultiCh Scaler', 'Waveform','2D-TrgRate','2D-Charge LG', '2D-Charge HG', 'Staircase', 'HoldDelay-Scan']
+		self.plot_options = ['PHA LG','PHA HG', 'ToA', 'ToT', 'TrgRate-Ch','Waveform','2D-TrgRate','2D-Charge LG', '2D-Charge HG', 'Staircase', 'HoldDelay-Scan', 'MultiCh Scaler']
+		self.plot_type = StringVar(value='0')
+		sh.trace_bind(self.plot_type, 'write', lambda name, index, mode: self.SaveRunVars())#  , width=15
 		ttk.Combobox(parent, values=self.plot_options_v, textvariable=self.plot_type, state='readonly').place(relx=float(x0)/sh.Win_Ctrl_W, rely=float(y0+20)/sh.Win_H, relwidth=113./sh.Win_W, relheight=21./sh.Win_H)  #   x=x0, y=y0+20)
 		x0 += 120
 		Label(parent, text="Statistics Type").place(relx=float(x0)/sh.Win_W, rely=float(y0)/sh.Win_H)
 		self.smon_options = ['ChTrg Rate', 'ChTrg Cnt', 'Tstamp Rate', 'Tstamp cnt', 'PHA Rate', 'PHA Cnt']
-		self.smon_type = StringVar()
+		self.smon_type = StringVar(value='0')
 		self.smon_type.set('ChTrg Rate')
-		self.smon_type.trace('w', lambda name, index, mode: self.SaveRunVars())  #  , width=12
+		sh.trace_bind(self.smon_type, 'write', lambda name, index, mode: self.SaveRunVars())#  , width=12
 		ttk.Combobox(parent, values=self.smon_options, textvariable=self.smon_type, state='readonly').place(relx=float(x0)/sh.Win_W, rely=float(y0+20)/sh.Win_H, relwidth=95./sh.Win_W, relheight=21./sh.Win_H)  #  x=x0, y=y0+20)
 		x0 += 110
 		y0 = y0
@@ -239,7 +235,7 @@ class CtrlPanel():
 		self.Macro_msg = Label(parent, font=("Arial Bold", 10), text="")
 		self.Macro_msg.place(relx=(510)/sh.Win_W, rely=(y0+3)/sh.Win_H)
 
-		self.len_macro.trace('w', lambda name, index, mode: self.change_macro_msg())
+		sh.trace_bind(self.len_macro, 'write', lambda name, index, mode: self.change_macro_msg())
 		self.len_macro.set(len(cfg.cfg_file_list))
 
 		# ttk.Checkbutton(parent, text = "Enable combobox change (Expert)", variable = self.combobox_writing).place(x=x0, y=y0+20)
@@ -272,6 +268,24 @@ class CtrlPanel():
 		self.LoadRunVars()
 		self.enable_runvarsave = True
 
+	#######################################################################
+	#
+	# 							Functions
+	#
+	#######################################################################
+
+	def SetDebugModeWarning(self):
+		# Move Janus and Release labels up to show TDL DEBUG MODE
+		self.JanusLabel.place_forget()
+		self.ReleaseLabel.place_forget()
+		y0 = 1
+		self.ReleaseLabel.place(relx=float(280)/sh.Win_Ctrl_W, rely=float(y0+3)/sh.Win_Ctrl_H, relheight=0.01)  #  x = 280, y = y0+25)
+		self.JanusLabel.place(relx=float(320)/sh.Win_Ctrl_W, rely=float(y0-2)/sh.Win_Ctrl_H)  #   x = 320, y = y0-5)
+
+		# Place TDL DEBUG MODE label
+		self.TdlDebugLabel.place(relx=float(255)/sh.Win_Ctrl_W, rely=float(y0+4.4)/sh.Win_Ctrl_H, relheight=0.03)  #  x = 250, y = y0+10)
+
+
 
 	def SendStart(self):
 		if self.RisedWarning.get() == 0:
@@ -290,16 +304,9 @@ class CtrlPanel():
 			comm.SendCmd('f0')
 			self.bsingle.config(state=DISABLED)
 
+
 	def SaveCfgFile(self):
-		# DNIN: to decide: is better to implement everything in py or do with socket?
-		# if not self.CfgReloaded.get():	# new cfg file not loaded, update the Vbias from socket
-		# 	mycmd = "B" + params['HV_Vbias'].default	# not needed, the control is performed on Janus
-		# 	comm.SendCmd(mycmd)
-		# 	for i in range(sh.MaxBrd):
-		# 		if params['HV_Vbias'].value[i] != "": 
-		# 			comm.SendCmd("B"+ params['HV_Vbias'].value[i] + " b" + str(i))
-		# time.sleep(0.2)
-		############	Write and update Janus_config.txt
+		# Write and update Janus_config.txt
 		cfg.WriteConfigFile(sections, params, sh.CfgFile, self.show_warning.get())
 		self.CfgReloaded.set(0)
 		# GUI rising Warning 
@@ -307,6 +314,7 @@ class CtrlPanel():
 			self.CfgWarning.set(1)
 		self.RisedWarning.set(0)
 		self.b_apply.configure(bg = sh.BgCol, state=DISABLED)
+
 
 	def SaveCfgFileAs(self):
 		files = [('All Files', '*.*'), 
@@ -317,13 +325,15 @@ class CtrlPanel():
 			# self.SaveCfgFile()
 			self.CfgNameSaved.set(name)
 
+
 	def SaveCfgFileForRun(self):
 		filename, file_extension = os.path.splitext(sh.CfgFile)
-		filename = filename.split("/")[-1]
+		filename = filename.split(os.sep)[-1]
 		filename = os.path.join(sh.cfgfile_path, params['DataFilePath'].default, filename + '_Run' + str(self.RunNumber.get()))
 		
 		name = filename + file_extension
 		cfg.WriteConfigFile(sections, params, name, self.show_warning.get())
+
 
 	def ReadCfgFile(self):
 		try:
@@ -334,6 +344,7 @@ class CtrlPanel():
 			self.CfgReloaded.set(1)
 		except:
 			name = ''
+
 
 	def SaveRunVars(self):
 		if self.enable_runvarsave:
@@ -349,7 +360,7 @@ class CtrlPanel():
 			for i in range(8):
 				if self.PlotTraceSel[i] != "": 
 					default_PltTrSel = 0
-					rf.write("PlotTraces     " + str(i) + " " + self.PlotTraceSel[i] + "\n") #+ "  ")	# save Plot Trace on different lines
+					rf.write("PlotTraces     " + str(i) + " " + self.PlotTraceSel[i] + "\n") #+ "  ")	# Save Plot Trace on different lines
 					
 			if default_PltTrSel == 1:
 				rf.write    ("PlotTraces     " + "0 0 0 B\n")
@@ -365,11 +376,28 @@ class CtrlPanel():
 			rf.close()
 
 
+	def LoadDefaultRunVars(self):
+		self.enable_runvarsave = False
+		self.guimode.set('b')
+		self.active_board.set(0)
+		self.active_channel.set(0)
+		self.plot_type.set(self.plot_options[0])
+		self.smon_type.set(self.smon_options[0])
+		self.RunNumber.set("0")
+		self.Xcalib.set(0)
+		self.PlotTraceSel = [" 00 0 B", "", "", "", "", "", "", ""]
+		self.StaircaseSettings = "0 150 300 1 500"
+		self.HoldScanSettings = "0 0 256 8 500"
+		self.enable_runvarsave = True
+
+
 	def LoadRunVars(self):
 		if os.path.isfile(sh.RunVars):
 			self.enable_runvarsave = False
 			rf = open(sh.RunVars, "r")
-			for line in rf:
+			mLine = rf.readlines()
+			if len(mLine) == 0: self.LoadDefaultRunVars()
+			for line in mLine:
 				# line = line.split('#')[0]  # remove comments if line[0].count("#"): continue
 				if line[0].count("#"): continue
 				p = line.split()
@@ -394,6 +422,7 @@ class CtrlPanel():
 						self.HoldScanSettings = " ".join(p[1:])
 			rf.close()
 			self.enable_runvarsave = True
+
 
 	def SetAcqStatus(self, status, msg, offline = False):
 		self.AcqStatus["state"] = NORMAL
@@ -420,13 +449,28 @@ class CtrlPanel():
 		elif status == sh.ACQSTATUS_ERROR:
 			self.statled.set_color("red") 
 			self.AcqStatus.config(fg='red')
-		elif status == sh.ACQSTATUS_SOCK_CONNECTED: 
+			self.bstart.config(state=NORMAL)
+			self.bstop.config(state=DISABLED)
+		elif status == sh.ACQSTATUS_SOCK_CONNECTED or \
+			status == sh.ACQSTATUS_HW_CONNECTED or \
+			status == sh.ACQSTATUS_RESTARTING:
 			self.statled.set_color("yellow") 
 			self.AcqStatus.config(fg='black')
-		elif status == sh.ACQSTATUS_HW_CONNECTED: 
-			self.statled.set_color("yellow")
+		elif status == sh.ACQSTATUS_RESTARTINGJANUS: 
+			self.statled.set_color("yellow") 
 			self.AcqStatus.config(fg='black')
+			self.bstart.config(state=DISABLED)
+			self.staircase_button.config(state=DISABLED)
+			self.holdscan_button.config(state=DISABLED)
+			self.bin2csv_button["state"] = DISABLED # It is meant to avoid the conversion of a file which is currently being written
+			self.bstop.config(state=DISABLED)
+			self.bpause.config(state=DISABLED)
+			self.LoadCfg_button.config(state=DISABLED)	
+			self.SaveAs_button.config(state=DISABLED)
+			self.SaveToRun_button.config(state=DISABLED)
+			self.bclear.config(state=DISABLED)
 		elif status == sh.ACQSTATUS_READY: # ready for run
+			self.RunNumSpinbox.config(state=NORMAL)
 			self.LoadCfg_button.config(state=NORMAL)
 			self.SaveAs_button.config(state=NORMAL)
 			self.SaveToRun_button.config(state=NORMAL)
@@ -453,16 +497,30 @@ class CtrlPanel():
 			self.bsingle.config(state=DISABLED)
 			self.bclear.config(state=DISABLED)
 			self.prev_brd[0] = 0
-		elif status == sh.ACQSTATUS_RUNNING : # running 
+		elif status == sh.ACQSTATUS_WAITING_EXTSTART:
+			self.RunNumSpinbox.config(state=DISABLED)
 			self.AcqStatus.config(bg='white')
-			self.runled.set_color("green") 
 			self.bstart.config(state=DISABLED)
 			self.staircase_button.config(state=DISABLED)
 			self.holdscan_button.config(state=DISABLED)
-			self.bin2csv_button["state"] = DISABLED # DNIN: it is meant to avoid to convert a file that is going to be written during DAQ..is that useful?
+			self.bin2csv_button["state"] = DISABLED # It is meant to avoid the conversion of a file which is currently being written
 			self.bstop.config(state=NORMAL)
 			self.bpause.config(state=NORMAL)
-			self.LoadCfg_button.config(state=DISABLED)	# Is it correct to have this option?
+			self.LoadCfg_button.config(state=DISABLED)	
+			self.SaveAs_button.config(state=DISABLED)
+			self.SaveToRun_button.config(state=DISABLED)
+			self.bclear.config(state=NORMAL)
+		elif status == sh.ACQSTATUS_RUNNING : # running 
+			self.RunNumSpinbox.config(state=DISABLED)
+			self.AcqStatus.config(bg='white')
+			if 'waiting' not in msg: self.runled.set_color("green") 
+			self.bstart.config(state=DISABLED)
+			self.staircase_button.config(state=DISABLED)
+			self.holdscan_button.config(state=DISABLED)
+			self.bin2csv_button["state"] = DISABLED # It is meant to avoid the conversion of a file which is currently being written
+			self.bstop.config(state=NORMAL)
+			self.bpause.config(state=NORMAL)
+			self.LoadCfg_button.config(state=DISABLED)	
 			self.SaveAs_button.config(state=DISABLED)
 			self.SaveToRun_button.config(state=DISABLED)
 			if self.FreezeStat.get() == 1: self.bsingle.config(state=NORMAL)
@@ -483,7 +541,7 @@ class CtrlPanel():
 				self.HV_ON[rmp_board] = self.HV_ON[rmp_board]^1
 				self.prev_brd[0] = 1
 				self.prev_brd[1] = rmp_board
-		elif status == sh.ACQSTATUS_STAIRCASE or status == sh.ACQSTATUS_HOLDSCAN: # running staircase or holdscan
+		elif status == sh.ACQSTATUS_STAIRCASE or status == sh.ACQSTATUS_HOLDSCAN: # Running staircase or holdscan
 			self.AcqStatus.config(bg='white')
 			# if status == sh.ACQSTATUS_STAIRCASE: self.runled.set_color("green")   DNIN: Is there a reason to not turn on the led during DelayScan?
 			self.runled.set_color("green") 
@@ -517,7 +575,7 @@ class CtrlPanel():
 	def OpenExternalCfg(self):	#
 		if self.IsExtFileOpen: self.CloseExternalCfg() 
 		self.no_update2 = True
-		xw = 280
+		xw = sh.multiplatform_width(280,20)
 		yw = 420
 		self.displ_y = 25
 		self.displ_x = 35
@@ -532,7 +590,7 @@ class CtrlPanel():
 		self.IsExtFileOpen = True
 		self.VarList = StringVar()	# indexes of the cfg path
 		self.VarList.set("0")	
-		self.CfgFilesList = []	# Entry where Cfg File are displaied (maybe the stringvar can be avoid??)
+		self.CfgFilesList = []	# Entry where Cfg File are displayed (maybe the stringvar can be avoid??)
 		self.NumCfgFile = [] # Radiobutton of the indexes
 		self.previous_idx = "0"
 
@@ -551,21 +609,22 @@ class CtrlPanel():
 			self.NumCfgFile[i].place(relx=0.014, rely=0.067+0.06*i, relwidth=0.09, relheight=0.06) #  x=4, y=self.start_y+self.displ_y*i-2)
 			self.CfgFilesList.append(Entry(self.ExtCfgLoad, textvariable = self.ExtCfgFileName[i], state='readonly'))
 			self.CfgFilesList[i].place(relx=0.125, rely= 0.071+0.06*i, relwidth=0.76, relheight=0.05) # , width=35 x = self.displ_x, y = self.start_y+self.displ_y*i)
-			self.ExtCfgFileName[i].trace('w', lambda name, index, mode:self.set_cfg_path(1))
+			sh.trace_bind(self.ExtCfgFileName[i], 'write', lambda name, index, mode:self.set_cfg_path(1))
 			self.CBCfg.append(Checkbutton(self.ExtCfgLoad, variable=self.myint[i]))
 			self.CBCfg[i].place(relx=0.9, rely=0.067+0.06*i, relwidth=0.075, relheight=0.05) #  x=250, y=self.start_y+self.displ_y*i-2)
-			self.myint[i].trace('w', lambda name, index, mode: self.set_cfg_path(2))
-
-		self.VarList.trace('w', lambda name, index, mode:self.set_cfg_path(0))
+			sh.trace_bind(self.myint[i], 'write', lambda name, index, mode: self.set_cfg_path(2))
+		sh.trace_bind(self.VarList, 'write', lambda name, index, mode:self.set_cfg_path(0))
 		self.CfgFilesList[0].config(state='normal')
-		Button(self.ExtCfgLoad, text="Add Macro", command=self.AddCfgFile, height=2).place(relx=0.089, rely=0.798, relwidth=0.24, relheight=0.1) # , width=8 x=25, y=334) fg="#00CC00"
+		Button(self.ExtCfgLoad, text="Add\nMacro", command=self.AddCfgFile, height=2).place(relx=0.089, rely=0.798, relwidth=0.24, relheight=0.1) # , width=8 x=25, y=334) fg="#00CC00"
 		Button(self.ExtCfgLoad, text="Remove\nMacro", command=self.RmCfgFile, height=2).place(relx=0.375, rely=0.798, relwidth=0.24, relheight=0.1) # width=8, x=105, y=334) fg="#FF0000", 
 		Button(self.ExtCfgLoad, text="Remove\nAll Macros", command=self.RmAllFile, height=2).place(relx=0.66, rely=0.795, relwidth=0.24, relheight=0.1) # width=8, x=185, y=334) fg="#FF0000", 
 		Button(self.ExtCfgLoad, text="DONE", font=("Arial Bold",9), command=self.AppendCfgFile, bg='light blue').place(relx=0.0893, rely=0.914, relwidth=0.81, relheight=0.065) #  width=31, x=25, y=384) bg="#00CC00"
 
 		self.no_update2 = False
 	
-	def AppendCfgFile(self): # Active when you save, 
+
+	def AppendCfgFile(self): 
+		# Active when you save, 
 		cfg_not_found = []
 		idx = [i for i in range(len(self.myint)) if self.myint[i].get()==1]
 		cfg.cfg_file_list.clear()
@@ -589,9 +648,10 @@ class CtrlPanel():
 		self.SaveCfgFile()
 		self.CloseExternalCfg()
 
+
 	def CloseExternalCfg(self):
-		# self.AppendCfgFile()
 		self.ExtCfgLoad.destroy()
+
 
 	def set_cfg_path(self, turn_on):
 		if self.no_update2: return
@@ -626,6 +686,7 @@ class CtrlPanel():
 		self.no_update2 = False
 		self.previous_idx = midx
 
+
 	def RmAllFile(self): 
 		self.no_update2 = True
 		self.VarList.set("0")
@@ -635,11 +696,13 @@ class CtrlPanel():
 			self.myint[i].set(0)
 		self.no_update2 = False
 
+
 	def RmCfgFile(self):
 		j=int(self.VarList.get(),10)
 		self.ExtCfgFileName[j].set("") 
 		self.NumCfgFile[j].config(fg='black')
 		self.myint[j].set(0)
+
 
 	def AddCfgFile(self):
 		j=int(self.VarList.get(),10)
@@ -648,10 +711,10 @@ class CtrlPanel():
 		self.ExtCfgFileName[j].set(name)
 
 		
-	# ***************************************************************************************
-	# Popup window for Plot enable mask
-	# ***************************************************************************************
 	def OpenPlotMaskWin(self):
+		# ***************************************************************************************
+		# Popup window for Plot enable mask
+		# ***************************************************************************************
 		if self.PlotMaskWinIsOpen: self.ClosePlotMaskWin()
 		self.Tbrd = IntVar()
 		self.Tbrd.set(0)
@@ -725,7 +788,7 @@ class CtrlPanel():
 		#### Set the Run# of the plot you want to visualize
 		self.SelRunFile.append(Label(self.PlotMaskWin, text="Run#", font=("Arial Bold", 11)))
 		# self.SelRunFile[0].place(x=x0+155, y=y0+1)
-		# self.RunFromFile.trace("w", lambda name, index, mode: self.UpdateMask())
+		# sh.trace_bind(self.RunFromFile, 'write', lambda name, index, mode: self.UpdateMask())
 		self.SelRunFile.append(Spinbox(self.PlotMaskWin, textvariable=self.RunFromFile, from_=0, to=1000, command=self.UpdateMask, 
 			validate="key", validatecommand=vcmd2, font=("Arial Bold", 12), width=2))
 		# self.SelRunFile[1].place(x=x0+200, y=y0+1)
@@ -737,7 +800,7 @@ class CtrlPanel():
 		# self.SelRunFile[2].place(x=x0, y=y0+10)
 		self.SelRunFile.append(Button(self.PlotMaskWin, text="...", command=self.OpenExtRunFile))  #  , height=1, width=2
 		# self.SelRunFile[3].place(x=x0+8*self.sp+5, y=y0+10)
-		self.FromBrdFile.trace("w", lambda name, index, mode: self.EnableRunFile())	# Enable the legend and the SpinBox
+		sh.trace_bind(self.FromBrdFile, 'write', lambda name, index, mode: self.EnableRunFile())# Enable the legend and the SpinBox
 		#### I would add a button "Trace-ON" to activate the trace, as the opposite of Trace-OFF
 		
 		y0 += 20
@@ -764,15 +827,15 @@ class CtrlPanel():
 		Label(self.PlotMaskWin, text = "Calib X-axis").place(relx=float(x0+20)/xw, rely=float(y0+2)/yw)  #  x = x0 + 20, y = y0+2)
 		self.EnablePixelMap = IntVar()
 		Checkbutton(self.PlotMaskWin, text='Pixel Map', variable = self.EnablePixelMap, indicatoron=0).place(relx=float(x0+140)/xw, rely=float(y0)/yw, relwidth=0.26, relheight=26.04/420)  # , width=8 x = x0 + 140, y = y0)
-		self.EnablePixelMap.trace('w', lambda name, index, mode: self.PixelMap())
-
+		sh.trace_bind(self.EnablePixelMap, 'write', lambda name, index, mode: self.PixelMap())
 		self.no_update = False
 		self.InitPlotMaskButtons = False
 
-	############################################################
-	## Methods for OpenPlotMaskWin
-	############################################################
+
 	def UpdateMask(self):
+		############################################################
+		## Methods for OpenPlotMaskWin
+		############################################################
 		if self.no_update: return
 		sel = self.PlotTraceSelVar.get()
 		# self.PlotMaskVar.set(str(self.Tch.get()))
@@ -839,6 +902,7 @@ class CtrlPanel():
 			[self.EntryRunFile[i].place_forget() for i in range(len(self.EntryRunFile))]
 		return True
 
+
 	def AssignOctet(self, octet):
 		if self.no_update: return
 		# Set Variable
@@ -858,10 +922,12 @@ class CtrlPanel():
 		self.PlotMaskVar.set(str(cc))
 		self.SaveRunVars()
 
+
 	def ActiveTrace(self):
 		if self.no_update: return
 		if self.GetBrdCh():	self.PlotMaskVar.set(str(self.Tch.get()))
 		else: self.PlotMaskVar.set("")
+
 
 	def DisableTrace(self):
 		if self.no_update: return
@@ -872,6 +938,7 @@ class CtrlPanel():
 		self.selbutton[sel].config(fg='black')
 		self.SaveRunVars()
 		
+
 	def DisableAllTraces(self):
 		if self.no_update: return
 		self.no_update = True # Prevent Updating Mask while setting RunVars
@@ -883,6 +950,7 @@ class CtrlPanel():
 			self.selbutton[sel].config(fg='black')
 		self.SaveRunVars()
 		self.no_update = False
+
 
 	def PixelMap(self):
 		x0, y0 = self.xm, self.ym
@@ -901,6 +969,7 @@ class CtrlPanel():
 					xp, yp = x, y
 				self.maskbutton[i].place(relx=float(x0+xp*self.sp)/270, rely=float(y0+(yp+1)*self.sp)/420)  #  x = x0+xp*self.sp, y=y0+(yp+1)*self.sp)
 
+
 	def EnableRunFile(self):
 		if self.FromBrdFile.get() == 'B':
 			[self.SelRunFile[i].place_forget() for i in range(len(self.SelRunFile))]
@@ -917,7 +986,7 @@ class CtrlPanel():
 		elif self.FromBrdFile.get() == 'S':	# not yey implemented
 			[self.SelRunFile[i].place_forget() for i in range(2)]
 			# self.SelRunFile[2].place(x=17, y=125+5)
-			self.SelRunFile[2].place(relx=0.64, rely=104./420, relwidth=25.2/270, relheight=25.2/420)  # DNIN: scale to 420 and 270 x=17+155, y=104)
+			self.SelRunFile[2].place(relx=0.64, rely=104./420, relwidth=25.2/270, relheight=25.2/420)  # Scale to 420 and 270 x=17+155, y=104)
 			# self.SelRunFile[2].config(state = 'readonly')
 			self.EntryRunFile[self.PlotTraceSelVar.get()].place(relx=17./270, rely=130./420, relwidth=0.88, relheight=19/420)  #  x=17, y=125+5)
 			[self.octetbutton[i].config(state = "disabled") for i in range(8)]
@@ -930,7 +999,9 @@ class CtrlPanel():
 		# 	[self.SelRunFile[i].config(state="disabled") for i in range(2)]
 		# 	self.BrdFile = self.FromBrdFile.get()
 
-	def OpenExtRunFile(self):	# for loading histograms from specific file
+
+	def OpenExtRunFile(self):	
+		# Loading histograms from specific file
 		[self.EntryRunFile[i].place_forget() for i in range(8)]
 		self.EntryRunFile[int(self.PlotTraceSelVar.get())].place(relx=17./270, rely=130./420, relwidth=0.88, relheight=19/420)  #  x=17, y=125+5)
 		try:
@@ -939,16 +1010,18 @@ class CtrlPanel():
 			self.ExtRunFile[int(self.PlotTraceSelVar.get())].set("")  # self.ExtRunFile.get()[int(self.PlotTraceSelVar.get())])   To CHECK
 		self.UpdateMask() 
 		
+
 	def ClosePlotMaskWin(self):
 		self.UpdateMask()
 		self.PlotMaskWin.destroy()
 		self.PlotMaskWinIsOpen = False
 
 
-	# ***************************************************************************************
-	# Popup window for Staircase
-	# ***************************************************************************************
 	def OpenSpecialRunWin(self, RunType, parent):
+		# ***************************************************************************************
+		# Popup window for Staircase/HoldDelayScan
+		# ***************************************************************************************
+
 		self.MinScan = StringVar()
 		self.MaxScan = StringVar()
 		self.StepScan = StringVar()
@@ -957,55 +1030,68 @@ class CtrlPanel():
 		self.StepValue = ["8", "16", "24", "32", "40"]
 		self.RunType = RunType
 		vcmd = (parent.register(self.validate_RunNumber), '%P')
+		self.LoadRunVars()
 		if self.RunType == 'Staircase': ss = self.StaircaseSettings.split()
 		else: ss = self.HoldScanSettings.split()
-		if len(ss) == 4:
-			self.MinScan.set(ss[0])
-			self.MaxScan.set(ss[1])
-			self.StepScan.set(ss[2])
-			self.DwellNpts.set(ss[3])
+		
+		board_count = sum(1 for val in params['Open'].value if val != "")
+		max_board = max(0, board_count - 1)
+		if len(ss) == 5:
+			if int(ss[0]) > max_board:
+				self.SpecialRunBoard.set(str(max_board))
+			else:
+				self.SpecialRunBoard.set(ss[0])
+			self.MinScan.set(ss[1])
+			self.MaxScan.set(ss[2])
+			self.StepScan.set(ss[3])
+			self.DwellNpts.set(ss[4])
 		elif self.RunType == 'Staircase':	
+			self.SpecialRunBoard.set("0")
 			self.MinScan.set("150")
 			self.MaxScan.set("300")
 			self.StepScan.set("1")
 			self.DwellNpts.set("500")
 		else:	
+			self.SpecialRunBoard.set("0")
 			self.MinScan.set("0")
 			self.MaxScan.set("256")
 			self.StepScan.set("8")
 			self.DwellNpts.set("500")
-		xw = 195
+		xw = sh.multiplatform_width(195, 20)
 		yw = 250 # 250
 		if self.SpecialRunWinIsOpen: self.CloseSpecialRunWin()
 		self.SpecialRunWin = Toplevel()
 		self.SpecialRunWin.geometry("{}x{}+{}+{}".format(xw, yw, 550, 250))
-		self.SpecialRunWin.wm_title("")
+		if self.RunType == 'Staircase': title = "Staircase Settings"
+		else: title = "Hold Scan Settings"
+		self.SpecialRunWin.wm_title(title)
 		self.SpecialRunWin.protocol("WM_DELETE_WINDOW", self.CloseSpecialRunWin)
 		self.SpecialRunWinIsOpen = True
 		Frame(self.SpecialRunWin, width=xw, height=yw, relief=RIDGE).place(x=0, y=0)  #  , bd=2
 
 		x0, y0 = 5, 5
+		right_mar = 57
 		sp = 26
 		if self.RunType == 'Staircase': 
-			Label(self.SpecialRunWin, text = "Staircase Settings", font=("Arial Bold", 10)).place(relx=float(x0)/xw, rely=float(y0)/yw)  #  x = x0, y = y0)
+			Label(self.SpecialRunWin, text = "Staircase Settings:", font=("Arial Bold", 10)).place(relx=float(x0)/xw, rely=float(y0)/yw)  #  x = x0, y = y0)
 			Label(self.SpecialRunWin, text = "Min Threshold").place(relx=float(x0)/xw, rely=float(y0+sp)/yw)  #  x = x0, y = y0+sp)
 			Label(self.SpecialRunWin, text = "Max Threshold").place(relx=float(x0)/xw, rely=float(y0+sp*2)/yw)  #  x = x0, y = y0+sp*2)
 			Label(self.SpecialRunWin, text = "Step").place(relx=float(x0)/xw, rely=float(y0+sp*3)/yw)  #  x = x0, y = y0+sp*3)
 			Label(self.SpecialRunWin, text = "Dwell Time (ms)").place(relx=float(x0)/xw, rely=float(y0+sp*4)/yw)  #  x = x0, y = y0+sp*4)
 			Label(self.SpecialRunWin, text = "Board").place(relx=x0/xw, rely=(y0+sp*5)/yw)
-			Entry(self.SpecialRunWin, textvariable=self.StepScan, validate='key', validatecommand=vcmd, width=8).place(relx=float(x0+130)/xw, rely=float(y0+sp*3)/yw, relwidth=52./xw, relheight=20./yw)  #  x = x0 + 130, y = y0+sp*3)
+			Entry(self.SpecialRunWin, textvariable=self.StepScan, validate='key', validatecommand=vcmd, width=8).place(relx=float(xw-right_mar)/xw, rely=float(y0+sp*3)/yw, relwidth=52./xw, relheight=20./yw)  #  x = x0 + 130, y = y0+sp*3)
 		else:	
-			Label(self.SpecialRunWin, text = "Hold Scan Settings", font=("Arial Bold", 10)).place(relx=float(x0)/xw, rely=float(y0)/yw) # x = x0, y = y0)
+			Label(self.SpecialRunWin, text = "Hold Scan Settings:", font=("Arial Bold", 10)).place(relx=float(x0)/xw, rely=float(y0)/yw) # x = x0, y = y0)
 			Label(self.SpecialRunWin, text = "Min Delay (ns)").place(relx=float(x0)/xw, rely=float(y0+sp)/yw) # x = x0, y = y0+sp)
 			Label(self.SpecialRunWin, text = "Max Delay (ns)").place(relx=float(x0)/xw, rely=float(y0+sp*2)/yw) # x = x0, y = y0+sp*2)
 			Label(self.SpecialRunWin, text = "Step (mult. of 8 ns)").place(relx=float(x0)/xw, rely=float(y0+sp*3)/yw) # x = x0, y = y0+sp*3)
-			Label(self.SpecialRunWin, text = "Num averaged points").place(relx=float(x0)/xw, rely=float(y0+sp*4)/yw) # x = x0, y = y0+sp*4)
+			Label(self.SpecialRunWin, text = "Num avg points (>10)").place(relx=float(x0)/xw, rely=float(y0+sp*4)/yw) # x = x0, y = y0+sp*4)
 			Label(self.SpecialRunWin, text = "Board").place(relx=x0/xw, rely=(y0+sp*5)/yw)
-			ttk.Combobox(self.SpecialRunWin, values=self.StepValue, textvariable=self.StepScan, state="readonly", width=5).place(relx=float(x0+130)/xw, rely=float(y0+sp*3)/yw)  #  x = x0 + 130, y = y0+sp*3)
-		Entry(self.SpecialRunWin, textvariable=self.MinScan, validate='key', validatecommand=vcmd, width=8).place(relx=float(x0+130)/xw, rely=float(y0+sp)/yw, relwidth=52./xw, relheight=20./yw) # x = x0 + 130, y = y0+sp)
-		Entry(self.SpecialRunWin, textvariable=self.MaxScan, validate='key', validatecommand=vcmd, width=8).place(relx=float(x0+130)/xw, rely=float(y0+sp*2)/yw, relwidth=52./xw, relheight=20./yw) # x = x0 + 130, y = y0+sp*2)
-		Entry(self.SpecialRunWin, textvariable=self.DwellNpts, validate='key', validatecommand=vcmd, width=8).place(relx=float(x0+130)/xw, rely=float(y0+sp*4)/yw, relwidth=52./xw, relheight=20./yw) # x = x0 + 130, y = y0+sp*4)
-		Spinbox(self.SpecialRunWin, textvariable=self.SpecialRunBoard, state='readonly', from_=0, to=sum(1 for val in params['Open'].value if val != ""), validate='key', validatecommand=vcmd).place(relx=float(x0+130)/xw, rely=float(y0+sp*5)/yw, relwidth=52./xw, relheight=20./yw)
+			ttk.Combobox(self.SpecialRunWin, values=self.StepValue, textvariable=self.StepScan, state="readonly", width=5).place(relx=float(xw-right_mar)/xw, rely=float(y0+sp*3)/yw, relwidth=52/xw)  #  x = x0 + 130, y = y0+sp*3)
+		Entry(self.SpecialRunWin, textvariable=self.MinScan, validate='key', validatecommand=vcmd, width=8).place(relx=float(xw-right_mar)/xw, rely=float(y0+sp)/yw, relwidth=52./xw, relheight=20./yw) # x = x0 + 130, y = y0+sp)
+		Entry(self.SpecialRunWin, textvariable=self.MaxScan, validate='key', validatecommand=vcmd, width=8).place(relx=float(xw-right_mar)/xw, rely=float(y0+sp*2)/yw, relwidth=52./xw, relheight=20./yw) # x = x0 + 130, y = y0+sp*2)
+		Entry(self.SpecialRunWin, textvariable=self.DwellNpts, validate='key', validatecommand=vcmd, width=8).place(relx=float(xw-right_mar)/xw, rely=float(y0+sp*4)/yw, relwidth=52./xw, relheight=20./yw) # x = x0 + 130, y = y0+sp*4)
+		Spinbox(self.SpecialRunWin, textvariable=self.SpecialRunBoard, state='readonly', from_=0, to=max_board, validate='key', validatecommand=vcmd).place(relx=float(xw-right_mar)/xw, rely=float(y0+sp*5)/yw, relwidth=52./xw, relheight=20./yw)
 
 		y0 += sp*5 + 50
 		self.sc_run = Button(self.SpecialRunWin, text='Start Scan', command=self.StartScan)  #  , height = 1, width=25
@@ -1015,6 +1101,7 @@ class CtrlPanel():
 		y0 += 30
 		self.sc_progress = Progressbar(self.SpecialRunWin, orient = HORIZONTAL, length = 185, mode = 'determinate') 
 		self.sc_progress.place(relx=float(x0)/xw, rely=float(y0)/yw, relwidth=0.95, relheight=25.3/yw) # x = x0, y = y0)
+
 
 	def StartScan(self):
 		self.sc_run.config(state=DISABLED)
@@ -1026,6 +1113,7 @@ class CtrlPanel():
 		else: 
 			comm.SendCmd('Y')
 
+
 	def CloseSpecialRunWin(self):
 		self.SpecialRunWin.destroy()
 		self.SpecialRunWinIsOpen = False
@@ -1036,7 +1124,7 @@ class CtrlPanel():
 ##############################################################################
 	def ConvertBin2CSV(self):
 		if self.ConvWinIsOpen: self.CloseConvWin()
-		xw = 360
+		xw = sh.multiplatform_width(360, 15)
 		yw = 520
 		y_displ = 0.82/16
 		displ_x = 35
@@ -1056,7 +1144,7 @@ class CtrlPanel():
  		# self.ExtCfgFileName = [] # Binary File path
 		self.BinVarList = StringVar()	# indexes of the Bin path
 		self.BinVarList.set("0")	
-		self.BinFilesList = []	# Entry where Bin File are displaied (maybe the stringvar can be avoid??)
+		self.BinFilesList = []	# Entry where Bin File are displayed (maybe the stringvar can be avoid??)
 		self.NumBinFile = [] # Radiobutton of the indexes
 		self.pr_idx = "0"
 
@@ -1069,7 +1157,7 @@ class CtrlPanel():
 			self.BinFilesList.append(Entry(self.ConvWin, textvariable = self.Bin_fname[i])) # width=50
 			self.BinFilesList[i].place(relx=0.097, rely=start_y2+y_displ*i, relwidth=0.85, relheight=(y_displ-0.01)) #   x = displ_x, y = start_y+displ_y*i)
 
-		self.BinVarList.trace('w', lambda name, index, mode: self.ActivePath())
+		sh.trace_bind(self.BinVarList, 'write', lambda name, index, mode: self.ActivePath())
 		self.BinFilesList[0].config(state=NORMAL)
 		
 		t_unit = []
@@ -1080,10 +1168,12 @@ class CtrlPanel():
 		Checkbutton(self.ConvWin, text='List of binary files names', font=("Arial Bold", 10), variable=self.list_of_bfile).place(relx=0.097, rely=0.09+0.06*14)
 		Button(self.ConvWin, text='Convert', command=self.ConvertFile, bg='light blue').place(relx=0.097+0.55, rely=0.06+0.06*14, relwidth=0.25, relheight=0.075) # , width=12  x=displ_x+170, y=start_y+displ_y*14+5)
 
+
 	def ActivePath(self):
 		self.BinFilesList[int(self.pr_idx)].config(state='readonly')
 		self.BinFilesList[int(self.BinVarList.get())].config(state='normal')
 		self.pr_idx = self.BinVarList.get()
+
 
 	def SelectToConvertFile(self, index):
 		try:
@@ -1092,17 +1182,18 @@ class CtrlPanel():
 		except:
 			self.Bin_fname[index].set("")
 
+
 	def ConvertFile(self):
 		ON_POSIX = 'posix' in sys.builtin_module_names
-		exe_cmd = [] # list with the command to execute - executable + input arguments
+		exe_cmd = [] # List with the command to execute - executable + input arguments
 		if sys.platform.find('win') < 0: 
-			fname = "./BinToCsv"	# name of the executable on linux
+			fname = "./BinToCsv"	# Name of the executable on linux
 		else:
 			fname = "BinToCsv.exe"
 		
 		exe_name = os.path.join(sh.cfgfile_path, fname)
 
-		if not os.path.exists(exe_name):	#   Error: BinToCsv is not the folder and cannot be launched
+		if not os.path.exists(exe_name):	#   Error: BinToCsv is not the expected folder and cannot be launched
 			Jmsg="Warning, BinToCsV executable is missing!!!\nPlease, check if the antivirus cancel it during the unzip (Windows)"
 			Jmsg=Jmsg+"\nor run Janus_Install.sh from the main folder (Linux)"
 			messagebox.showwarning(title=None, message=Jmsg)
@@ -1111,14 +1202,14 @@ class CtrlPanel():
 
 		exe_cmd.append(exe_name)
 		if self.time_unit.get(): exe_cmd.append('--ns') # The time is forced to be converted in ns
-		if self.list_of_bfile.get(): exe_cmd.append("--lfile") # The file inserted contains the list of binary file to convert
-		else: exe_cmd.append("--bfile")  # Option to append binary files to convert
+		if self.list_of_bfile.get(): exe_cmd.append("--lfile") # The file inserted contains the list of binary file to be converted
+		else: exe_cmd.append("--bfile")  # Option to append binary files to be converted
 		for ffb in self.Bin_fname:
 			if len(ffb.get()) > 0:
 				exe_cmd.append(ffb.get())
 		
 		self.ConvCsvTrace.set(1)
-		# display on log that the conversion started
+		# Display on log that the conversion started
 		process = subprocess.Popen(exe_cmd, shell=False) # Run on a separate process from the GUI
 		# process = subprocess.Popen(["BinToCsv.exe", self.Bin_fname], shell=False) # Run on a separate process from the GUI
 		self.CloseConvWin()

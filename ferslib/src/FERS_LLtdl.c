@@ -42,6 +42,7 @@ uint32_t TDL_NumNodes[FERSLIB_MAX_NCNC][FERSLIB_MAX_NTDL] = { 0 };	// num of nod
 uint16_t TDL_ChainStatus[FERSLIB_MAX_NCNC][FERSLIB_MAX_NTDL] = { 0 };	// Status if TDL chains during enumeration
 uint8_t TDL_ChainStatus_Code[FERSLIB_MAX_NCNC][FERSLIB_MAX_NTDL] = { 0 }; // Error codes during enumeration
 float TDL_FiberDelayAdjust[FERSLIB_MAX_NCNC][FERSLIB_MAX_NTDL][FERSLIB_MAX_NNODES] = { 0 };	// Fiber length (in meters) for individual tuning of the propagation delay along the TDL daisy chains
+float max_delay[FERSLIB_MAX_NCNC] = { 0 }; // Maximum delay (in meters) among all fibers connected to the concentrators
 int InitDelayAdjust[FERSLIB_MAX_NCNC] = { 0 };
 
 static f_socket_t FERS_CtrlSocket[FERSLIB_MAX_NCNC] = {f_socket_invalid};	// slow control (R/W reg)
@@ -60,6 +61,7 @@ static f_thread_t ThreadID[FERSLIB_MAX_NCNC];			// RX Thread ID
 static mutex_t RxMutex[FERSLIB_MAX_NCNC];				// Mutex for the access to the Rx data buffer and pointers
 static mutex_t rdf_mutex[FERSLIB_MAX_NCNC];				// Mutex to access RawData file
 static FILE *Dump[FERSLIB_MAX_NCNC] = { NULL };			// low level data dump files (for debug)
+static FILE* Dump2[FERSLIB_MAX_NCNC] = { NULL };		// low level data dump files (for debug)
 static FILE* RawData[FERSLIB_MAX_NBRD] = { NULL };		// low level data saving for a further reprocessing
 static uint8_t ReadData_Init[FERSLIB_MAX_NBRD] = { 0 }; // Re-init read pointers after run stop
 static int subrun[FERSLIB_MAX_NBRD] = { 0 };			// Sub Run index
@@ -68,22 +70,42 @@ static int64_t size_file[FERSLIB_MAX_NBRD] = { 0 };		// Size of Raw Data Binary 
 // ********************************************************************************************************
 // Write messages or data to debug dump file
 // ********************************************************************************************************
-static int FERS_DebugDump(int bindex, char *fmt, ...) {
+static int FERS_DebugDump(int cindex, char *fmt, ...) {
 	char msg[1000], filename[200];
-	static int openfile[FERSLIB_MAX_NBRD] = { 1 };
+	static int fileopened[FERSLIB_MAX_NCNC] = { 0 }; // Negative Logic. Arrays can be initialized at 0
 	va_list args;
-	if (bindex >= FERSLIB_MAX_NBRD) return -1;
-	if (openfile[bindex]) {
-		sprintf(filename, "ll_log_%d.txt", bindex);
-		Dump[bindex] = fopen(filename, "w");
-		openfile[bindex] = 0;
+	if (cindex >= FERSLIB_MAX_NCNC) return -1;
+	if (!fileopened[cindex]) {
+		sprintf(filename, "ll_log_%d.txt", cindex);
+		Dump[cindex] = fopen(filename, "w");
+		fileopened[cindex] = 1;
 	}
 
 	va_start(args, fmt);
 	vsprintf(msg, fmt, args);
 	va_end(args);
-	if (Dump[bindex] != NULL)
-		fprintf(Dump[bindex], "%s", msg);
+	if (Dump[cindex] != NULL)
+		fprintf(Dump[cindex], "%s", msg);
+	return 0;
+}
+
+
+static int FERS_DebugDump2(int cindex, const char* fmt, ...) {
+	char msg[1000], filename[200];
+	static int fileopened[FERSLIB_MAX_NCNC] = { 0 }; // Negative Logic. Arrays can be initialized at 0
+	va_list args;
+	if (cindex >= FERSLIB_MAX_NCNC) return -1;
+	if (!fileopened[cindex]) {
+		sprintf(filename, "ll_Readlog_%d.txt", cindex);
+		Dump2[cindex] = fopen(filename, "w");
+		fileopened[cindex] = 1;
+	}
+
+	va_start(args, fmt);
+	vsprintf(msg, fmt, args);
+	va_end(args);
+	if (Dump2[cindex] != NULL)
+		fprintf(Dump2[cindex], "%s", msg);
 	return 0;
 }
 
@@ -485,10 +507,10 @@ int LLtdl_WriteRegister(int cindex, int chain, int node, uint32_t address, uint3
 		}
 		res = *((uint32_t*)recvbuf);
 		if (res == 0) break;
-		if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[WARNING][NODE %d:%d:%d] Write Reg @ %08X returned with code %08X: attempt n. %d\n", cindex, chain, node, address, res, i + 1);
+		if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[WARNING][NODE %d:%d:%d] Write Reg @ %08X returned with code 0x%08X: attempt n. %d\n", cindex, chain, node, address, res, i + 1);
 	}
 	if (i == TDL_RW_MAX_ATTEMPTS) {
-		if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[ERROR][NODE %d:%d:%d] Write Reg @ %08X failed; Status = %08X\n", cindex, chain, node, address, res);
+		if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[ERROR][NODE %d:%d:%d] Write Reg @ %08X failed; Status = 0x%08X\n", cindex, chain, node, address, res);
 		return FERSLIB_ERR_COMMUNICATION;
 	}
 	else return 0;
@@ -605,7 +627,8 @@ int LLtdl_ReadRegister(int cindex, int chain, int node, uint32_t address, uint32
 		res = *((uint32_t*)&recvbuf[0]);
 		*data = *((uint32_t*)&recvbuf[4]);
 		if (res == 0) break;
-		if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[WARNING][NODE %d:%d:%d] Read Reg @ %08X returned with code %08X: attempt n. %d\n", cindex, chain, node, address, res, i + 1);
+		if (ENABLE_FERSLIB_LOGMSG) 
+			FERS_LibMsg("[WARNING][NODE %d:%d:%d] Read Reg @ %08X returned with code %08X: attempt n. %d\n", cindex, chain, node, address, res, i + 1);
 	}
 	if (i == TDL_RW_MAX_ATTEMPTS) {
 		if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[ERROR][NODE %d:%d:%d] Read Reg @ %08X failed; Status = %08X\n", cindex, chain, node, address, res);
@@ -659,10 +682,10 @@ int LLtdl_SendCommand(int cindex, int chain, int node, uint32_t cmd, uint32_t de
 		}
 		res = *((uint32_t*)recvbuf);
 		if (res == 0) break;
-		if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[WARNING][NODE %d:%d:%d] Send Cmd returned with code %08X: attempt n. %d d\n", cindex, chain, node, res, i + 1);
+		if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[WARNING][NODE %d:%d:%d] Send Cmd 0x%08X returned with code %08X: attempt n. %d d\n", cindex, chain, node, cmd, res, i + 1);
 	}
 	if (i == TDL_RW_MAX_ATTEMPTS) {
-		if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[ERROR][NODE %d:%d:%d] Send Cmd %02X failed; Status = %08X\n", cindex, chain, node, cmd, res);
+		if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[ERROR][NODE %d:%d:%d] Send Cmd 0x%02X failed; Status = %08X\n", cindex, chain, node, cmd, res);
 		return FERSLIB_ERR_COMMUNICATION;
 	}
 	else return 0;
@@ -677,6 +700,53 @@ int LLtdl_SendCommand(int cindex, int chain, int node, uint32_t cmd, uint32_t de
 // --------------------------------------------------------------------------------------------------------- 
 int LLtdl_SendCommandBroadcast(int cindex, uint32_t cmd, uint32_t delay) {
 	return LLtdl_SendCommand(cindex, 0xFF, 0xFF, cmd, delay);
+}
+
+int LLtdl_SetDCommandBroadcast(int cindex, uint32_t cmd, uint32_t delay) {
+	uint32_t res;
+	f_socket_t sck = FERS_CtrlSocket[cindex];
+	char sendbuf[32], recvbuf[32];
+	int iResult;
+	int i, p = 0;
+	delay = 100;  // Just for test
+
+	int chain = 0xFF; // broadcast to all chains
+	int node = 0xFF; // broadcast to all nodes
+
+	sendbuf[p] = 'D'; p++;
+	sendbuf[p] = 'C'; p++;
+	sendbuf[p] = 'M'; p++;
+	sendbuf[p] = 'D'; p++;
+	*((uint16_t*)&sendbuf[p]) = (uint16_t)chain; p += 2;
+	*((uint16_t*)&sendbuf[p]) = (uint16_t)node; p += 2;
+	*((uint32_t*)&sendbuf[p]) = cmd; p += 4;
+	*((uint32_t*)&sendbuf[p]) = 0; p += 4;
+	*((uint32_t*)&sendbuf[p]) = delay; p += 4;
+
+	for (i = 0; i < TDL_RW_MAX_ATTEMPTS; ++i) {
+		iResult = send(sck, sendbuf, p, 0);
+		if (iResult == f_socket_error) {
+			if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[ERROR][NODE %d:%d:%d] Set DCmd, send failed with error: %d\n", cindex, chain, node, f_socket_errno);
+			f_socket_cleanup();
+			return FERSLIB_ERR_COMMUNICATION;
+		}
+		if (delay >= 100000)
+			Sleep(delay / 100000);
+
+		iResult = recv(sck, recvbuf, 4, 0);
+		if (iResult == f_socket_error) {
+			if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[ERROR][NODE %d:%d:%d] Set DCmd, recv failed with error: %d\n", cindex, chain, node, f_socket_errno);
+			f_socket_cleanup();
+			return FERSLIB_ERR_COMMUNICATION;
+		}
+		res = *((uint32_t*)recvbuf);
+		if (res == 0) break;
+		if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[WARNING][NODE %d:%d:%d] Set DCmd returned with code %08X: attempt n. %d d\n", cindex, chain, node, res, i + 1);
+	}
+	if (i == TDL_RW_MAX_ATTEMPTS) {
+		if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[ERROR][NODE %d:%d:%d] Set DCmd %02X failed; Status = %08X\n", cindex, chain, node, cmd, res);
+		return FERSLIB_ERR_COMMUNICATION;
+	} else return 0;
 }
 
 
@@ -776,7 +846,7 @@ int LLtdl_GetCncInfo(int cindex, FERS_CncInfo_t *CncInfo)
 {
 	f_socket_t sck = FERS_CtrlSocket[cindex];
 	char sendbuf[32], recvbuf[2048];
-	int iResult, size, p = 0, i;
+	int iResult, size, p = 0, i, ret;
 
 	// There are two different commands that return concentrator info; this function calls both commands and combine the information into a single struct
 
@@ -860,6 +930,16 @@ int LLtdl_GetCncInfo(int cindex, FERS_CncInfo_t *CncInfo)
 	sscanf(bic[5], "%d", &nlink);
 	CncInfo->NumLink = (uint16_t)nlink;
 
+	// Get Master/Slave configuration
+	uint32_t cnc_controller = 0;
+	ret = LLtdl_CncReadRegister(cindex, VR_IO_MASTER_SALVE, &cnc_controller);
+	if (cnc_controller == 0) {
+		CncInfo->MasterSlave = 1;
+		FERS_LibMsg("[INOF][CNC %02d] Concentrator set as Master\n", FERS_INDEX(cindex));
+	} else {
+		CncInfo->MasterSlave = 0;
+		FERS_LibMsg("[INOF][CNC %02d] Concentrator set as Salve\n", FERS_INDEX(cindex));
+	}
 	return 0;
 }
 
@@ -894,7 +974,7 @@ static void* tdl_data_receiver(void *params) {
 
 	ct = get_time();
 	pt = ct;
-	while(1) {
+	while (1) {
 		ct = get_time();
 		if (QuitThread[cindex]) {
 			if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[INFO][CNC %02d] Data receiver thread is quitting\n", cindex);
@@ -911,7 +991,7 @@ static void* tdl_data_receiver(void *params) {
 				WaitingForData[cindex] = 0;
 				WrReady = 1;
 				FlushBuffer = 0;
-				for(int i=0; i<2; i++)
+				for (int i = 0; i < 2; i++)
 					RxB_Nbytes[cindex][i] = 0;
 				tstart = ct;
 				tdata = ct;
@@ -927,17 +1007,18 @@ static void* tdl_data_receiver(void *params) {
 				RxStatus[cindex] = RXSTATUS_RUNNING;
 				lock(FERS_RoMutex);
 				FERS_RunningCnt++;
+				FERS_LibMsg("[INFO][CNC %02d] Run Started, FERS_RunningCnt=%d\n", cindex, FERS_RunningCnt);
 				unlock(FERS_RoMutex);
 			} else {
 				// make "dummy" reads while not running to flush old data. Stop when there is no data
 				if (!empty) {
-					FD_ZERO(&socks); 
+					FD_ZERO(&socks);
 					FD_SET((int)FERS_DataSocket[cindex], &socks);
 					res = select((int)FERS_DataSocket[cindex] + 1, &socks, NULL, NULL, &timeout);
 					if (res < 0) {  // socket error, quit thread
 						f_socket_cleanup();
 						RxStatus[cindex] = -1;
-						break; 
+						break;
 					}
 					if (res == 0) empty = 1;
 					else nbrx = recv(FERS_DataSocket[cindex], RxBuff[cindex][0], RX_BUFF_SIZE, 0);
@@ -965,13 +1046,14 @@ static void* tdl_data_receiver(void *params) {
 			//  - there is no data for more than NODATA_TIMEOUT
 			//  - STOP_TIMEOUT after the stop to the boards
 			lock(RxMutex[cindex]);
-			if ((FERS_ReadoutStatus == ROSTATUS_FLUSHING) || ((ct - tdata) > NODATA_TIMEOUT) || ((ct - tstop) > STOP_TIMEOUT)) {  
+			if ((FERS_ReadoutStatus == ROSTATUS_FLUSHING) || ((ct - tdata) > NODATA_TIMEOUT) || ((ct - tstop) > STOP_TIMEOUT)) {
 				RxStatus[cindex] = RXSTATUS_IDLE;
 				lock(FERS_RoMutex);
-				if (FERS_RunningCnt > 0) FERS_RunningCnt--;
-				unlock(FERS_RoMutex);
+				if (FERS_RunningCnt > 0) --FERS_RunningCnt;
+				//unlock(FERS_RoMutex);
 				if (DebugLogs & DBLOG_LL_MSGDUMP) FERS_DebugDump(cindex, "Run stopped (RunTime=%.3f s)\n", 0.001 * (ct - tstart));
-				if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[INFO][CNC %02d] RX Thread is now IDLE. (RunTime=%.3f s)\n", cindex, 0.001 * (ct - tstart));
+				if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[INFO][CNC %02d] RX Thread is now IDLE. (RunTime=%.3f s). FERS_RunningCnt=%d\n", cindex, 0.001 * (ct - tstart), FERS_RunningCnt);
+				unlock(FERS_RoMutex);  // DNIN: here for debug on FERS_RunningCnt
 				empty = 0;
 				unlock(RxMutex[cindex]);
 				continue;
@@ -988,22 +1070,22 @@ static void* tdl_data_receiver(void *params) {
 			}
 			unlock(RxMutex[cindex]);
 			WrReady = 1;
-		} 
+		}
 
 		wpnt = RxBuff[cindex][RxB_w[cindex]] + RxBuff_wp[cindex];
 		nbreq = RX_BUFF_SIZE - RxBuff_wp[cindex];  // try to read enough bytes to fill the buffer
-		FD_ZERO(&socks); 
+		FD_ZERO(&socks);
 		FD_SET((int)FERS_DataSocket[cindex], &socks);
 		res = select((int)FERS_DataSocket[cindex] + 1, &socks, NULL, NULL, &timeout);
 		if (res == 0) { // Timeout
 			FlushBuffer = 1;
-			continue; 
+			continue;
 		}
 		if (res < 0) {  // socket error, quit thread
 			f_socket_cleanup();
 			lock(RxMutex[cindex]);
 			RxStatus[cindex] = -1;
-			break; 
+			break;
 		}
 		nbrx = recv(FERS_DataSocket[cindex], wpnt, nbreq, 0);
 		if (nbrx == f_socket_error) {
@@ -1028,13 +1110,13 @@ static void* tdl_data_receiver(void *params) {
 			totnb = 0;
 			lt = ct;
 		}
-		unlock(RxMutex[bindex]);
+		unlock(RxMutex[cindex]);
 		continue;
 #endif
 
 		RxBuff_wp[cindex] += nbrx;
 		if ((ct - pt) > 10) {  // every 10 ms, check if the data consumer is waiting for data or if the thread has to quit
-			if (QuitThread[cindex]) break;  
+			if (QuitThread[cindex]) break;
 			if (WaitingForData[cindex] && (RxBuff_wp[cindex] > 0)) FlushBuffer = 1;
 			pt = ct;
 		}
@@ -1044,111 +1126,127 @@ static void* tdl_data_receiver(void *params) {
 			RxB_Nbytes[cindex][RxB_w[cindex]] = RxBuff_wp[cindex];
 			RxB_w[cindex] ^= 1;  // switch to the other buffer
 			RxBuff_wp[cindex] = 0;
-			unlock(RxMutex[cindex]); 
+			unlock(RxMutex[cindex]);
 			WrReady = 0;
 			FlushBuffer = 0;
 		}
 		// Dump data to log file (for debugging)
 		if ((DebugLogs & DBLOG_LL_DATADUMP) && (nbrx > 0)) {
-			for(int i=0; i<nbrx; i+=4) {
-				uint32_t *d32 = (uint32_t *)(wpnt + i);
+			for (int i = 0; i < nbrx; i += 4) {
+				uint32_t* d32 = (uint32_t*)(wpnt + i);
 				FERS_DebugDump(cindex, "%08X\n", *d32);
 			}
 			if (Dump[cindex] != NULL) fflush(Dump[cindex]);
 		}
 		// Saving Raw data output file
-		if (FERScfg[cindex]->OF_RawData && !FERS_Offline) {
-			size_file[cindex] += nbrx;
-			if (FERScfg[cindex]->OF_LimitedSize && size_file[cindex] > FERScfg[cindex]->MaxSizeDataOutputFile) {
+		if (FERScfg[cindex] != NULL) {
+			if (FERScfg[cindex]->OF_RawData && !FERS_Offline) {
+				size_file[cindex] += nbrx;
+				if (FERScfg[cindex]->OF_LimitedSize && size_file[cindex] > FERScfg[cindex]->MaxSizeDataOutputFile) {
+					lock(rdf_mutex[cindex]);
+					LLtdl_IncreaseRawDataSubrun(cindex);
+					size_file[cindex] = nbrx;
+					unlock(rdf_mutex[cindex]);
+				}
 				lock(rdf_mutex[cindex]);
-				LLtdl_IncreaseRawDataSubrun(cindex);
-				size_file[cindex] = nbrx;
+				if (RawData[cindex] != NULL) {
+					fwrite(wpnt, sizeof(char), nbrx, RawData[cindex]);
+					fflush(RawData[cindex]);
+				}
 				unlock(rdf_mutex[cindex]);
 			}
-			lock(rdf_mutex[cindex]);
-			if (RawData[cindex] != NULL) {
-				fwrite(wpnt, sizeof(char), nbrx, RawData[cindex]);
-				fflush(RawData[cindex]);
-			}
-			unlock(rdf_mutex[cindex]);
 		}
 	}
 
 	RxStatus[cindex] = RXSTATUS_OFF;
 	unlock(RxMutex[cindex]);
+	lock(FERS_RoMutex);
+	if (FERS_RunningCnt > 0)
+		FERS_RunningCnt = 0;
+	FERS_LibMsg("[INFO][CNC %02d] Quitting readout thread. FERS_RunningCnt=%d\n", cindex, FERS_RunningCnt);
+	unlock(FERS_RoMutex);
 	return NULL;
 }
 
 // --------------------------------------------------------------------------------------------------------- 
 // Description: Copy a data block from RxBuff of the concentrator to the user buffer 
-// Inputs:		bindex = concentrator index
+// Inputs:		cindex = concentrator index
 //				buff = user data buffer to fill
 //				maxsize = max num of bytes being transferred
 //				nb = num of bytes actually transferred
 // Return:		0=No Data, 1=Good Data 2=Not Running, negative number = error code
 // --------------------------------------------------------------------------------------------------------- 
-int LLtdl_ReadData(int bindex, char *buff, int maxsize, int *nb) {
+int LLtdl_ReadData(int cindex, char *buff, int maxsize, int *nb) {
 	char *rpnt;
-	static char* bpnt;
-	static int RdReady[FERSLIB_MAX_NBRD] = { 0 };
-	static int Nbr[FERSLIB_MAX_NBRD] = { 0 };
-	static int Rd_pnt[FERSLIB_MAX_NBRD] = { 0 };	// read pointer in Rx data buffer
+	//static char* rbuff[FERSLIB_MAX_NCNC] = { 0 };
+	static int RdReady[FERSLIB_MAX_NCNC] = { 0 };
+	static int Nbr[FERSLIB_MAX_NCNC] = { 0 };
+	static int Rd_pnt[FERSLIB_MAX_NCNC] = { 0 };	// read pointer in Rx data buffer
 
 	*nb = 0;
-	//if (trylock(RxMutex[bindex]) != 0) return 0;
-	if (ReadData_Init[bindex]) {
-		while (trylock(RxMutex[bindex]));
-		RdReady[bindex] = 0;
-		Nbr[bindex] = 0;
-		ReadData_Init[bindex] = 0;
-		unlock(RxMutex[bindex]);
+	if (ReadData_Init[cindex]) {
+		while (trylock(RxMutex[cindex]));
+		RdReady[cindex] = 0;
+		Nbr[cindex] = 0;
+		ReadData_Init[cindex] = 0;
+		unlock(RxMutex[cindex]);
 		return 2;
 	} 
 
-	if ((RxStatus[bindex] != RXSTATUS_RUNNING) && (RxStatus[bindex] != RXSTATUS_EMPTYING)) {
+	lock(RxMutex[cindex]);
+	if ((RxStatus[cindex] != RXSTATUS_RUNNING) && (RxStatus[cindex] != RXSTATUS_EMPTYING)) {
+		unlock(RxMutex[cindex]);
 		return 2;
 	}
+	unlock(RxMutex[cindex]);
 
-	if (!RdReady[bindex]) {
-		if (trylock(RxMutex[bindex]) != 0) return 0;
-		if (RxB_Nbytes[bindex][RxB_r[bindex]] == 0) {  // The buffer is empty => assert "WaitingForData" and return 0 bytes to the caller
-			WaitingForData[bindex] = 1;
-			unlock(RxMutex[bindex]);
+	if (!RdReady[cindex]) {
+		if (trylock(RxMutex[cindex]) != 0) return 0;
+		if (RxB_Nbytes[cindex][RxB_r[cindex]] == 0) {  // The buffer is empty => assert "WaitingForData" and return 0 bytes to the caller
+			WaitingForData[cindex] = 1;
+			unlock(RxMutex[cindex]);
 			return 0;
 		}
-		RdReady[bindex] = 1;
-		Nbr[bindex] = RxB_Nbytes[bindex][RxB_r[bindex]];  // Get the num of bytes available for reading in the buffer
-		bpnt = RxBuff[bindex][RxB_r[bindex]];
-		Rd_pnt[bindex] = 0;
-		WaitingForData[bindex] = 0;
-		unlock(RxMutex[bindex]);
+		RdReady[cindex] = 1;
+		Nbr[cindex] = RxB_Nbytes[cindex][RxB_r[cindex]];  // Get the num of bytes available for reading in the buffer
+		Rd_pnt[cindex] = 0;
+		WaitingForData[cindex] = 0;
+		unlock(RxMutex[cindex]);
 	}
 
-	rpnt = bpnt + Rd_pnt[bindex];
-	*nb = Nbr[bindex] - Rd_pnt[bindex];  // num of bytes currently available for reading in RxBuff
+	rpnt = RxBuff[cindex][RxB_r[cindex]] + Rd_pnt[cindex]; // rbuff[cindex] + Rd_pnt[cindex];
+	*nb = Nbr[cindex] - Rd_pnt[cindex];  // num of bytes currently available for reading in RxBuff
 	if (*nb > maxsize) 
 		*nb = maxsize;
 	if (*nb > 0) {
 		memcpy(buff, rpnt, *nb);
-		Rd_pnt[bindex] += *nb;
+		Rd_pnt[cindex] += *nb;
+		if (DebugLogs & DBLOG_LL_READDUMP) {
+			for (int i = 0; i < *nb; i += 4) {
+				uint32_t* d32 = (uint32_t*)(buff + i);
+				FERS_DebugDump2(cindex, "%08X\n", *d32);
+				fflush(Dump2[cindex]);
+
+			}
+		}
 	}
 
-	if (Rd_pnt[bindex] == Nbr[bindex]) {  // end of current buff reached => switch to other buffer 
-		while (trylock(RxMutex[bindex]));
-		RxB_Nbytes[bindex][RxB_r[bindex]] = 0;  
-		RxB_r[bindex] ^= 1;
-		//RxBuff_rp[bindex] = 0;
-		RdReady[bindex] = 0;
-		unlock(RxMutex[bindex]);
+	if (Rd_pnt[cindex] == Nbr[cindex]) {  // end of current buff reached => switch to other buffer 
+		while (trylock(RxMutex[cindex]));
+		RxB_Nbytes[cindex][RxB_r[cindex]] = 0;  
+		RxB_r[cindex] ^= 1;
+		Rd_pnt[cindex] = 0;
+		RdReady[cindex] = 0;
+		unlock(RxMutex[cindex]);
 	}
 	return 1;
 }
 
-int LLtdl_ReadData_File(int cindex, char* buff, int maxsize, int* nb, int flushing) {
+int LLtdl_ReadData_File(int cindex, char* buff, int64_t maxsize, int* nb, int flushing) {
 	//uint8_t stop_loop = 1;
-	static int tmp_srun[FERSLIB_MAX_NBRD] = { 0 };
-	static int fsizeraw[FERSLIB_MAX_NBRD] = { 0 };
-	static FILE* ReadRawData[FERSLIB_MAX_NBRD] = { NULL };
+	static int tmp_srun[FERSLIB_MAX_NCNC] = { 0 };
+	static int64_t fsizeraw[FERSLIB_MAX_NCNC] = { 0 };
+	static FILE* ReadRawData[FERSLIB_MAX_NCNC] = { NULL };
 	int fret = 0;
 	if (flushing) {  // Used for reset, in case of any Readout Error
 		if (ReadRawData[cindex] != NULL)
@@ -1169,9 +1267,9 @@ int LLtdl_ReadData_File(int cindex, char* buff, int maxsize, int* nb, int flushi
 			tmp_srun[cindex] = 0;
 			return 4;
 		}
-		fseek(ReadRawData[cindex], 0, SEEK_END);	// Get the file size
-		fsizeraw[cindex] = ftell(ReadRawData[cindex]);
-		fseek(ReadRawData[cindex], 0, SEEK_SET);
+		f_fseek(ReadRawData[cindex], 0, SEEK_END);	// Get the file size
+		fsizeraw[cindex] = f_ftell(ReadRawData[cindex]);
+		f_fseek(ReadRawData[cindex], 0, SEEK_SET);
 
 		// Here the file has the correct format. For both files with FERSlib name format
 		// and custom one, the header have to be search when tmp_srun is 0
@@ -1179,7 +1277,8 @@ int LLtdl_ReadData_File(int cindex, char* buff, int maxsize, int* nb, int flushi
 			// Read Header keyword
 			char file_header[50];
 			fret = fread(&file_header, 32, 1, ReadRawData[cindex]);
-			if (strcmp(file_header, "$$$$$$$FERSRAWDATAHEADER$$$$$$$") != 0) { // No header mark found
+			if ((strcmp(file_header, "$$$$$$$FERSRAWDATAHEADER$$$$$$$") != 0) && 
+				(strcmp(file_header, "$$$$$$FERSRAWDATAHEADERv2$$$$$$") != 0)) { // No header mark found
 				if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[ERROR][CNC %02d] No valid header found in Raw Data filename %s\n.", cindex, filename);
 				_setLastLocalError("ERROR: No valid keyword header found");
 				fclose(ReadRawData[cindex]);
@@ -1187,9 +1286,9 @@ int LLtdl_ReadData_File(int cindex, char* buff, int maxsize, int* nb, int flushi
 			}
 			size_t jump_size_header = 0;
 			fret = fread(&jump_size_header, sizeof(jump_size_header), 1, ReadRawData[cindex]);
-			fseek(ReadRawData[cindex], (long)(jump_size_header - sizeof(size_t)), SEEK_CUR);
+			f_fseek(ReadRawData[cindex], (long)(jump_size_header - sizeof(size_t)), SEEK_CUR);
 
-			fsizeraw[cindex] -= ftell(ReadRawData[cindex]);
+			fsizeraw[cindex] -= f_ftell(ReadRawData[cindex]);
 		}
 	}
 
@@ -1275,11 +1374,12 @@ int LLtdl_OpenDevice(char *board_ip_addr, int cindex) {
 
 	if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[INFO][CNC %02d] Opening CNC with IP-ADDR = %s\n", cindex, board_ip_addr);
 	FERS_CtrlSocket[cindex] = LLtdl_ConnectToSocket(board_ip_addr, COMMAND_PORT);
-	FERS_DataSocket[cindex] = LLtdl_ConnectToSocket(board_ip_addr, STREAMING_PORT);
 	if (FERS_CtrlSocket[cindex] == f_socket_invalid) {
 		if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[ERROR][CNC %02d] Failed to open Control Socket\n", cindex);
 		return FERSLIB_ERR_COMMUNICATION;
 	}
+	Sleep(500);  // Sleep for a while to let the concentrator set up the data socket after opening the control socket
+	FERS_DataSocket[cindex] = LLtdl_ConnectToSocket(board_ip_addr, STREAMING_PORT);
 	if (FERS_DataSocket[cindex] == f_socket_invalid) {
 		if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[ERROR][CNC %02d] Failed to open Data Socket\n", cindex);
 		return FERSLIB_ERR_COMMUNICATION;
@@ -1338,28 +1438,139 @@ int LLtdl_OpenDevice(char *board_ip_addr, int cindex) {
 	setsockopt(FERS_CtrlSocket[cindex], SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof tv);
 #endif
 	f_sem_destroy(&RxSemaphore[cindex]);
+
 	return 0;
 }
 
 
 // --------------------------------------------------------------------------------------------------------- 
-// Description: Initialize the TDlink chains (enumerate chains, then send sync commands)
-// Inputs:		board_ip_addr = IP address of the concentrator
-//				DelayAdjust = individual fiber delay adjust
-// Outputs:		cindex = concentrator index
+// Description: Enumerate the TDlink chains. If the enum failed for one chain, the function will retry
+//              up to N-times. If the enum fails, the process starts from the first chain again.
+// Inputs:		cindex = concentrator index//				DelayAdjust = individual fiber delay adjust
 // Return:		0=OK, negative number = error code
 // --------------------------------------------------------------------------------------------------------- 
-int LLtdl_InitTDLchains(int cindex, float DelayAdjust[FERSLIB_MAX_NTDL][FERSLIB_MAX_NNODES]) {
+int LLtdl_EnumerateTDLChains(int cindex, float DelayAdjust[FERSLIB_MAX_NTDL][FERSLIB_MAX_NNODES]) {
 	int ret = 0, chain;
 	int do_sync = 0;
-	float max_delay = 0, node_delay, flength, del_sum;
+	float max_d = 0, node_delay, flength, del_sum;
 	uint32_t i;
 	bool enumerated_before;
 
+	// Set Delay on chains
 	if (DelayAdjust != NULL) {
 		memcpy(TDL_FiberDelayAdjust[cindex], DelayAdjust, sizeof(float) * FERSLIB_MAX_NTDL * FERSLIB_MAX_NNODES);
 		InitDelayAdjust[cindex] = 1;
 	}
+
+	for (chain = 0; chain < FERSLIB_MAX_NTDL; chain++) {
+		if (TDL_NumNodes[cindex][chain] == 0) continue;
+		del_sum = 0;
+		for (int i = 0; i < TDL_NumNodes[cindex][chain]; i++) {
+			flength = (!InitDelayAdjust[cindex] || (TDL_FiberDelayAdjust[cindex][chain][i] == 0)) ? DEFAULT_FIBER_LENGTH : TDL_FiberDelayAdjust[cindex][chain][i];
+			del_sum += FIBER_DELAY(flength);
+		}
+		max_d = max(del_sum, max_d);
+	}
+	max_delay[cindex] = (float)ceil(max_d);
+
+	SyncCnc_Completed = 0;
+
+	// get chain info (if already enumerated)
+	enumerated_before = true;
+	for (chain = 0; chain < FERSLIB_MAX_NTDL; chain++) {
+		FERS_TDL_ChainInfo_t tdl_info;
+		ret |= LLtdl_GetChainInfo(cindex, chain, &tdl_info);
+		TDL_ChainStatus[cindex][chain] = tdl_info.Status;
+		if (tdl_info.Status == 0) { // disabled
+			TDL_NumNodes[cindex][chain] = 0;
+			if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[INFO][CHAIN %d:%d] Chain Disabled (Status=%d)\n", cindex, chain, TDL_ChainStatus[cindex][chain]);
+		} else if ((tdl_info.Status == 1) || (tdl_info.Status == 2)) {  // down or up
+			enumerated_before = false;
+			if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[INFO][CHAIN %d:%d] Chain Not Initialized (Status=%d)\n", cindex, chain, TDL_ChainStatus[cindex][chain]);
+			TDL_NumNodes[cindex][chain] = 0;
+		} else { // ready or running
+			if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[INFO][CHAIN %d:%d] Chain Ready. Num Nodes=%d, RRT=%.1f (Status=%d)\n", cindex, chain, tdl_info.BoardCount, tdl_info.rrt, TDL_ChainStatus[cindex][chain]);
+			TDL_NumNodes[cindex][chain] = tdl_info.BoardCount;
+		}
+	}
+
+	// try enumeration at least N times
+	int MaxCyc = 5;
+	for (int cyc = 1; cyc <= MaxCyc; cyc++) {
+		if (enumerated_before == true)
+			break;
+
+		// reset all chains if not enumerated before
+		if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[INFO][CNC %02d] Resetting chains\n", cindex);
+		LLtdl_ResetChains(cindex);
+		do_sync = 1;
+
+		// enumerate chains 
+		enumerated_before = true;
+		for (chain = 0; chain < FERSLIB_MAX_NTDL; chain++) {
+			if (TDL_ChainStatus[cindex][chain] == 0) continue;  // chain is disabled
+			ret = LLtdl_EnumChain(cindex, chain, &TDL_NumNodes[cindex][chain]);
+			if (ret != 0) {
+				TDL_NumNodes[cindex][chain] = 0;
+				if (cyc < MaxCyc) {
+					enumerated_before = false; // retry enumeration
+					if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[WARNING][CNC %02d][CHAIN %02d]: Enumeration failed (cyc %d) => Retry from chain 0\n", cindex, chain, cyc);
+					break;
+				} else {
+					FERS_LibMsg("[ERROR][CNC %02d][CHAIN %02d] Enumeration failed after %d attempts (ret=%d)\n", cindex, chain, cyc);
+					_setLastLocalError("Enumeration failed for cnc %d, chain %d after %d attempts (ret=%d)", cindex, chain, cyc, ret);
+					return ret;
+				}
+			} else {
+				if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[INFO][CHAIN %d:%d]: Chain enumerated succesfully. %d nodes found\n", 
+					cindex, chain, TDL_NumNodes[cindex][chain]);
+			}
+		}
+	}
+
+	// if all attempts failed => return error
+	if (enumerated_before == false) {
+		if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[ERROR][CNC %02d]: Enumeration Error after %d attempts!\n", cindex, MaxCyc);
+		_setLastLocalError("Enumeration for cnc %d failed after %d attempts", cindex, MaxCyc);
+		return FERSLIB_ERR_COMMUNICATION;
+	}
+
+	return 0;
+}
+
+
+
+// --------------------------------------------------------------------------------------------------------- 
+// Description: Enumerate the TDlink chains
+// Inputs:		cindex = concentrator index
+//				DelayAdjust = individual fiber delay adjust
+// Return:		0=OK, negative number = error code
+// --------------------------------------------------------------------------------------------------------- 
+int LLtdl_EnumerateTDLChains_deprecated(int cindex, float DelayAdjust[FERSLIB_MAX_NTDL][FERSLIB_MAX_NNODES]) {
+	int ret = 0, chain;
+	int do_sync = 0;
+	float max_d = 0, node_delay, flength, del_sum;
+	uint32_t i;
+	bool enumerated_before;
+
+	// Set Delay on chains
+	if (DelayAdjust != NULL) {
+		memcpy(TDL_FiberDelayAdjust[cindex], DelayAdjust, sizeof(float) * FERSLIB_MAX_NTDL * FERSLIB_MAX_NNODES);
+		InitDelayAdjust[cindex] = 1;
+	}
+
+	for (chain = 0; chain < FERSLIB_MAX_NTDL; chain++) {
+		if (TDL_NumNodes[cindex][chain] == 0) continue;
+		del_sum = 0;
+		for (int i = 0; i < TDL_NumNodes[cindex][chain]; i++) {
+			flength = (!InitDelayAdjust[cindex] || (TDL_FiberDelayAdjust[cindex][chain][i] == 0)) ? DEFAULT_FIBER_LENGTH : TDL_FiberDelayAdjust[cindex][chain][i];
+			del_sum += FIBER_DELAY(flength);
+		}
+		max_d = max(del_sum, max_d);
+	}
+	max_delay[cindex] = (float)ceil(max_d);
+
+	SyncCnc_Completed = 0;
 
 	// get chain info (if already enumerated)
 	enumerated_before = true;
@@ -1407,8 +1618,8 @@ int LLtdl_InitTDLchains(int cindex, float DelayAdjust[FERSLIB_MAX_NTDL][FERSLIB_
 				}
 			} else if (ret < 0) {
 				TDL_NumNodes[cindex][chain] = 0;
-				if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[ERROR][CHAIN %d:%d]: Enumeration Error. This chain will be ignored\n", cindex, chain);  // HACK CTIN: disable this chain?
-				//return FERSLIB_ERR_COMMUNICATION;
+				if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[ERROR][CHAIN %d:%d]: Enumeration Error %d. This chain will be ignored\n", cindex, chain, ret);  // HACK CTIN: disable this chain?
+				return ret;
 			} else {
 				if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[INFO][CHAIN %d:%d]: Chain enumerated succesfully. %d nodes found\n", cindex, chain, TDL_NumNodes[cindex][chain]);
 			}
@@ -1418,58 +1629,164 @@ int LLtdl_InitTDLchains(int cindex, float DelayAdjust[FERSLIB_MAX_NTDL][FERSLIB_
 	// if all attempts failed => return error
 	if (enumerated_before == false) {
 		if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[ERROR][CNC %02d]: Enumeration Error after %d attempts!\n", cindex, MaxCyc);
+		_setLastLocalError("ERROR: Enumeration Error after %d attempts", MaxCyc);
 		return FERSLIB_ERR_COMMUNICATION;
 	}
 
-	// Sync the Chains
-	if (do_sync)
-		ret |= LLtdl_SyncChains(cindex); 
+	return 0;
+}
 
-	// Find maximum delay 
-	for (chain = 0; chain < FERSLIB_MAX_NTDL; chain++) {
-		if (TDL_NumNodes[cindex][chain] == 0) continue;
-		del_sum = 0;
-		for (i = 0; i < TDL_NumNodes[cindex][chain]; i++) {
-			flength = (!InitDelayAdjust[cindex] || (TDL_FiberDelayAdjust[cindex][chain][i] == 0)) ? DEFAULT_FIBER_LENGTH : TDL_FiberDelayAdjust[cindex][chain][i];
-			del_sum += FIBER_DELAY(flength);
-		}
-		max_delay = max(del_sum, max_delay);
-	}
-	max_delay = (float)ceil(max_delay);
-	
-	for (chain = 0; chain < FERSLIB_MAX_NTDL; chain++) {
-		if (TDL_NumNodes[cindex][chain] == 0) continue;
-		node_delay = max_delay;
-		for (i = 0; i < TDL_NumNodes[cindex][chain]; i++) {
-			flength = (!InitDelayAdjust[cindex] || (TDL_FiberDelayAdjust[cindex][chain][i] == 0)) ? DEFAULT_FIBER_LENGTH : TDL_FiberDelayAdjust[cindex][chain][i];
-			node_delay -= FIBER_DELAY(flength);
-			if (node_delay < 0) node_delay = 0;
-			uint32_t data = (chain << 24) | (i << 16) | (uint32_t)node_delay;
-			ret |= LLtdl_CncWriteRegister(cindex, VR_SYNC_DELAY, data);	
-			if (ret < 0) return FERSLIB_ERR_COMMUNICATION;
+
+// --------------------------------------------------------------------------------------------------------- 
+// Description: Send Sync commands to all chains of the concentrators
+// Inputs:		*cnchandle = handle to all concentrator
+//				DelayAdjust = individual fiber delay adjust
+// Return:		0=OK, negative number = error code
+// --------------------------------------------------------------------------------------------------------- 
+int LLtdl_SyncTDLchains(int* cnchandle, uint32_t StartRunMode)
+{
+	int ret = 0;
+	int chain = 0;
+	float node_delay[FERSLIB_MAX_NCNC] = { 0 }, flength[FERSLIB_MAX_NCNC] = { 0 }, del_sum[FERSLIB_MAX_NCNC] = { 0 };
+
+	//// Setting Clock - This is now performed by Web Interface
+	for (int cindex = 0; cindex < NumCncConnected; ++cindex) {
+		if (FERS_isCncMaster(cindex)) { // Concentrator as Master
+			// Set CmdTrg Sync for DCmdBroadcast
+			uint32_t val = 0x20 | VR_IO_CMD_SYNC;
+			ret |= LLtdl_CncWriteRegister(cindex, VR_IO_CMD, val);
+			Sleep(10);
+			//		// Set Clock source
+			//		if ((sync_mode == STARTRUN_TDL) || (sync_mode == STARTRUN_TDL_EXTRUN))
+			//			ret |= LLtdl_CncWriteRegister(cindex, VR_IO_CLK_SOURCE, VR_IO_CLKSOURCE_INTERNAL); // VR_IO_CLKSOURCE_INTERNAL);
+			//		if (sync_mode == STARTRUN_TDL_EXTRUN_EXTCLK)
+			//			ret |= LLtdl_CncWriteRegister(cindex, VR_IO_CLK_SOURCE, ext_clk_src);
+			//		if (sync_mode == STARTRUN_TDL_GPS)
+			//			ret |= LLtdl_CncWriteRegister(cindex, VR_IO_CLK_SOURCE, VR_IO_CLKSOURCE_LEMO);
+
+			if (ret != 0) {
+				if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[ERROR][CNC %02d] Setting cmd trigger failed\n", cindex);
+				_setLastLocalError("ERROR: Setting cmd trigger CNC%d source failed", cindex);
+				return FERSLIB_ERR_COMMUNICATION;
+			}
+		} else {
+			// Set CmdTrg
+			uint32_t val = 0x20 | VR_IO_CMD_SYNC_B;
+			ret |= LLtdl_CncWriteRegister(cindex, VR_IO_CMD, val);
+			//		// Set Clock from SyncInA 
+			//		ret |= LLtdl_CncWriteRegister(cindex, VR_IO_CLK_SOURCE, VR_IO_CLKSOURCE_SYNC);
+			if (ret != 0) {
+				if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[ERROR][CNC %02d] Setting Command Trigger Source failed\n", cindex);
+				_setLastLocalError("ERROR: Setting Command Trigger Source for CNC%d source failed", cindex);
+				return FERSLIB_ERR_COMMUNICATION;
+			}
 		}
 	}
 
-	// Disable chains (stop tokens)
-	for (chain = 0; chain < FERSLIB_MAX_NTDL; chain++) {
-		if (TDL_NumNodes[cindex][chain] == 0) continue;
-		ret |= LLtdl_ControlChain(cindex, chain, 0, 0);
+	// Sending T0 phy
+	for (int cindex = 0; cindex < NumCncConnected; ++cindex) {
+		if (FERS_isCncMaster(FERS_INDEX(cnchandle[cindex]))) {
+			FERS_LibMsg("[INFO][CNC %02d] Send T0 Command Sync\n", cindex);
+			ret |= LLtdl_SyncChains(cindex);  // This is the real T0-Command
+		}
+	}
+	if (ret < 0) {
+		if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[ERROR] Sync T0 Command failed\n");
+		_setLastLocalError("ERROR: Sync T0 Command failed");
+		return FERSLIB_ERR_COMMUNICATION;
+	}
+
+	float delay_max = 0;
+	for (int i = 0; i < 4; ++i)
+		delay_max = max(delay_max, max_delay[i]);
+
+	// Settings fibers delay for the chains of all CNCs
+	for (int cindex = 0; cindex < NumCncConnected; ++cindex) {
+		for (chain = 0; chain < FERSLIB_MAX_NTDL; chain++) {
+			if (TDL_NumNodes[cindex][chain] == 0) continue;
+			node_delay[cindex] = delay_max; // max_delay[cindex];
+			for (int i = 0; i < TDL_NumNodes[cindex][chain]; i++) {
+				flength[cindex] = (!InitDelayAdjust[cindex] || (TDL_FiberDelayAdjust[cindex][chain][i] == 0)) ? DEFAULT_FIBER_LENGTH : TDL_FiberDelayAdjust[cindex][chain][i];
+				node_delay[cindex] -= FIBER_DELAY(flength[cindex]);
+				if (node_delay[cindex] < 0) node_delay[cindex] = 0;
+				uint32_t data = (chain << 24) | (i << 16) | (uint32_t)node_delay[cindex];
+				ret |= LLtdl_CncWriteRegister(cindex, VR_SYNC_DELAY, data);
+				if (ret < 0) return FERSLIB_ERR_COMMUNICATION;
+			}
+		}
+	}
+
+	if (ret < 0) {
+		if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[ERROR] Fiber Delay setting failed\n");
+		_setLastLocalError("ERROR: Fiber Delay setting failed");
+		return FERSLIB_ERR_COMMUNICATION;
 	}
 
 	// Send sync commands to FERS units
-	if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[INFO][CNC %02d] Sending Sync commands\n", cindex);
-	ret |= LLtdl_SendCommandBroadcast(cindex, CMD_TDL_SYNC, TDL_COMMAND_DELAY);
-	ret |= LLtdl_SendCommandBroadcast(cindex, CMD_TIME_RESET, TDL_COMMAND_DELAY);
-	ret |= LLtdl_SendCommandBroadcast(cindex, CMD_RES_PTRG, TDL_COMMAND_DELAY);
+	if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[INFO] Sending Sync commands to Concentrators\n");
 
-	// Enable chains (start tokens)
-	for (chain = 0; chain < FERSLIB_MAX_NTDL; chain++) {
-		if (TDL_NumNodes[cindex][chain] == 0) continue;
-		ret |= LLtdl_ControlChain(cindex, chain, 1, 0x100);
+	// Disable chains (stop tokens)
+	for (int cindex = 0; cindex < NumCncConnected; ++cindex) {
+		for (chain = 0; chain < FERSLIB_MAX_NTDL; chain++) {
+			if (TDL_NumNodes[cindex][chain] == 0) continue;
+			ret |= LLtdl_ControlChain(cindex, chain, 0, 0);
+		}
 	}
 
-	if (ret) return FERSLIB_ERR_COMMUNICATION;
-	return 0;
+	// Send sync command via DCMD
+	ret |= LLtdl_SendDCommandBroadcast(cnchandle, CMD_TDL_SYNC, TDL_COMMAND_DELAY); // TDL_COMMAND_DELAY can be a bit too long for 2 cnc
+	if (ret < 0) {
+		if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[ERROR] Sending TDL Sync Command failed\n");
+		_setLastLocalError("ERROR: Sending TDL Sync Command failed");
+		return FERSLIB_ERR_COMMUNICATION;
+	}
+
+	// Set Synchronization completed
+	SyncCnc_Completed = 1;
+
+	return ret;
+}
+
+
+// --------------------------------------------------------------------------------------------------------- 
+// Description: Set a DCMD to all cnc and execute with a Sw Command (SYNC). CmdTrg Must be set as 'SYNC'
+// Inputs:		cnchandle = pointer to the cncs handles
+// 				cmd = command opcode	
+//				delay = execution delay (must take into account the time it takes for the 
+//				command to travel along the chain)
+// Return:		true = init done; false = not done
+// ---------------------------------------------------------------------------------------------------------
+int LLtdl_SendDCommandBroadcast(int *cnchandle, uint32_t cmd, uint32_t delay) {
+	int ret = 0;
+	uint8_t idxMaster[FERSLIB_MAX_NCNC] = { 0 };
+	uint8_t numMaster = 0;  // Only 1 Master, but ...
+	for (int i = 0; i < NumCncConnected; ++i) {  //DNIN: WARNING, si presuppone ci sia un unico CNC master
+		if (FERS_isCncMaster(FERS_INDEX(cnchandle[i]))) {
+			idxMaster[numMaster] = FERS_INDEX(cnchandle[i]);
+			++numMaster;
+		}
+	}
+	// Set DCMD to all concentrators
+	for (int i = 0; i < NumCncConnected; ++i) 
+		ret |= LLtdl_SetDCommandBroadcast(FERS_INDEX(cnchandle[i]), cmd, delay);
+	Sleep(10);
+	if (ret < 0) {
+		if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[ERROR] Setting DCMD %" PRIu32 " Broadcast failed\n", cmd);
+		_setLastLocalError("ERROR: Setting DCMD %" PRIu32 " Broadcast failed", cmd);
+		return FERSLIB_ERR_COMMUNICATION;
+	}
+	
+	// Send CmdTrg 'SW' as Sync command to Master cnc
+	for (int i = 0; i < numMaster; ++i)
+		ret |= LLtdl_CncWriteRegister(idxMaster[i], VR_IO_SYNC_SEND, 1); 
+
+	if (ret < 0) {
+		if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[ERROR] Executing DCMD %" PRIu32 " with Sync failed\n", cmd);
+		_setLastLocalError("ERROR: Executing DCMD %" PRIu32 " with Sync failed", cmd);
+		return FERSLIB_ERR_COMMUNICATION;
+	}
+
+	return ret;
 }
 
 
@@ -1501,6 +1818,10 @@ int LLtdl_CloseDevice(int cindex)
 	lock(RxMutex[cindex]);
 	QuitThread[cindex] = 1;
 	unlock(RxMutex[cindex]);
+
+	// Wait for the thread to stop (with timeout)
+	thread_join(ThreadID[cindex], NULL);
+
 	for (int i = 0; i < 100; i++) {
 		if (RxStatus[cindex] == RXSTATUS_OFF) break;
 		Sleep(1);
@@ -1534,36 +1855,63 @@ int LLtdl_CloseDevice(int cindex)
 // Inputs:		bindex: board index
 // Return:		0=OK, negative number = error code
 // --------------------------------------------------------------------------------------------------------- 
-int LLtdl_OpenRawOutputFile(int *handle) {
+int LLtdl_OpenRawOutputFile(int *handle, int cindex) {
 	if (ProcessRawData) return 0;
 	
-	int cidx = FERS_CNCINDEX(handle[0]);	// Considered only 1 concentrator connection
-	uint16_t brdConnected = FERS_GetNumBrdConnected();
+	int cidx = cindex;	// Considered only 1 concentrator connection
 
 	if (FERScfg[cidx]->OF_RawData && RawData[cidx] == NULL) {
-		FERS_BoardInfo_t tmpInfo[64];
+		FERS_BoardInfo_t tmpInfo[FERSLIB_MAX_NBRD];
+
+		FERS_CncInfo_t tmpCncInfo;
+		FERS_GetCncInfo2(cidx, &tmpCncInfo);
+		uint16_t brdConnected = tmpCncInfo.ChainInfo->BoardCount;  // FERS_GetNumBrdConnected();
 
 		char filename[200];
 		sprintf(filename, "%s.%d.frd", RawDataFilenameTdl[cidx], subrun[cidx]);
 		RawData[cidx] = fopen(filename, "wb");
-		size_t header_size = sizeof(size_t) + sizeof(FERS_CncInfo_t) + brdConnected*(sizeof(handle[0]) + sizeof(FERS_BoardInfo_t));
+
+		size_t header_size =  // sizeof(size_t) + sizeof(CncHandles[cidx]) + sizeof(FERS_CncInfo_t) + tmpCncInfo.ChainInfo->BoardCount * (sizeof(handle[0]) + sizeof(FERS_BoardInfo_t));
+			sizeof(size_t) +
+			sizeof(int8_t) * 5 + // Library and RawData version
+			sizeof(CncHandles[cidx]) +
+			sizeof(FERS_CncInfo_t) +
+			brdConnected * (sizeof(handle[0]) + sizeof(FERS_BoardInfo_t));
+			
 		for (int i = 0; i < brdConnected; ++i) {
+			if (FERS_CNCINDEX(handle[i]) != cidx) continue; // Only for the current concentrator
+
 			FERS_GetBoardInfo(handle[i], &tmpInfo[i]);
 			if (FERS_IsXROC(handle[i])) header_size += sizeof(PedestalLG[i]) + sizeof(PedestalHG[i]);
 		}
 
-		char title[32] = "$$$$$$$FERSRAWDATAHEADER$$$$$$$";
+		char title[32] = "$$$$$$FERSRAWDATAHEADERv2$$$$$$";
 		fwrite(&title, sizeof(title), 1, RawData[cidx]);
 		fwrite(&header_size, sizeof(header_size), 1, RawData[cidx]);
+		
+		// Library version
+		int8_t my_tmp_version = FERSLIB_VERSION_MAJOR;
+		fwrite(&my_tmp_version, sizeof(my_tmp_version), 1, RawData[cidx]);
+		my_tmp_version = FERSLIB_VERSION_MINOR; 
+		fwrite(&my_tmp_version, sizeof(my_tmp_version), 1, RawData[cidx]);
+		my_tmp_version = FERSLIB_VERSION_PATCH;
+		fwrite(&my_tmp_version, sizeof(my_tmp_version), 1, RawData[cidx]);
+		// RawData version
+		my_tmp_version = FERSLIB_RAWDATA_VERSION_MAJOR;
+		fwrite(&my_tmp_version, sizeof(my_tmp_version), 1, RawData[cidx]);
+		my_tmp_version = FERSLIB_RAWDATA_VERSION_MINOR;
+		fwrite(&my_tmp_version, sizeof(my_tmp_version), 1, RawData[cidx]);
+		
 
-		// Write Cnc Info
-		FERS_CncInfo_t tmpCInfo;
-		LLtdl_GetCncInfo(cidx, &tmpCInfo);
-		fwrite(&tmpCInfo, sizeof(FERS_CncInfo_t), 1, RawData[cidx]);
+		// Write Cnc handle and Info
+		//FERS_CncInfo_t tmpCInfo;
+		//LLtdl_GetCncInfo(cidx, &tmpCInfo);
+		fwrite(&CncHandles[cidx], sizeof(CncHandles[cidx]), 1, RawData[cidx]);
+		fwrite(&tmpCncInfo, sizeof(FERS_CncInfo_t), 1, RawData[cidx]);
 
 		// Write Board Info
 		for (int i = 0; i < brdConnected; ++i) {
-			if (FERS_CONNECTIONTYPE(handle[i]) != FERS_CONNECTIONTYPE_TDL)
+			if ((FERS_CONNECTIONTYPE(handle[i]) != FERS_CONNECTIONTYPE_TDL) || (FERS_CNCINDEX(handle[i]) != cidx))
 				continue; // In case not all the boards are connected via tdl
 			fwrite(&handle[i], sizeof(int), 1, RawData[cidx]);
 			fwrite(&tmpInfo[i], sizeof(tmpInfo[i]), 1, RawData[cidx]);
@@ -1585,14 +1933,14 @@ int LLtdl_OpenRawOutputFile(int *handle) {
 int LLtdl_CloseRawOutputFile(int handle) {
 	if (ProcessRawData) return 0;
 
-	int bidx = FERS_CNCINDEX(handle);
-	lock(rdf_mutex[bidx]);
-	if (RawData[bidx] != NULL) {
-		fclose(RawData[bidx]);
-		RawData[bidx] = NULL;
+	int cidx = FERS_CNCINDEX(handle);
+	lock(rdf_mutex[cidx]);
+	if (RawData[cidx] != NULL) {
+		fclose(RawData[cidx]);
+		RawData[cidx] = NULL;
 	}
-	size_file[bidx] = 0;
-	subrun[bidx] = 0;
-	unlock(rdf_mutex[bidx]);
+	size_file[cidx] = 0;
+	subrun[cidx] = 0;
+	unlock(rdf_mutex[cidx]);
 	return 0;
 }

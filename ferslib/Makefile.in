@@ -16,8 +16,7 @@
 
 #	Copyright (C) 2020-2023 CAEN SpA
 #
-#	This file is part of the CAEN Dig2 Low Level Library.
-
+#	This file is part of the CAEN FERS Low Level Library.
 
 VPATH = @srcdir@
 am__is_gnu_make = { \
@@ -103,8 +102,8 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ax_cxx_compile_stdcxx.m4 \
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(top_srcdir)/configure \
-	$(am__configure_deps) $(dist_ferslibdoc_DATA) \
-	$(dist_noinst_HEADERS) $(include_HEADERS) $(am__DIST_COMMON)
+	$(am__configure_deps) $(dist_noinst_HEADERS) \
+	$(include_HEADERS) $(am__DIST_COMMON)
 am__CONFIG_DISTCLEAN_FILES = config.status config.cache config.log \
  configure.lineno config.status.lineno
 mkinstalldirs = $(install_sh) -d
@@ -164,9 +163,7 @@ am__uninstall_files_from_dir = { \
     || { echo " ( cd '$$dir' && rm -f" $$files ")"; \
          $(am__cd) "$$dir" && rm -f $$files; }; \
   }
-am__installdirs = "$(DESTDIR)$(ferslibdocdir)" \
-	"$(DESTDIR)$(includedir)"
-DATA = $(dist_ferslibdoc_DATA)
+am__installdirs = "$(DESTDIR)$(includedir)"
 HEADERS = $(dist_noinst_HEADERS) $(include_HEADERS)
 RECURSIVE_CLEAN_TARGETS = mostlyclean-recursive clean-recursive	\
   distclean-recursive maintainer-clean-recursive
@@ -388,11 +385,7 @@ dist_noinst_HEADERS = \
 	include/FERS_config.h \
 	include/FERS_paramparser.h 	
 
-EXTRA_DIST = FERSlibDemo README ReleaseNotes.txt doc/html/
-ferslibdocdir = $(docdir)
-dist_ferslibdoc_DATA = \
-	doc/documentation.tar.gz
-
+EXTRA_DIST = FERSlibDemo README ReleaseNotes.txt doc/html
 all: all-recursive
 
 .SUFFIXES:
@@ -438,27 +431,6 @@ clean-libtool:
 
 distclean-libtool:
 	-rm -f libtool config.lt
-install-dist_ferslibdocDATA: $(dist_ferslibdoc_DATA)
-	@$(NORMAL_INSTALL)
-	@list='$(dist_ferslibdoc_DATA)'; test -n "$(ferslibdocdir)" || list=; \
-	if test -n "$$list"; then \
-	  echo " $(MKDIR_P) '$(DESTDIR)$(ferslibdocdir)'"; \
-	  $(MKDIR_P) "$(DESTDIR)$(ferslibdocdir)" || exit 1; \
-	fi; \
-	for p in $$list; do \
-	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
-	  echo "$$d$$p"; \
-	done | $(am__base_list) | \
-	while read files; do \
-	  echo " $(INSTALL_DATA) $$files '$(DESTDIR)$(ferslibdocdir)'"; \
-	  $(INSTALL_DATA) $$files "$(DESTDIR)$(ferslibdocdir)" || exit $$?; \
-	done
-
-uninstall-dist_ferslibdocDATA:
-	@$(NORMAL_UNINSTALL)
-	@list='$(dist_ferslibdoc_DATA)'; test -n "$(ferslibdocdir)" || list=; \
-	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
-	dir='$(DESTDIR)$(ferslibdocdir)'; $(am__uninstall_files_from_dir)
 install-includeHEADERS: $(include_HEADERS)
 	@$(NORMAL_INSTALL)
 	@list='$(include_HEADERS)'; test -n "$(includedir)" || list=; \
@@ -780,10 +752,10 @@ distcleancheck: distclean
 	       exit 1; } >&2
 check-am: all-am
 check: check-recursive
-all-am: Makefile $(DATA) $(HEADERS)
+all-am: Makefile $(HEADERS)
 installdirs: installdirs-recursive
 installdirs-am:
-	for dir in "$(DESTDIR)$(ferslibdocdir)" "$(DESTDIR)$(includedir)"; do \
+	for dir in "$(DESTDIR)$(includedir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
 	done
 install: install-recursive
@@ -838,7 +810,7 @@ info: info-recursive
 
 info-am:
 
-install-data-am: install-dist_ferslibdocDATA install-includeHEADERS
+install-data-am: install-includeHEADERS
 
 install-dvi: install-dvi-recursive
 
@@ -884,7 +856,7 @@ ps: ps-recursive
 
 ps-am:
 
-uninstall-am: uninstall-dist_ferslibdocDATA uninstall-includeHEADERS
+uninstall-am: uninstall-includeHEADERS
 
 .MAKE: $(am__recursive_targets) install-am install-strip
 
@@ -895,20 +867,21 @@ uninstall-am: uninstall-dist_ferslibdocDATA uninstall-includeHEADERS
 	dist-xz dist-zip distcheck distclean distclean-generic \
 	distclean-libtool distclean-tags distcleancheck distdir \
 	distuninstallcheck dvi dvi-am html html-am info info-am \
-	install install-am install-data install-data-am \
-	install-dist_ferslibdocDATA install-dvi install-dvi-am \
-	install-exec install-exec-am install-html install-html-am \
-	install-includeHEADERS install-info install-info-am \
-	install-man install-pdf install-pdf-am install-ps \
-	install-ps-am install-strip installcheck installcheck-am \
-	installdirs installdirs-am maintainer-clean \
+	install install-am install-data install-data-am install-dvi \
+	install-dvi-am install-exec install-exec-am install-html \
+	install-html-am install-includeHEADERS install-info \
+	install-info-am install-man install-pdf install-pdf-am \
+	install-ps install-ps-am install-strip installcheck \
+	installcheck-am installdirs installdirs-am maintainer-clean \
 	maintainer-clean-generic mostlyclean mostlyclean-generic \
 	mostlyclean-libtool pdf pdf-am ps ps-am tags tags-am uninstall \
-	uninstall-am uninstall-dist_ferslibdocDATA \
-	uninstall-includeHEADERS
+	uninstall-am uninstall-includeHEADERS
 
 .PRECIOUS: Makefile
 
+#ferslibdocdir = $(docdir)
+#dist_ferslibdoc_DATA = \
+#	doc/documentation.tar.gz
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

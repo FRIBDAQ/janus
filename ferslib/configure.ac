@@ -5,7 +5,7 @@
 # Tested with autoconf 2.69, released in 2012
 # [m4_esyscmd_s([echo $VERSION])]
 VERSION=1.2.0
-m4_define([FL_VERSION], [Linux-1.2.0])
+m4_define([FL_VERSION], [2.2.1])
 AC_PREREQ([2.69])
 AC_INIT(caenferslib, [FL_VERSION], support.computing@caen.it)
 
@@ -39,7 +39,7 @@ CFLAGS="$CFLAGS -Dlinux"
 AC_PROG_INSTALL
 
 # Check fo libusb-1.0
-#AC_SEARCH_LIBS([libusb_init], [usb-1.0], [], [AC_MSG_ERROR([DIOCANE])])
+#AC_SEARCH_LIBS([libusb_init], [usb-1.0], [], [AC_MSG_ERROR([LIBUSB MISSING])])
 PKG_CHECK_MODULES([LIBUSB], [libusb-1.0], [], [AC_MSG_ERROR([libusb-1.0 is required but it was not found.])])
 
 #AC_SUBST([LIBUSB_CFLAGS])
@@ -61,6 +61,9 @@ AC_HEADER_ASSERT
 
 # Checks for Boost 1.67.0 or greater
 #AX_BOOST_BASE([1.67.0], [], [AC_MSG_ERROR(Boost library >= 1.67.0 (headers only) required.)])
+
+# Check for unsafe character(s) in path
+AS_CASE(["$PWD"], [*[!A-Za-z0-9./-]*], [AC_MSG_ERROR([Unsafe build path detected])])
 
 AC_CONFIG_FILES([
 	Makefile

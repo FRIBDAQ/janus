@@ -57,10 +57,9 @@
 	#endif
 #endif
 
-#define SW_RELEASE_NUM			"4.2.0"
-#define SW_RELEASE_DATE			"06/06/2025"
-#define FILE_LIST_VER			"3.3"
-
+#define SW_RELEASE_NUM			"5.0.1"
+#define SW_RELEASE_DATE			"21/07/2026"
+#define FILE_LIST_VER			"3.4"
 #ifdef _WIN32
 #define CONFIG_FILENAME			"Janus_Config.txt"
 #define RUNVARS_FILENAME		"RunVars.txt"
@@ -75,8 +74,8 @@
 // Definition of limits and sizes
 //****************************************************************************
 #define MAX_NBRD						128	// max. number of boards supported in console
-#define MAX_NBRD_GUI					16	// max. number of boards in the GUI	
-#define MAX_NCNC						8	// max. number of concentrators
+#define MAX_NBRD_GUI					32	// max. number of boards in the GUI	
+#define MAX_NCNC						4	// max. number of concentrators
 #define MAX_NCH							64	// max. number of channels 
 #define MAX_GW							20	// max. number of generic write commads
 #define MAX_NTRACES						8	// Max num traces in the plot
@@ -177,6 +176,8 @@
 #define ACQSTATUS_RAMPING_HV			11	// Switching HV ON or OFF
 #define ACQSTATUS_UPGRADING_FW			12	// Upgrading the FW
 #define ACQSTATUS_HOLD_SCAN				13	// Running Scan Hold
+#define ACQSTATUS_WAITING_EXTSTART		14	// Waiting EXTERBNAL TRIGGER
+#define ACQSTATUS_RESTARTINGJANUS		15	// Restart Janus
 #define ACQSTATUS_ERROR					-1	// Error
 
 
@@ -202,7 +203,8 @@ typedef struct Config_t {
 	int JobFirstRun;				// First Run Number of the job
 	int JobLastRun;					// Last Run Number of the job
 	float RunSleep;					// Wait time between runs of one job
-	int StartRunMode;				// Start Mode (this is a HW setting that defines how to start/stop the acquisition in the boards)
+	int StartRunMode;					// Start Mode (this is a HW setting that defines how to start/stop the acquisition in the boards)
+	int ExtClkSource;				// External source for clock signal in master concentrator
 	int StopRunMode;				// Stop Mode (unlike the start mode, this is a SW setting that deicdes the stop criteria)
 	int RunNumber_AutoIncr;			// auto increment run number after stop
 	float PresetTime;				// Preset Time (Real Time in s) for auto stop
@@ -222,13 +224,13 @@ typedef struct Config_t {
 
 	int CitirocCfgMode;				// 0=from regs, 1=from file
 	//uint16_t Pedestal;				// Common pedestal added to all channels
-
 	//                                                                       
 	// Acquisition Setup (HW settings)
 	//                                                                       
 	// Board Settings
 	uint32_t AcquisitionMode;						// ACQMODE_COUNT, ACQMODE_SPECT, ACQMODE_TIMING, ACQMODE_WAVE
 	uint32_t EnableToT;								// Enable readout of ToT (time over threshold)
+	uint8_t EnableListZeroSuppr;					// Enable zero suppression in list mode
 
 	uint32_t TriggerMask;	// Variable needed in plot.c. There no handle is passed
 	//uint32_t WaveformLength;
@@ -252,7 +254,10 @@ typedef struct RunVars_t {
 	int HoldDelayScanCfg[5];	// Hold Delay Scan Params: Board MinDelay MaxDelay Step Nmean
 } RunVars_t;
 
-
+typedef struct {
+	int handle;
+	int onoff;
+} HVSwitchArgs_t;
 
 //****************************************************************************
 // Global Variables

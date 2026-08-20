@@ -25,7 +25,7 @@
 FILE *plotpipe = NULL;
 int LastPlotType = -1; 
 int LastPlotName = -1;
-const int debug = 0;
+const int debug = 1;
 
 #ifdef _WIN32
 #define GNUPLOT_COMMAND  "..\\gnuplot\\gnuplot.exe"
@@ -127,14 +127,17 @@ int PlotSpectrum()
 		fprintf(plotpipe, "set title 'ToT'\n");
 		strcpy(ffxunit, Stats.H1_ToT[0][0].x_unit);
 		strcpy(fftitle, "ToT"); // Stats.H1_ToT[0][0].title);
-	}
-	else if (RunVars.PlotType == PLOT_MCS_TIME) {
+	} else if (RunVars.PlotType == PLOT_MCS_TIME) {
 		fprintf(plotpipe, "set title 'MCS'\n");
 		strcpy(ffxunit, Stats.H1_MCS[0][0].x_unit);
 		strcpy(fftitle, "MCS"); // Stats.H1_MCS[0][0].title);
 	}
 
 	nt = 0;
+	// Build a compact list of active trace indices to avoid scanning all MAX_NTRACES every iteration
+	int active_traces[MAX_NTRACES];
+	int n_active = 0;
+
 	//char tmp_rn[8][100];
 	for(t=0; t<MAX_NTRACES; t++) {
 		if (strlen(RunVars.PlotTraces[t]) == 0) {
@@ -235,17 +238,14 @@ int PlotSpectrum()
 
 				sprintf(description[t], "T%d Run%d", t, RunVars.RunNumber); // Online
 			}
+			active_traces[n_active++] = t; // Store the index of the active trace
 		}
 	}
 	if (nt == 0) return 0;
 	// Take A0 and A1 of the first active channel.
-	for (int t = 0; t < MAX_NTRACES; ++t) {
-		if (!en[t])
-			continue;
-		la0 = A0[t];
-		la1 = A1[t];
-		break;
-	}
+	la0 = A0[active_traces[0]];
+	la1 = A1[active_traces[0]];
+
 	if ((LastPlotType != PLOT_TYPE_SPECTRUM) || (LastNbin != Nbin) || (LastXcalib != xcalib) || (LastPlotName != RunVars.PlotType)
 		|| LastA0 != la0 || LastA1 != la1) {
 		char gnuplotSettings[2048] = "";
@@ -300,42 +300,41 @@ int PlotSpectrum()
 	if (debug) 	fprintf(debbuff, "$PlotData << EOD\n");
 	fprintf(plotpipe, "$PlotData << EOD\n");
 	char pipeData[MAX_NTRACES * 32768] = "";
+	int pipePos = 0;
+	const int pipeMax = (int)sizeof(pipeData) - 512; // Keep some margin to avoid overflow when concatenating lines
 	for(i=0; i < Nbin; i++) {
 		char line[512] = "";
-		for (t = 0; t < MAX_NTRACES; t++) {
-			if (en[t]) {
-				int ind = i;
-				if (i > (int)(Histo[t]->Nbin - 1)) continue; // Offline histograms can have lower number of bins
-				if (RunVars.PlotType == PLOT_MCS_TIME) {	// DNIN: For MCS it is needed to reorder the binning, since the plot is saved in circular buffer but it is visualized as linear one
-					if (Histo[t]->H_data[Nbin - 2] > 0)
-						ind = (i + Histo[t]->Bin_set) % (Histo[t]->Nbin - 1);
-				}
-				char cat_line[256] = "";
-				sprintf(cat_line, "%" PRIu32 " ", Histo[t]->H_data[ind]);
-				strcat(line, cat_line);
-				//fprintf(plotpipe, "%" PRIu32 " ", Histo[t]->H_data[ind]);
-				if (debug) fprintf(debbuff, "%" PRIu32 " ", Histo[t]->H_data[ind]);
+		for (int at = 0; at < n_active; at++) {
+			t = active_traces[at];
+			int ind = i;
+			if (i > (int)(Histo[t]->Nbin - 1)) continue; // Offline histograms can have lower number of bins
+			if (RunVars.PlotType == PLOT_MCS_TIME) {	// DNIN: For MCS it is needed to reorder the binning, since the plot is saved in circular buffer but it is visualized as linear one
+				if (Histo[t]->H_data[Nbin - 2] > 0)
+					ind = (i + Histo[t]->Bin_set) % (Histo[t]->Nbin - 1);
 			}
+			pipePos += sprintf(pipeData + pipePos, "%" PRIu32 " ", Histo[t]->H_data[ind]);
+			//fprintf(plotpipe, "%" PRIu32 " ", Histo[t]->H_data[ind]);
+			//if (debug) fprintf(debbuff, "%" PRIu32 " ", Histo[t]->H_data[ind]);
 		}
-		strcat(line, "\n");
-		//fprintf(plotpipe, "\n");
-		strcat(pipeData, line);
-		if (strlen(pipeData) > sizeof(pipeData) - 512) {
-			fprintf(plotpipe, "%s", pipeData);
-			pipeData[0] = '\0'; // Empty the buffer
-		}
+		pipeData[pipePos++] = '\n';
 		if (debug) fprintf(debbuff, "\n");
+
+		if (pipePos > pipeMax) {
+			pipeData[pipePos] = '\0'; // Null-terminate the buffer
+			fprintf(plotpipe, "%s", pipeData);
+			pipePos = 0; // Reset position for next batch
+		}
 	}
+	pipeData[pipePos] = '\0'; 
 	fprintf(plotpipe, "%sEOD\n", pipeData);
 	//fprintf(plotpipe, "EOD\n");
-	if (debug) fprintf(debbuff, "EOD\n");
+	if (debug) fprintf(debbuff, "%sEOD\n", pipeData);
 
-	sprintf(cmd, "plot ");
+	int cmdPos = sprintf(cmd, "plot ");
 	int nt_written = 0;
 	char smeas[200];
-	for(t=0; t<MAX_NTRACES; t++){
-		if (!en[t]) continue;
-
+	for(int at=0; at<n_active; at++){
+		t = active_traces[at];
 		char title[200], tmpc[9500];
 		double a0 = xcalib ? A0[t] : 0;
 		double a1 = xcalib ? A1[t] : 1;
@@ -350,25 +349,22 @@ int PlotSpectrum()
 		if (SorBF[t] == 'S') {
 			sprintf(title, "%s: %s - T%d File", description[t], smeas, t);
 			fprintf(plotpipe, "set label %d '%s' font 'courier new, 10' at graph 0.95,%f right textcolor rgb '#2B65EC' noenhanced\n", nt_written + 1, title, 0.96 - (nt_written * LEG_VSPACE));
-			sprintf(tmpc, " $PlotData u ($0*%lf+%lf):($%d) title ' ' noenhanced w step", a1, a0, nt_written + 1);
+			cmdPos = sprintf(cmd + cmdPos, " $PlotData u ($0*%lf+%lf):($%d) title ' ' noenhanced w step", a1, a0, nt_written + 1);
 		} else {
 			if (J_cfg.NumBrd > 1)
 				sprintf(title, "Brd[%d] Ch[%d] (%s): %s - %s", brd[t], ch[t], pixel, smeas, description[t]);
 			else
 				sprintf(title, "Ch[%d] (%s): %s - %s", ch[t], pixel, smeas, description[t]);
 
-			char leg_color[] = "#000000";  // Offline and Online histograms differ by legend color
-			if (SorBF[t] == 'F') sprintf(leg_color, "#2B65EC");
-			else sprintf(leg_color, "#000000");
+			const char* leg_color = (SorBF[t] == 'F')? "#2B65EC": "#000000";  // Offline and Online histograms differ by legend color
 			fprintf(plotpipe, "set label %d '%s' font 'courier new, 10' at graph 0.95,%f right textcolor rgb '%s'\n", nt_written + 1, title, 0.958-(nt_written*LEG_VSPACE), leg_color);
 			if (debug) 	fprintf(debbuff, "set label %d '%s' font 'courier new, 10' at graph 0.95,%f right textcolor rgb '%s'\n", nt_written + 1, title, 0.958 - (nt_written * LEG_VSPACE), leg_color);
-			sprintf(tmpc, " $PlotData u ($0*%lf+%lf):($%d) title '                      ' w step", a1, a0, nt_written + 1);   // DNIN here check for ToA spectra  title '%s', title
+			cmdPos += sprintf(cmd + cmdPos, " $PlotData u ($0*%lf+%lf):($%d) title '                      ' w step", a1, a0, nt_written + 1);   // DNIN here check for ToA spectra  title '%s', title
 		}
-		strcat(cmd, tmpc);
 		++nt_written;
 		
-		if (nt_written < nt) strcat(cmd, ", ");
-		else strcat(cmd, "\n");
+		if (nt_written < nt) cmdPos += sprintf(cmd + cmdPos, ", ");
+		else cmdPos += sprintf(cmd + cmdPos, "\n");
 	}
 	for (int p = nt_written+1; p < MAX_NTRACES+1; ++p) {
 		fprintf(plotpipe, "unset label %d\n", p);
@@ -377,8 +373,10 @@ int PlotSpectrum()
 	if (debug) fprintf(debbuff, "%s", cmd);
 	fprintf(plotpipe, "%s", cmd);
 	fflush(plotpipe);
-	if (debug) fflush(debbuff);
-	if (debug) fclose(debbuff);
+	if (debug) {
+		fflush(debbuff);
+		fclose(debbuff);
+	}
 	return 0;
 }
 

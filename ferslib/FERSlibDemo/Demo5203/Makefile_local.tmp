@@ -1,0 +1,32 @@
+TARGET = Demo5203
+CXX = g++
+CXXFLAGS = -Wall -Wno-write-strings -Dlinux
+LDPATH = -Lferslib/local/lib
+LDADD = -lusb-1.0 -Wl,-rpath,ferslib/local/lib -lcaenferslib
+INCLUDE = -I/usr/include/libusb-1.0
+INCLUDELIB = -Iferslib/local/include
+SRCDIR = src
+BINDIR = bin
+
+
+.PHONY: default all clean
+
+default: $(TARGET)
+all: default  
+
+##############################
+# Demo make
+##############################	
+
+OBJDEMO = $(SRCDIR)/Demo5203.o
+
+#.PRECIOUS: $(TARGET) $(OBJDEMO)
+
+$(TARGET): $(SRCDIR)/Demo5203.cpp | $(BINDIR)
+	$(CXX) $(CXXFLAGS) -o $(BINDIR)/$@ $< $(INCLUDE) $(INCLUDELIB) $(LDPATH) $(LDADD)
+
+clean:
+	-rm -f $(SRCDIR)/*.o
+	-rm -f $(BINDIR)/$(TARGET)	
+	
+

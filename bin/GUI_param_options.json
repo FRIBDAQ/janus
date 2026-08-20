@@ -1,6 +1,6 @@
 {
 	"StopRunMode": {
-		"type": "job",
+		"type": "stoprunmode",
 		"J": [
 			"PRESET_TIME",
 			"PRESET_COUNTS"
@@ -10,5 +10,24 @@
 			"PRESET_TIME",
 			"PRESET_COUNTS"
 		]
+	},
+	"AcquisitionMode": {
+		"type": "visualization",
+		"b": [
+				"SPECTROSCOPY",
+				"SPECT_TIMING",
+				"TIMING_CSTART",
+				"TIMING_CSTOP",
+				"COUNTING"
+			],
+		"a": [
+				"SPECTROSCOPY",
+				"SPECT_TIMING",
+				"TIMING_CSTART",
+				"TIMING_CSTOP",
+				"COUNTING",
+				"WAVEFORM"
+			]
 	}
 }
+

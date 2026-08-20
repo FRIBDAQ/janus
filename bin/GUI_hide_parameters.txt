@@ -1,10 +1,15 @@
 # List of the parameters that won't be visualized in the different GUI views
-# xNNN, where x=a, b, N=0 to 5 (multiple N allowed)
+# xNNNM, where x=a, b, N=0 to 5, M=S, R, C, G (multiple N allowed)
 # x: a=Advanced, b=Basic
 # N: SPECT=0, SPECT_TIME=1, TIME_CSTART=2, TIME_CSTOP=3, COUNT=4, WAVE=5 (see par_defs.txt for details)
+# M: StartRun Aync or T0/1_Chain = S, StartRun TDL_EXT = R, TDLEXTRUN_EXTCLK = C, GPS = G
 # Es: Run Sleep			b01 (parameter removed in basic, spect and specttime modes
 # Please, use 'tab' for spacing param_name and hiding attriute
 # Param name		Hiding Attribute
+
+GPS Time UTC			SCR
+Ext Run Source			SG
+Ext Run Level			SG
 
 Job First Run			b
 Job Last Run			b
@@ -15,13 +20,14 @@ Event Building Mode		b
 Bunch Trigger Source	23
 Tstamp Coinc Window		b
 Trg Time Window         b
-Veto Source				b45
+Veto Source				b2345
 Validation Source		b2345
 Validation Mode			b2345
-Counting Mode			b1235
+Counting Mode			b01235
 Paired-Cnt Coinc Win	b01235
 Channel Trigger Width	b
 Enable Counts ZS		b01235
+Enable List ZS			b0145
 
 Enable ToT				b045
 TrefDelay				045

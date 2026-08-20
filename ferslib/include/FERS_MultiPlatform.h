@@ -90,13 +90,13 @@ typedef int							ssize_t;			//!< Used on Linux as return type of send() an recv
 #define f_socket_close(f_sock)		closesocket(f_sock)	//!< On Windows closesocket. On linux close>
 #define f_socket_cleanup()			WSACleanup()		//!< On Windows WSACleanup. On linux "do nothing">
 
-#define j_strdup						_strdup
+#define j_strdup					_strdup
 #endif // linux
 
 // Thread??
 #ifdef _WIN32
 	typedef HANDLE                  mutex_t;
-	typedef int						f_thread_t;
+	typedef HANDLE					f_thread_t;
 	typedef HANDLE					f_sem_t;
 	#define initmutex(m)            (m = CreateMutex(NULL, FALSE, NULL))==NULL ? GetLastError() : 0
 	#define destroymutex(m)         ReleaseMutex(m) != FALSE ? 0 : GetLastError()
@@ -104,8 +104,13 @@ typedef int							ssize_t;			//!< Used on Linux as return type of send() an recv
 	#define unlock(m)               (ReleaseMutex(m) != 0) ? 0 : GetLastError()
 	#define trylock(m)           	WaitForSingleObject(m, 10)
 
-	#define thread_create(f, p, id)	_beginthreadex(NULL, 0, (unsigned int(__stdcall *)(void*))f, p, 0, (unsigned int *)id);
-	#define thread_join(id, r)		WaitForSingleObject((HANDLE *)id, INFINITE)
+	#define thread_create(f, p, id) \
+	    (*(id) = (HANDLE)_beginthreadex(NULL, 0, (unsigned int(__stdcall *)(void*))(f), (p), 0, NULL))
+	#define thread_join(id, r) \
+	    do { if ((id) != NULL) { WaitForSingleObject((id), INFINITE); CloseHandle((id)); (id) = NULL; } } while (0)
+	
+	//#define thread_create(f, p, id)	_beginthreadex(NULL, 0, (unsigned int(__stdcall *)(void*))f, p, 0, (unsigned int *)id);
+	//#define thread_join(id, r)		WaitForSingleObject((HANDLE *)id, INFINITE)
 
 #ifdef __cplusplus
 extern "C" {
@@ -150,6 +155,20 @@ extern "C" {
 //	mutex_t mutex;
 //	int mutex_init;
 //} f_mutex_t;
+
+
+// File Management
+#ifdef _WIN32
+
+#define f_fseek _fseeki64
+#define f_ftell _ftelli64
+
+#else
+
+#define f_fseek fseeko
+#define f_ftell ftello
+
+#endif
 
 
 // TAKEN FROM CAENUtility

@@ -4,7 +4,7 @@
 
 from tkinter import IntVar, messagebox
 import tkinter
-import shared as sh
+import janus_shared as sh
 
 debug = 0
 empty_field = []
@@ -25,6 +25,7 @@ class param:
 
 		self.name = name         # parameter name (same as dictionary key)
 		self.default = default   # default value
+		self.JanusDefault = default # Janus default value (used by default if the field is left blank)
 		self.descr = ""          # param description (used for tooltip and comments)
 		self.section = section   # section in the config file and GUI tab
 		self.type = type         # param type: 'd' = int decimal, 'h' = int hex, 'f' = float, 's' = string, 'c' = combo, 'b' = boolean, '-' = separator
@@ -39,6 +40,7 @@ class param:
 		self.descr = descr
 
 	def set_default(self):
+		self.default = self.JanusDefault
 		if (self.distr == 'c'):
 			self.value = [['' for c in sh.Channels] for b in sh.Boards]
 		elif (self.distr == 'b'):
@@ -51,7 +53,11 @@ class param:
 # Read param description
 # ------------------------------------------------------------------
 def ReadParamDescription(filename, sections, params):
-	pardef = open(filename, "r")
+	try:
+		pardef = open(filename, "r")
+	except:
+		return "ERROR: could not open parameter definition file " + filename + ". Quitting...\n"
+		
 	blankn = 1
 	lastp = ""
 	version = "5202"
@@ -169,12 +175,14 @@ def ReadConfigFile(params, filename, reloaded=1, our_cfg=0): # DNIN: need to pas
 							if not ret: 
 								continue
 					params[key].default = val
+					params[key].JanusDefault = val
 				elif lev == 1:
 					if params[key].distr == 'b':
 						if brd < sh.MaxBrd:
 							params[key].value[brd] = val
 					else:
 						params[key].default = val
+						params[key].JanusDefault = val
 				else:
 					if brd < sh.MaxBrd and ch < sh.MaxCh:
 						params[key].value[brd][ch] = val
@@ -278,6 +286,7 @@ def WriteConfigFile(sections, params, filename, show_popup): # DNIN: need to pas
 			if (params[p].section == s) and (params[p].type != '-') and (params[p].type != 'm'):
 				if params[p].default.split(" ")[0] == "":
 					if manage_empty_entries(params, p, show_popup):
+						params[p].set_default()
 						num_empty_field += 1
 						continue
 					else:

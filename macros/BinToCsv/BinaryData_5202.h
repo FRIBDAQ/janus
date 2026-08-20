@@ -14,9 +14,7 @@
 * software, documentation and results solely at his own risk.
 ****************************************************************************** */
 
-#ifdef Win32
 #pragma once
-#endif
 
 #include <cstdint>
 #include <cstdio>
@@ -28,9 +26,6 @@
 #include <algorithm>
 #include <vector>
 #include <array>
-
-#define OUTLSB  0
-#define OUTNS   1
 
 // Acquisition Mode 5202
 #define ACQMODE_SPECT		0x01  // Spectroscopy Mode (Energy)
@@ -53,20 +48,11 @@
 #define TOA                 0x10
 #define TOT                 0x20
 
-#ifdef _WIN32
-#include <windows.h>
-#define my_sprintf sprintf_s
-#else
-#define  my_sprintf sprintf
-#include <unistd.h>
-#define Sleep(x) usleep((x)*1000)
-#endif
-
 class t_BinaryData
 {
 private:
     std::streampos                      t_begin, end, mb;
-    std::streamoff                      t_totsize;
+    std::streamoff                      t_evts_size;
     std::array<std::string, 2>          t_unit;         // = { "LSB", "ns" };
     std::array<std::string, 2>          t_unit_tstamp;  // = { "LSB", "us" };  // time unit in the csv file header for timestamp
     std::string                         t_s_sw_version;
@@ -83,6 +69,7 @@ private:
     uint8_t                             t_brd;
     double                              t_tstamp;
     double                              t_rel_tstamp;   // Relative Timestamp of an external trigger
+	double                              t_tref_tstamp;  // Tref Timestamp with 0.5 ns resolution for SpectTiming mode  
     uint64_t                            t_trigger_ID;
     uint64_t                            t_ch_mask;
     uint16_t                            t_num_of_hit;
@@ -92,10 +79,10 @@ private:
     std::vector<uint16_t>               t_PHA_LG;
     std::vector<uint16_t>               t_PHA_HG;
     std::vector<uint32_t>               t_ToA_i;
-    std::vector<uint16_t>               t_ToT_i;
+    std::vector<int16_t>                t_ToT_i;
     std::vector<float>                  t_ToA_f;
     std::vector<float>                  t_ToT_f;
-    std::vector<uint32_t>               t_counts;
+    std::vector<uint64_t>               t_counts;
 
     void Init(uint8_t force_ns, uint8_t mode);
 public:
@@ -107,11 +94,11 @@ public:
 
     void ReadHeaderBinfile(std::ifstream& binfile);
     void ComputeBinfileSize(std::ifstream& binfile);
-    std::streamoff GetEventsSize() { return t_BinaryData::t_totsize; };  // Return the size of the bin file containing the Events
+    std::streamoff GetEventsSize() { return t_BinaryData::t_evts_size; };  // Return the size of the bin file containing the Events
     std::streamoff GetEventsBegin() { return std::streamoff(t_BinaryData::t_begin); };  // Return the file position where the Events start
     void WriteCsvHeader(std::ofstream& csvfile);
 
-    void ReadEvtHeader(std::ifstream& binfile);
+    uint16_t ReadEvtHeader(std::ifstream& binfile);
     void ReadTmpEvt(std::ifstream& binfile);
     uint16_t ReadSpectTime(std::ifstream& binfile);
     //uint16_t ReadTime(std::ifstream& binfile);

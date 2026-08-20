@@ -28,6 +28,8 @@
 #include "FERSlib.h"
 
 static int SetClockChain(int handle);
+int NotFirstCall[FERSLIB_MAX_NBRD] = { 0 };
+int ReSync = 0;
 
 int Configure5203(int handle, int mode)
 {
@@ -62,6 +64,8 @@ int Configure5203(int handle, int mode)
 	// Set USB or Eth communication mode
 	if ((FERS_CONNECTIONTYPE(handle) == FERS_CONNECTIONTYPE_ETH) || (FERS_CONNECTIONTYPE(handle) == FERS_CONNECTIONTYPE_USB))
 		ret |= FERS_WriteRegisterSlice(handle, a_acq_ctrl, 20, 20, 1); // Force disable of TDlink
+	else if (FERS_FPGA_FW_MajorRev(handle) >= 4)
+		ret |= FERS_WriteRegister(handle, a_uC_shutdown, 0xDEAD); // Shut down uC (PIC) if not used (readout via TDL)
 
 	// Acq Mode
 	if (mode == CFG_HARD) ret |= FERS_WriteRegisterSlice(handle, a_acq_ctrl, 0, 7, FERScfg[brd]->AcquisitionMode);
@@ -82,12 +86,16 @@ int Configure5203(int handle, int mode)
 		ret |= FERS_WriteRegisterSlice(handle, a_acq_ctrl, 14, 14, 1);
 	else
 		ret |= FERS_WriteRegisterSlice(handle, a_acq_ctrl, 14, 14, FERScfg[brd]->En_Empty_Ev_Suppr);
-	ret |= FERS_WriteRegisterSlice(handle, a_acq_ctrl, 20, 20, FERScfg[brd]->Dis_tdl);
 
 	if (FERScfg[brd]->TestMode) {
 		ret |= FERS_WriteRegisterSlice(handle, a_acq_ctrl, 23, 23, 1); // Enable Test Mode (create events with fixed pattern)
 		ret |= FERS_WriteRegisterSlice(handle, a_acq_ctrl, 0, 3, FERScfg[brd]->TestMode); // 1 = 1 hit per channel, 2 = 8 hits per channel, 3 = 32 hit per channel
 	}
+
+	if (FERScfg[brd]->TDC_ChBufferSize == 0x0)
+		ret |= FERS_WriteRegisterSlice(handle, a_acq_ctrl, 25, 25, 1);
+	else
+		ret |= FERS_WriteRegisterSlice(handle, a_acq_ctrl, 25, 25, 0);
 
 	// Set ToT reject threshold
 	if (FERScfg[brd]->MeasMode == MEASMODE_LEAD_TOT8 || FERScfg[brd]->MeasMode == MEASMODE_LEAD_TOT11) {
@@ -100,11 +108,11 @@ int Configure5203(int handle, int mode)
 	ret |= FERS_WriteRegister(handle, a_t1_out_mask, FERScfg[brd]->T1_outMask);
 
 	// Set Digital Probe
-	ret |= FERS_WriteRegister(handle, a_dprobe_5203, (FERScfg[brd]->DigitalProbe[1] << 8) | FERScfg[brd]->DigitalProbe[0]);
+	ret |= ConfigureProbe5203(handle);  
 	// Set Digital Probe in concentrator (if present)
 	if (FERS_CONNECTIONTYPE(handle) == FERS_CONNECTIONTYPE_TDL) {
-		if (FERScfg[brd]->CncProbe_A >= 0) FERS_WriteRegister(FERS_CNC_HANDLE(handle), VR_IO_FA_FN, VR_IO_FUNCTION_ZERO);  // Set FA function = ZERO
-		if (FERScfg[brd]->CncProbe_B >= 0) FERS_WriteRegister(FERS_CNC_HANDLE(handle), VR_IO_FB_FN, VR_IO_FUNCTION_ZERO);  // Set FB function = ZERO
+		if (FERScfg[brd]->CncProbe_A > 0) FERS_WriteRegister(FERS_CNC_HANDLE(handle), VR_IO_FA_FN, VR_IO_FUNCTION_ZERO);  // Set FA function = ZERO
+		if (FERScfg[brd]->CncProbe_B > 0) FERS_WriteRegister(FERS_CNC_HANDLE(handle), VR_IO_FB_FN, VR_IO_FUNCTION_ZERO);  // Set FB function = ZERO
 		FERS_WriteRegister(FERS_CNC_HANDLE(handle), VR_IO_DEBUG, FERScfg[brd]->CncProbe_A | (FERScfg[brd]->CncProbe_B << 8));
 	}
 
@@ -151,15 +159,37 @@ int Configure5203(int handle, int mode)
 			ret |= FERS_WriteRegister(handle, a_t1_out_mask, 1);  // set T1-OUT = T1-IN
 		}
 		//if (FERScfg[brd]->T0_outMask != (1 << 4)) Con_printf("LCSw", "WARNING: T1-OUT setting has been overwritten for Start daisy chaining\n");
-	} else if (FERScfg[brd]->StartRunMode == STARTRUN_TDL) {
+	} else if (FERScfg[brd]->StartRunMode == STARTRUN_TDL ||
+		FERScfg[brd]->StartRunMode == STARTRUN_TDL_EXTRUN ||
+		FERScfg[brd]->StartRunMode == STARTRUN_TDL_GPS) {
 		ret |= FERS_WriteRegister(handle, a_run_mask, 0x01);
+		//if (FERS_CONNECTIONTYPE(handle) == FERS_CONNECTIONTYPE_TDL) {
+		//	if ((FERScfg[brd]->StartRunMode == STARTRUN_TDL_GPS))
+		//		ret |= FERS_WriteRegister(FERS_CNC_HANDLE(handle), VR_IO_PPS_SOURCE, FERScfg[brd]->GPSPPSSource); // Set PPS source if GPS start is selected
+		//	else
+		//		ret |= FERS_WriteRegister(FERS_CNC_HANDLE(handle), VR_IO_PPS_SOURCE, VR_PPS_DISABLE); // Set PPS source if GPS start is selected
+		//} else {
+		//	FERS_LibMsg("[WARNING] Cannot set GPS PPS source: TDL connection not established\n");
+		//}
 	}
+	//if (FERS_CONNECTIONTYPE(handle) == FERS_CONNECTIONTYPE_TDL) {
+	//	if ((FERScfg[brd]->StartRunMode == STARTRUN_TDL_GPS))
+	//		ret |= FERS_WriteRegister(FERS_CNC_HANDLE(handle), VR_IO_PPS_SOURCE, FERScfg[brd]->GPSPPSSource); // Set PPS source if GPS start is selected
+	//	else
+	//		ret |= FERS_WriteRegister(FERS_CNC_HANDLE(handle), VR_IO_PPS_SOURCE, VR_PPS_DISABLE); // Set PPS source if GPS start is selected
+	//} else {
+	//	FERS_LibMsg("[WARNING] Cannot set GPS PPS source: TDL connection not established\n");
+	//}
 
 	// Set Veto mask
 	FERS_WriteRegister(handle, a_veto_mask, FERScfg[brd]->Veto_Mask);
 
 	// Trigger buffer size and FIFO almost full levels
-	if ((FERScfg[brd]->TriggerBufferSize > 0) && (FERScfg[brd]->TriggerBufferSize < 512)) {
+	if (FERScfg[brd]->TriggerBufferSize > 0) {
+		if (FERScfg[brd]->TriggerBufferSize >= 512) {
+			FERS_LibMsg("[WARNING] TriggerBufferSize is out of range (0 - 511); setting it to 511\n");
+			FERScfg[brd]->TriggerBufferSize = 511;
+		}
 		int af_bsy, af_skp, max_evsize;
 		const int lsof_size = 16 * 1024;
 		int chbuff_size=0;
@@ -170,7 +200,7 @@ int Configure5203(int handle, int mode)
 		// Set AlmFull level "as_bsy" of the LSOF FIFO: busy is generated when this level is reached. The busy stops the trigger, but there is no guarantee that the number of pending triggers
 		// (still in the pipeline) with the relevant event packets will find place in the LSOF fifo. Therefore, there is a scond almont full level (af_skp); when this is reached, the hit
 		// data will be discarded and only headers and trailers will be written into the LSOF fifo. The HLOSS flag is asserted in this case.
-		if (FERScfg[brd]->AcquisitionMode != ACQMODE_TEST_MODE) {
+		if (FERScfg[brd]->TestMode == 0) {
 			chbuff_size = 1 << (FERScfg[brd]->TDC_ChBufferSize + 2); // Ch buffer size in the picoTDC (0=4, 1=8, ... 7=512)
 			max_evsize = (chbuff_size + 2) * FERS_BoardInfo[brd]->NumCh; // +2 is for header and trailer
 			if (max_evsize <= 2176)
@@ -208,7 +238,7 @@ int Configure5203(int handle, int mode)
 		ret = 0;
 
 		// Write default cfg
-		Set_picoTDC_Default(&pcfg);
+		Set_picoTDC_Default(handle, &pcfg);
 		ret |= Write_picoTDC_Cfg(handle, tdc, pcfg, 1);
 
 		// Initialize PLL with AFC
@@ -383,10 +413,10 @@ int Configure5203(int handle, int mode)
 		int nch = FERS_AdapterNch(brd);
 		if (FERScfg[brd]->DisableThresholdCalib)
 			FERS_DisableThrCalib(handle);
-		for (i = 0; i < nch; i++) {
+		for (i = 0; i < (nch-1); i++) {
 			ret |= FERS_Set_DiscrThreshold(handle, i, FERScfg[brd]->DiscrThreshold[i], brd);
 		}
-		if ((FERScfg[brd]->AdapterType == A5256_CH0_POSITIVE) && (FERScfg[brd]->AdapterType == ADAPTER_A5256))
+		if ((FERScfg[brd]->A5256_Ch0Polarity == A5256_CH0_POSITIVE) && (FERScfg[brd]->AdapterType == ADAPTER_A5256))
 			FERS_WriteRegisterSlice(handle, a_io_ctrl, 0, 1, 3); // invert polarity of the edge_conn trigger
 	}
 	if (ret) goto abortcfg;
@@ -414,11 +444,22 @@ abortcfg:
 }
 
 
-
 static int SetClockChain(int handle) {
 	int ret = 0;
 
 	int brd = FERS_INDEX(handle);
+
+	uint32_t HRClkWritten = 0;
+	ret = FERS_ReadRegister(handle, a_io_ctrl, &HRClkWritten);
+	HRClkWritten = (HRClkWritten & 0x3);
+
+	if ((HRClkWritten) && (HRClkWritten != FERScfg[brd]->HighResClock)) {
+		if (!NotFirstCall[brd]) {
+			NotFirstCall[brd] = 1;
+		} else {
+			ReSync = 1;
+		}
+	}
 
 	if (FERScfg[brd]->HighResClock == HRCLK_FAN_OUT) {
 		if (FERS_CONNECTIONTYPE(handle) == FERS_CONNECTIONTYPE_TDL) return FERSLIB_ERR_INVALID_CLK_SETTING;
@@ -440,9 +481,12 @@ static int SetClockChain(int handle) {
 			ret |= FERS_WriteRegisterSlice(handle, a_io_ctrl, 4, 4, 1); // Enable Clock Out
 		}
 		ret |= FERS_WriteRegisterSlice(handle, a_io_ctrl, 5, 6, FERScfg[brd]->TdlClkPhase & 0x3); // Set phase of the divided clock (0=0, 1=90, 2=180, 3=270)
-		// need re-sync of chain is clock phase has been changed
-		if ((FERS_CONNECTIONTYPE(handle) == FERS_CONNECTIONTYPE_TDL) && ((FERScfg[brd]->HighResClock == HRCLK_DAISY_CHAIN) || (FERScfg[brd]->HighResClock == HRCLK_FAN_OUT)))
-			ret |= FERS_InitTDLchains(FERS_CNC_HANDLE(handle), NULL);
+		// need re-sync of chain if clock phase has been changed
+		// At the moment the sync is performed at once with the handle of all concentrators
+		//if ((FERS_CONNECTIONTYPE(handle) == FERS_CONNECTIONTYPE_TDL) && ((FERScfg[brd]->HighResClock == HRCLK_DAISY_CHAIN) || (FERScfg[brd]->HighResClock == HRCLK_FAN_OUT))) {
+		//	// Si dà il Sync a tutti sempre?
+		//	ret |= FERS_SyncTDLchains(CncHandles, FERScfg[0]->StartRunMode); // To be changed
+		//}
 	}
 	return ret;
 }
@@ -483,8 +527,9 @@ int ConfigureProbe5203(int handle) {
 // Description: Set default value of picoTDC register (don't write in TDC, just in the struct)
 // Outpus:		pfcg: struct with picoTDC regs
 // --------------------------------------------------------------------------------------------------------- 
-void Set_picoTDC_Default(picoTDC_Cfg_t* pcfg) {
+void Set_picoTDC_Default(int handle, picoTDC_Cfg_t* pcfg) {
 	memset(pcfg, 0, sizeof(picoTDC_Cfg_t));  // set all parames to 0 
+	int brd = FERS_INDEX(handle);
 
 	pcfg->Enable.bits.highres_en = 1;
 	pcfg->Enable.bits.crossing_en = 1;
@@ -501,7 +546,11 @@ void Set_picoTDC_Default(picoTDC_Cfg_t* pcfg) {
 	pcfg->BunchCount.bits.bunchcount_overflow = 0x1FFF;
 	pcfg->EventID.bits.eventid_overflow = 0x1FFF;
 
-	pcfg->Buffers.bits.channel_buffer_size = FERScfg[0]->TDC_ChBufferSize & 0x7;
+	if (FERScfg[brd]->TDC_ChBufferSize == 0x0) {
+		// Patch for TDC ChBuffSize 4, not working on picoTDC. Da capire come implementare il taglio completamente da FPGA
+		pcfg->Buffers.bits.channel_buffer_size = 0x1;
+	} else
+		pcfg->Buffers.bits.channel_buffer_size = FERScfg[brd]->TDC_ChBufferSize & 0x7;
 	pcfg->Buffers.bits.readout_buffer_size = 0x7;
 	pcfg->Buffers.bits.trigger_buffer_size = 0x7;
 	pcfg->Buffers.bits.disable_ro_reject = 1;

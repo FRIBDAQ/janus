@@ -13,6 +13,7 @@
 * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. The user relies on the
 * software, documentation and results solely at his own risk.
 ******************************************************************************/
+//AGGIUNGERE A_LIST_SIZE COME PARAMETRO DA SETTARE SULLA SET E GET
 
 #include "FERS_MultiPlatform.h"
 
@@ -86,7 +87,10 @@ int Configure5202(int handle, int mode) {
 
 	ret |= FERS_WriteRegisterSlice(handle, a_acq_ctrl, 24, 25, FERScfg[brd]->Validation_Mode); // 0=disabled, 1=accept, 2=reject
 
-	ret |= FERS_WriteRegisterSlice(handle, a_acq_ctrl, 27, 29, FERScfg[brd]->Counting_Mode); // 0=singles, 1=paired_AND
+	uint32_t count_mode = 0;  // Force singles counting mode when counting Mode is not set
+	if (FERScfg[brd]->AcquisitionMode == ACQMODE_COUNT)
+		count_mode = FERScfg[brd]->Counting_Mode; // 0=singles, 1=paired_AND
+	ret |= FERS_WriteRegisterSlice(handle, a_acq_ctrl, 27, 29, count_mode); 
 	ret |= FERS_WriteRegister(handle, a_hit_width, (uint32_t)(FERScfg[brd]->ChTrg_Width / CLK_PERIOD[FERS_INDEX(handle)])); /// Monostable on Citiroc Self triggers => Coinc Window for Trigger logic and counting in paired-AND mode
 	ret |= FERS_WriteRegister(handle, a_tlogic_width, (uint32_t)(FERScfg[brd]->Tlogic_Width / CLK_PERIOD[FERS_INDEX(handle)])); // Monostable on Trigger Logic Output (0=linear)
 
@@ -143,31 +147,41 @@ int Configure5202(int handle, int mode) {
 			ret |= FERS_WriteRegister(handle, a_t1_out_mask, 1);  // set T1-OUT = T1-IN
 		}
 		//if (FERScfg->T0_outMask != (1 << 4)) Con_printf("LCSw", "WARNING: T1-OUT setting has been overwritten for Start daisy chaining\n");
-	} else if (FERScfg[brd]->StartRunMode == STARTRUN_TDL) {
+	} else if (FERScfg[brd]->StartRunMode == STARTRUN_TDL ||
+		FERScfg[brd]->StartRunMode == STARTRUN_TDL_EXTRUN ||
+		FERScfg[brd]->StartRunMode == STARTRUN_TDL_GPS) {
 		ret |= FERS_WriteRegister(handle, a_run_mask, 0x01);
+		//if (FERS_CONNECTIONTYPE(handle) == FERS_CONNECTIONTYPE_TDL) {
+		//	if ((FERScfg[brd]->StartRunMode == STARTRUN_TDL_GPS))
+		//		ret |= FERS_WriteRegister(FERS_CNC_HANDLE(handle), VR_IO_PPS_SOURCE, FERScfg[brd]->GPSPPSSource); // Set PPS source if GPS start is selected
+		//	else
+		//		ret |= FERS_WriteRegister(FERS_CNC_HANDLE(handle), VR_IO_PPS_SOURCE, VR_PPS_DISABLE); // Set PPS source if GPS start is selected
+		//} else {
+		//	FERS_LibMsg("[WARNING] Cannot set GPS PPS source: TDL connection not established\n");
+		//}		}
 	}
 
 	// Set Tref mask
-	FERS_WriteRegister(handle, a_tref_mask, FERScfg[brd]->Tref_Mask);
+	ret |= FERS_WriteRegister(handle, a_tref_mask, FERScfg[brd]->Tref_Mask);
 	// Set Tref window
-	FERS_WriteRegister(handle, a_tref_window, (uint32_t)(FERScfg[brd]->TrefWindow / ((float)CLK_PERIOD[FERS_INDEX(handle)] / 16)));
+	ret |= FERS_WriteRegister(handle, a_tref_window, (uint32_t)(FERScfg[brd]->TrefWindow / ((float)CLK_PERIOD[FERS_INDEX(handle)] / 16)));
 	//uint32_t trf_w = (uint32_t)(FERScfg->TrefWindow / ((float)CLK_PERIOD / 16));
 	// Set Tref delay
 	if ((FERScfg[brd]->AcquisitionMode == ACQMODE_TIMING_CSTART) || (FERScfg[brd]->AcquisitionMode == ACQMODE_TSPECT))
-		FERS_WriteRegister(handle, a_tref_delay, (uint32_t)(FERScfg[brd]->TrefDelay / (float)CLK_PERIOD[FERS_INDEX(handle)]));
+		ret |= FERS_WriteRegister(handle, a_tref_delay, (uint32_t)(FERScfg[brd]->TrefDelay / (float)CLK_PERIOD[FERS_INDEX(handle)]));
 	else if (FERScfg[brd]->AcquisitionMode == ACQMODE_TIMING_CSTOP) {
 		float td = (float)(FERScfg[brd]->TrefDelay / CLK_PERIOD[FERS_INDEX(handle)]) - (float)(FERScfg[brd]->TrefWindow / ((float)CLK_PERIOD[FERS_INDEX(handle)]));
 		//int32_t td = ((int32_t)(-FERScfg->TrefWindow / ((float)CLK_PERIOD)) + (int32_t)(FERScfg->TrefDelay / ((float)CLK_PERIOD)));
-		FERS_WriteRegister(handle, a_tref_delay, (uint32_t)td);
+		ret |= FERS_WriteRegister(handle, a_tref_delay, (uint32_t)td);
 	}
 
 
 	// Set Trigger Logic
-	FERS_WriteRegister(handle, a_tlogic_def, (FERScfg[brd]->MajorityLevel << 8) | (FERScfg[brd]->TriggerLogic & 0xFF));
+	ret |= FERS_WriteRegister(handle, a_tlogic_def, (FERScfg[brd]->MajorityLevel << 8) | (FERScfg[brd]->TriggerLogic & 0xFF));
 	// Set Veto mask
-	FERS_WriteRegister(handle, a_veto_mask, FERScfg[brd]->Veto_Mask);
+	ret |= FERS_WriteRegister(handle, a_veto_mask, FERScfg[brd]->Veto_Mask);
 	// Set Validation mask
-	FERS_WriteRegister(handle, a_validation_mask, FERScfg[brd]->Validation_Mask);
+	ret |= FERS_WriteRegister(handle, a_validation_mask, FERScfg[brd]->Validation_Mask);
 
 	// Set Test pulse Source and Amplitude
 	if (FERScfg[brd]->TestPulseSource == -1) {  // OFF
@@ -179,18 +193,18 @@ int Configure5202(int handle, int mode) {
 		if (FERScfg[brd]->TestPulseDestination == TEST_PULSE_DEST_ALL)  Tpulse_ctrl |= 0x00;
 		else if (FERScfg[brd]->TestPulseDestination == TEST_PULSE_DEST_EVEN) Tpulse_ctrl |= 0x10;
 		else if (FERScfg[brd]->TestPulseDestination == TEST_PULSE_DEST_ODD)  Tpulse_ctrl |= 0x20;
-		//else if (FERScfg->TestPulseDestination == TEST_PULSE_DEST_NONE) ??? this is not available;
+		else if (FERScfg[brd]->TestPulseDestination == TEST_PULSE_DEST_NONE) Tpulse_ctrl = 0x00; //? ? ? this is not available;
 		else Tpulse_ctrl |= 0x30 | (FERScfg[brd]->TestPulseDestination << 6);
 		Tpulse_ctrl |= ((FERScfg[brd]->TestPulsePreamp & 0x3) << 12);
 		ret |= FERS_WriteRegister(handle, a_tpulse_ctrl, Tpulse_ctrl);
 		ret |= FERS_WriteRegister(handle, a_tpulse_dac, FERScfg[brd]->TestPulseAmplitude);
 	}
-	ConfigureProbe5202(handle);
+	ret |= ConfigureProbe5202(handle);
 	// Set Digital Probe in concentrator (if present)
 	if (FERS_CONNECTIONTYPE(handle) == FERS_CONNECTIONTYPE_TDL) {
-		if (FERScfg[brd]->CncProbe_A >= 0) FERS_WriteRegister(FERS_CNC_HANDLE(handle), VR_IO_FA_FN, VR_IO_FUNCTION_ZERO);  // Set FA function = ZERO
-		if (FERScfg[brd]->CncProbe_B >= 0) FERS_WriteRegister(FERS_CNC_HANDLE(handle), VR_IO_FB_FN, VR_IO_FUNCTION_ZERO);  // Set FB function = ZERO
-		FERS_WriteRegister(FERS_CNC_HANDLE(handle), VR_IO_DEBUG, FERScfg[brd]->CncProbe_A | (FERScfg[brd]->CncProbe_B << 8));
+		if (FERScfg[brd]->CncProbe_A > 0) ret |= FERS_WriteRegister(FERS_CNC_HANDLE(handle), VR_IO_FA_FN, VR_IO_FUNCTION_ZERO);  // Set FA function = ZERO
+		if (FERScfg[brd]->CncProbe_B > 0) ret |= FERS_WriteRegister(FERS_CNC_HANDLE(handle), VR_IO_FB_FN, VR_IO_FUNCTION_ZERO);  // Set FB function = ZERO
+		ret |= FERS_WriteRegister(FERS_CNC_HANDLE(handle), VR_IO_DEBUG, FERScfg[brd]->CncProbe_A | (FERScfg[brd]->CncProbe_B << 8));
 	}
 
 
@@ -244,7 +258,7 @@ int Configure5202(int handle, int mode) {
 	ret |= FERS_WriteRegisterSlice(handle, a_amux_seq_ctrl, 8, 9, FERScfg[brd]->MuxNSmean);
 
 	// Set Trigger Hold-off (for channel triggers)
-	FERS_WriteRegister(handle, a_trgho, (uint32_t)(FERScfg[brd]->TrgHoldOff / CLK_PERIOD[FERS_INDEX(handle)]));
+	ret |= FERS_WriteRegister(handle, a_trgho, (uint32_t)(FERScfg[brd]->TrgHoldOff / CLK_PERIOD[FERS_INDEX(handle)]));
 
 	if (ret) goto abortcfg;
 
@@ -299,16 +313,23 @@ int Configure5202(int handle, int mode) {
 		sprintf(path_file, "B%d_CitirocCfg_1.txt", brd);
 		WriteCStoFileFormatted(path_file, SCbs[1]);
 	} else {
+
+		//! [SetCitiroc]
 		FERS_WriteRegister(handle, a_scbs_ctrl, 0x000);  // set citiroc index = 0
 		FERS_SendCommand(handle, CMD_CFG_ASIC);
+		//! [SetCitiroc] 
 		ReadSCbsFromChip(handle, 0, SCbs[0]);
+		
 		//WriteCStoFile("CitirocCfg_bitstream_0.txt", SCbs[0]);
 		char path_file[256];
 		sprintf(path_file, "B%d_CitirocCfg_0.txt", brd);
 		WriteCStoFileFormatted(path_file, SCbs[0]);
 
+		//\anchor init_full_sequence_1
+		//\{
 		FERS_WriteRegister(handle, a_scbs_ctrl, 0x200);  // set citiroc index = 1
 		FERS_SendCommand(handle, CMD_CFG_ASIC);
+		//\}
 		ReadSCbsFromChip(handle, 1, SCbs[1]);
 		//WriteCStoFile("CitirocCfg_bitstream_1.txt", SCbs[1]);
 		sprintf(path_file, "B%d_CitirocCfg_1.txt", brd);
@@ -327,8 +348,8 @@ int Configure5202(int handle, int mode) {
 	ret |= FERS_HV_Set_Imax(handle, FERScfg[brd]->HV_Imax); // same for Imax...
 	ret |= FERS_HV_Set_Imax(handle, FERScfg[brd]->HV_Imax);
 
-	FERS_HV_Set_Tsens_Coeff(handle, FERScfg[brd]->TempSensCoeff);
-	FERS_HV_Set_TempFeedback(handle, FERScfg[brd]->EnableTempFeedback, FERScfg[brd]->TempFeedbackCoeff);
+	ret |= FERS_HV_Set_Tsens_Coeff(handle, FERScfg[brd]->TempSensCoeff);
+	ret |= FERS_HV_Set_TempFeedback(handle, FERScfg[brd]->EnableTempFeedback, FERScfg[brd]->TempFeedbackCoeff);
 	if (ret) goto abortcfg;
 
 
@@ -346,6 +367,7 @@ int Configure5202(int handle, int mode) {
 	return 0;
 
 abortcfg:
+	_setLastLocalError("Error brd%d at: %s. Exit Code = %d\n", FERS_INDEX(handle), CfgStep, ret);
 	//sprintf(ErrorMsg, "Error at: %s. Exit Code = %d\n", CfgStep, ret);
 	return ret;
 }

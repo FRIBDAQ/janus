@@ -33,7 +33,7 @@
 // *********************************************************
 // simplified version of the GetParam
 // *********************************************************
-int FERS_GetParam_int(int handle, char* param_name) {
+int FERS_GetParam_int(int handle, const char* param_name) {
 	int ret = 0;
 	int cValue = 0;
 	char value[100];
@@ -41,27 +41,27 @@ int FERS_GetParam_int(int handle, char* param_name) {
 	ret = FERS_GetParam(handle, param_name, value);
 	if (ret != 0) {
 		FERS_GetLastError(desc_err);
-		Con_printf("LCSe", "%s\n");
+		Con_printf("LCSe", "%s\n", desc_err);
 	} else if (sscanf(value, "%d", &cValue) != 1)
 		Con_printf("LCSe", "ERROR: failed to get parameter %s\n", param_name);
 	return cValue;
 }
 
-uint32_t FERS_GetParam_uint32(int handle, char* param_name) {
+uint32_t FERS_GetParam_uint32(int handle, const char* param_name) {
 	uint32_t ret = 0;
-	uint32_t cValue = 0;;
+	uint32_t cValue = 0;
 	char value[100];
 	char desc_err[1024];
 	ret = FERS_GetParam(handle, param_name, value);
 	if (ret != 0) {
 		FERS_GetLastError(desc_err);
-		Con_printf("LCSe", "%s\n");
-	} else if (sscanf(value, "%" SCNd32, &cValue) != 1)
+		Con_printf("LCSe", "%s\n", desc_err);
+	} else if (sscanf(value, "%" SCNu32, &cValue) != 1)
 		Con_printf("LCSe", "ERROR: failed to get parameter %s\n", param_name);
 	return cValue;
 }
 
-uint32_t FERS_GetParam_hex(int handle, char* param_name) {
+uint32_t FERS_GetParam_hex(int handle, const char* param_name) {
 	uint32_t ret = 0;
 	uint32_t cValue = 0;;
 	char value[100];
@@ -69,27 +69,27 @@ uint32_t FERS_GetParam_hex(int handle, char* param_name) {
 	ret = FERS_GetParam(handle, param_name, value);
 	if (ret != 0) {
 		FERS_GetLastError(desc_err);
-		Con_printf("LCSe", "%s\n");
+		Con_printf("LCSe", "%s\n", desc_err);
 	} else if (sscanf(value, "%" SCNx32, &cValue) != 1)
 		Con_printf("LCSe", "ERROR: failed to get parameter %s\n", param_name);
 	return cValue;
 }
 
-uint64_t FERS_GetParam_uint64(int handle, char* param_name) {
+uint64_t FERS_GetParam_uint64(int handle, const char* param_name) {
 	uint32_t ret = 0;
 	uint64_t cValue = 0;;
-	char value[100];
+	char value[256];
 	char desc_err[1024];
 	ret = FERS_GetParam(handle, param_name, value);
 	if (ret != 0) {
 		FERS_GetLastError(desc_err);
-		Con_printf("LCSe", "%s\n");
-	} else if (sscanf(value, "%" SCNd64, &cValue) != 1)
+		Con_printf("LCSe", "%s\n", desc_err);
+	} else if (sscanf(value, "%" SCNu64, &cValue) != 1)
 		Con_printf("LCSe", "ERROR: failed to get parameter %s\n", param_name);
 	return cValue;
 }
 
-uint64_t FERS_GetParam_hex64(int handle, char* param_name) {
+uint64_t FERS_GetParam_hex64(int handle, const char* param_name) {
 	uint64_t ret = 0;
 	uint64_t cValue = 0;
 	char value[100];
@@ -97,13 +97,13 @@ uint64_t FERS_GetParam_hex64(int handle, char* param_name) {
 	ret = FERS_GetParam(handle, param_name, value);
 	if (ret != 0) {
 		FERS_GetLastError(desc_err);
-		Con_printf("LCSe", "%s\n");
+		Con_printf("LCSe", "%s\n", desc_err);
 	} else if (sscanf(value, "%" SCNx64, &cValue) != 1)
 		Con_printf("LCSe", "ERROR: failed to get parameter %s\n", param_name);
 	return cValue;
 }
 
-float FERS_GetParam_float(int handle, char* param_name) {
+float FERS_GetParam_float(int handle, const char* param_name) {
 	float ret = 0;
 	float cValue = 0;
 	char value[100];
@@ -111,7 +111,7 @@ float FERS_GetParam_float(int handle, char* param_name) {
 	ret = FERS_GetParam(handle, param_name, value);
 	if (ret != 0) {
 		FERS_GetLastError(desc_err);
-		Con_printf("LCSe", "%s\n");
+		Con_printf("LCSe", "%s\n", desc_err);
 	} else if (sscanf(value, "%f", &cValue) != 1)
 		Con_printf("LCSe", "ERROR: failed to get parameter %s\n", param_name);
 	return cValue;
@@ -204,31 +204,33 @@ void PrintMap()
 // ****************************************************
 // HV Control Panel
 // ****************************************************
-void HVControlPanel(int b_handle) 
+void HVControlPanel(int b_handle)
 {
-	int handle = b_handle;
-	int brd, c=0;
-	int HV_onoff, Ramp, OvC, OvV;
-	uint64_t ct=0, pt=0;
-	uint32_t RegAddr=0, DataType=1, Rdata=0, Wdata=0;
+	int h_handle = b_handle;
+	int brd, c = 0;
+	int HV_onoff[FERSLIB_MAX_NBRD] = { 0 }, Ramp, OvC, OvV, HV_onoff_global = 0;
+	uint64_t ct = 0, pt = 0;
+	uint32_t RegAddr = 0, DataType = 1, Rdata = 0, Wdata = 0;
 	float vbias = 0, imax = 10, vmon = 0, imon = 0, temp = 0;
-	char onoff_string[2][4] = {"OFF", "ON "};
+	char onoff_string[2][4] = { "OFF", "ON " };
+	char input[128];
+	int ret = 0;
 
 	ClearScreen();
-	while(1) {
+	while (1) {
 		ct = j_get_time();
-		if ((pt == 0) || ((ct-pt) > 1000)) {
-			FERS_HV_Get_Vmon(handle, &vmon);
-			FERS_HV_Get_Imon(handle, &imon);
-			FERS_HV_Get_Vbias(handle, &vbias);
-			FERS_HV_Get_Imax(handle, &imax);
-			FERS_HV_Get_Status(handle, &HV_onoff, &Ramp, &OvC, &OvV);
-			FERS_HV_Get_DetectorTemp(handle, &temp);
+		if ((pt == 0) || ((ct - pt) > 1000)) {
+			ret |= FERS_HV_Get_Vmon(h_handle, &vmon);
+			ret |= FERS_HV_Get_Imon(h_handle, &imon);
+			ret |= FERS_HV_Get_Vbias(h_handle, &vbias);
+			ret |= FERS_HV_Get_Imax(h_handle, &imax);
+			ret |= FERS_HV_Get_Status(h_handle, &HV_onoff[FERS_INDEX(h_handle)], &Ramp, &OvC, &OvV);
+			ret |= FERS_HV_Get_DetectorTemp(h_handle, &temp);
 			gotoxy(1, 2);
-			printf("[b] Board        %d              \n", FERS_INDEX(handle));
+			printf("[b] Board        %d              \n", FERS_INDEX(h_handle));
 			printf("[v] Vset         %.3f V          \n", vbias);
 			printf("[i] Imax         %.3f mA         \n", imax);
-			printf("[H] ON/OFF       %s              \n", onoff_string[HV_onoff]);
+			printf("[H] ON/OFF       %s              \n", onoff_string[HV_onoff[FERS_INDEX(h_handle)]]);
 			printf("[a] Reg Addr     %d              \n", RegAddr);
 			printf("[t] Data Type    %d              \n", DataType);
 			printf("[r] Read HV Reg  %d (0x%08X)     \n", Rdata, Rdata);
@@ -246,47 +248,116 @@ void HVControlPanel(int b_handle)
 			c = Con_getch();
 			if (c == 'b') {
 				printf("Board = ");
-				scanf("%d", &brd);
-				if ((brd >= 0) && (brd < FERS_GetNumBrdConnected())) {
-					handle = (handle & 0xFFFFFF00) + brd;
+				if (fgets(input, sizeof(input), stdin) && sscanf(input, "%d", &brd) == 1) {
+					if ((brd >= 0) && (brd < FERS_GetNumBrdConnected())) {
+						h_handle = handle[brd];
+					} else {
+						printf("Invalid board number\n");
+					}
+				} else {
+					printf("Invalid input\n");
 				}
+				//scanf("%d", &brd);
+				//if ((brd >= 0) && (brd < FERS_GetNumBrdConnected())) {
+				//	h_handle = handle[brd];
+				//} else {
+				//	while (((brd = getchar()) != '\n') && (brd != EOF));
+				//}
 			}
+
 			if (c == 'v') {
 				float newvset;
 				printf("Set HV (V) = ");
-				scanf("%f", &newvset);
-				FERS_HV_Set_Vbias(handle, newvset);
-				FERS_HV_Get_Vbias(handle, &vbias);
+				if (fgets(input, sizeof(input), stdin) && sscanf(input, "%f", &newvset) == 1 && newvset >= 0) {
+					ret |= FERS_HV_Set_Vbias(h_handle, newvset);
+					ret |= FERS_HV_Get_Vbias(h_handle, &vbias);
+				} else {
+					printf("Invalid voltage value!\n");
+				}
+				//scanf("%f", &newvset);
+				//if (newvset < 0) while (((newvset = getchar()) != '\n') && (newvset != EOF));
+				//ret |= FERS_HV_Set_Vbias(h_handle, newvset);
+				//ret |= FERS_HV_Get_Vbias(h_handle, &vbias);
 			}
 			if (c == 'i') {
 				float newimax;
 				printf("Set Imax (mA) = ");
-				scanf("%f", &newimax);
-				FERS_HV_Set_Imax(handle, newimax);
-				FERS_HV_Get_Imax(handle, &imax);
+				if (fgets(input, sizeof(input), stdin) && sscanf(input, "%f", &newimax) == 1 && newimax >= 0) {
+					ret |= FERS_HV_Set_Imax(h_handle, newimax);
+					ret |= FERS_HV_Get_Imax(h_handle, &imax);
+				} else {
+					printf("Invalid current value!\n");
+				}
+				//scanf("%f", &newimax);
+				//if (newimax < 0) while (((newimax = getchar()) != '\n') && (newimax != EOF));
+				//ret |= FERS_HV_Set_Imax(h_handle, newimax);
+				//ret |= FERS_HV_Get_Imax(h_handle, &imax);
 			}
 			if (c == 'a') {
+				int tmp;
 				printf("Reg Addr = ");
-				scanf("%d", (int*)&RegAddr);
+				if (fgets(input, sizeof(input), stdin) && sscanf(input, "%d", &tmp) == 1 && tmp >= 0) {
+					RegAddr = (uint32_t)tmp;
+				} else {
+					printf("Invalid register address!\n");
+				}
+				//int sret = scanf("%d", (int*)&RegAddr);
+				//if (sret != 1 || RegAddr < 0) while (((RegAddr = getchar()) != '\n') && (RegAddr != EOF));
 			}
 			if (c == 't') {
+				int tmp;
 				printf("Data Type = ");
-				scanf("%d", (int*)&DataType);
+				if (fgets(input, sizeof(input), stdin) && sscanf(input, "%d", &tmp) == 1 && tmp >= 0) {
+					DataType = (uint32_t)tmp;
+				} else {
+					printf("Invalid data type!\n");
+				}
+				//int sret = scanf("%d", (int*)&DataType);
+				//if (sret != 1 || (DataType < 0)) while (((DataType = getchar()) != '\n') && (DataType != EOF));
 			}
 			if (c == 'r') {
-				FERS_HV_ReadReg(handle, RegAddr, DataType, &Rdata);
+				ret |= FERS_HV_ReadReg(h_handle, RegAddr, DataType, &Rdata);
 			}
 			if (c == 'w') {
-				char str[100];
 				printf("Reg Data (0x for hex) = ");
-				scanf("%s", str);
-				if (str[1] == 'x') sscanf(str + 2, "%x", &Wdata);
-				else sscanf(str, "%d", &Wdata);
-				FERS_HV_WriteReg(handle, RegAddr, DataType, Wdata);
+				if (fgets(input, sizeof(input), stdin)) {
+					if (input[0] == '0' && (input[1] == 'x' || input[1] == 'X'))
+						sscanf(input + 2, "%x", &Wdata);
+					else
+						sscanf(input, "%d", &Wdata);
+					ret |= FERS_HV_WriteReg(h_handle, RegAddr, DataType, Wdata);
+				}
+				//char str[100];
+				//printf("Reg Data (0x for hex) = ");
+				//scanf("%s", str);
+				//if (str[1] == 'x') sscanf(str + 2, "%x", &Wdata);
+				//else sscanf(str, "%d", &Wdata);
+				//ret |= FERS_HV_WriteReg(h_handle, RegAddr, DataType, Wdata);
 			}
 			if (c == 'H') {
-				HV_onoff ^= 1;
-				FERS_HV_Set_OnOff(handle, HV_onoff);
+				ClearScreen();
+				gotoxy(1, 2);
+				printf("[H] Toggling HV On/Off for Board %d only\n", FERS_INDEX(h_handle));
+				printf("[A] Toggling HV On/Off for All Boards\n");
+				printf("[r] Return to the HV menu\n");
+				while (1) {
+					c = Con_getch();
+					if (c == 'H' || c == 'A' || c == 'r')
+						break;
+				}
+				if (c == 'H') {
+					HV_onoff[FERS_INDEX(h_handle)] ^= 1;
+					ret |= FERS_HV_Set_OnOff(h_handle, HV_onoff[FERS_INDEX(h_handle)]);
+				} else if (c == 'A') {
+					if (HV_onoff_global) printf("Turing HV OFF for all boards...\n");
+					else printf("Turning HV ON for all boards...\n");
+					Sleep(1500);
+					HV_onoff_global ^= 1;
+					for (int i = 0; i < FERS_GetNumBrdConnected(); i++) {
+						HV_onoff[i] = (HV_onoff_global? 1: 0);
+						ret |= FERS_HV_Set_OnOff(handle[i], HV_onoff[i]);
+					}
+				} // else if (c == 'r') Just exit the case 'H'
 			}
 			if (c == 'q') break;
 			ClearScreen();
@@ -305,6 +376,8 @@ void CitirocControlPanel(int b_handle)
 	int handle = b_handle;
 	int brd, c=0, print_menu=1, reload_cfg=0;
 	uint32_t tthr, qthr, lgg, hgg, lgst, hgst;
+	char input[128];
+	int tmp;
 
 	FERS_ReadRegister(handle, a_qd_coarse_thr, &qthr);	// Threshold for Q-discr
 	FERS_ReadRegister(handle, a_td_coarse_thr, &tthr);	// Threshold for T-discr
@@ -318,46 +391,74 @@ void CitirocControlPanel(int b_handle)
 			c = Con_getch();
 			if (c == 'b') {
 				printf("Board = ");
-				scanf("%d", &brd);
-				if ((brd >= 0) && (brd < FERS_GetNumBrdConnected())) {
-					handle = (handle & 0xFFFFFF00) + brd;
+				if (fgets(input, sizeof(input), stdin) && sscanf(input, "%d", &brd) == 1) {
+					if ((brd >= 0) && (brd < FERS_GetNumBrdConnected()))
+						handle = (handle & 0xFFFFFF00) + brd;
+					else
+						printf("Invalid board number!\n");
+				} else {
+					printf("Invalid input!\n");
 				}
 			}
 			if (c=='s') {
 				printf("Shaping Time LG = ");
-				scanf("%d", &lgst);
-				FERS_WriteRegister(handle, a_lg_sh_time, lgst);	// Shaping Time for LG
-				reload_cfg = '1';
+				if (fgets(input, sizeof(input), stdin) && sscanf(input, "%d", &tmp) == 1 && tmp >= 0) {
+					lgst = (uint32_t)tmp;
+					FERS_WriteRegister(handle, a_lg_sh_time, lgst);
+					reload_cfg = 1;
+				} else {
+					printf("Invalid value!\n");
+				}
 			}
 			if (c=='S') {
 				printf("Shaping Time HG = ");
-				scanf("%d", &hgst);
-				FERS_WriteRegister(handle, a_hg_sh_time, hgst);	// Shaping Time for HG
-				reload_cfg = '1';
+				if (fgets(input, sizeof(input), stdin) && sscanf(input, "%d", &tmp) == 1 && tmp >= 0) {
+					hgst = (uint32_t)tmp;
+					FERS_WriteRegister(handle, a_hg_sh_time, hgst);
+					reload_cfg = 1;
+				} else {
+					printf("Invalid value!\n");
+				}
 			}
 			if (c=='g') {
 				printf("Gain LG = ");
-				scanf("%d", &lgg);
-				FERS_WriteRegister(handle, BCAST_ADDR(a_lg_gain), lgg);	// Gain for LG
-				reload_cfg = '1';
+				if (fgets(input, sizeof(input), stdin) && sscanf(input, "%d", &tmp) == 1 && tmp >= 0) {
+					lgg = (uint32_t)tmp;
+					FERS_WriteRegister(handle, BCAST_ADDR(a_lg_gain), lgg);
+					reload_cfg = 1;
+				} else {
+					printf("Invalid value!\n");
+				}
 			}
 			if (c=='G') {
 				printf("Gain HG = ");
-				scanf("%d", &hgg);
-				FERS_WriteRegister(handle, BCAST_ADDR(a_hg_gain), hgg);	// Gain for HG
-				reload_cfg = '1';
+				if (fgets(input, sizeof(input), stdin) && sscanf(input, "%d", &tmp) == 1 && tmp >= 0) {
+					hgg = (uint32_t)tmp;
+					FERS_WriteRegister(handle, BCAST_ADDR(a_hg_gain), hgg);
+					reload_cfg = 1;
+				} else {
+					printf("Invalid value!\n");
+				}
 			}
 			if (c=='t') {
 				printf("Time Threshold = ");
-				scanf("%d", &tthr);
-				FERS_WriteRegister(handle, a_td_coarse_thr, tthr);	// Threshold for T-discr
-				reload_cfg = '1';
+				if (fgets(input, sizeof(input), stdin) && sscanf(input, "%d", &tmp) == 1 && tmp >= 0) {
+					tthr = (uint32_t)tmp;
+					FERS_WriteRegister(handle, a_td_coarse_thr, tthr);
+					reload_cfg = 1;
+				} else {
+					printf("Invalid value!\n");
+				}
 			}
 			if (c=='T') {
 				printf("Charge Threshold = ");
-				scanf("%d", &qthr);
-				FERS_WriteRegister(handle, a_qd_coarse_thr, qthr);	// Threshold for Q-discr
-				reload_cfg = '1';
+				if (fgets(input, sizeof(input), stdin) && sscanf(input, "%d", &tmp) == 1 && tmp >= 0) {
+					qthr = (uint32_t)tmp;
+					FERS_WriteRegister(handle, a_qd_coarse_thr, qthr);
+					reload_cfg = 1;
+				} else {
+					printf("Invalid value!\n");
+				}
 			}
 			if (reload_cfg) {
 				FERS_WriteRegister(handle, a_scbs_ctrl, 0x000);  // set citiroc index = 0
@@ -412,6 +513,7 @@ void ManualController(int b_handle)
 	int num_i2c_dev = 3;
 #endif
 
+	char input[128];
 	FILE *fp;
 
 	while(c != 'q') {
@@ -419,15 +521,29 @@ void ManualController(int b_handle)
 			c = Con_getch();
 			if (c == 'b') {
 				printf("Board = ");
-				scanf("%d", &brd);
-				if ((brd >= 0) && (brd < FERS_GetNumBrdConnected())) {
-					handle = (handle & 0xFFFFFF00) + brd;
+				if (fgets(input, sizeof(input), stdin) && sscanf(input, "%d", &brd) == 1) {
+					if ((brd >= 0) && (brd < FERS_GetNumBrdConnected()))
+						handle = (handle & 0xFFFFFF00) + brd;
+					else
+						printf("Invalid board number!\n");
+				} else {
+					printf("Invalid input!\n");
 				}
+				//scanf("%d", &brd);
+				//if ((brd >= 0) && (brd < FERS_GetNumBrdConnected())) {
+				//	handle = (handle & 0xFFFFFF00) + brd;
+				//}
 			}
 			if (c=='c') {
+				int tmp;
 				printf("Channel = ");
-				scanf("%d", &ch);
-				ch &= 0x3F;
+				if (fgets(input, sizeof(input), stdin) && sscanf(input, "%d", &tmp) == 1 && tmp >= 0) {
+					ch = (uint32_t)tmp & 0x3F;
+				} else {
+					printf("Invalid channel!\n");
+				}
+				//scanf("%d", &ch);
+				//ch &= 0x3F;
 			}
 			if (c == 'B') {
 				if (base == 0x0100) base = 0x0200;
@@ -441,29 +557,165 @@ void ManualController(int b_handle)
 				if (ch > 0) ch--;
 			}
 			if ((c=='a') || (c=='1')) {
+				uint32_t tmp;
 				printf("Address (offset only) = ");
-				scanf("%x", &offs);
-				offs &= 0xFFFF;
+				if (fgets(input, sizeof(input), stdin) && sscanf(input, "%x", &tmp) == 1) {
+					offs = tmp & 0xFFFF;
+				} else {
+					printf("Invalid address!\n");
+				}
+				//scanf("%x", &offs);
+				//offs &= 0xFFFF;
 			}
 			if (c=='w') {
 				printf("Data = ");
-				scanf("%x", &wdata);
-				FERS_WriteRegister(handle, addr, wdata);
+				if (fgets(input, sizeof(input), stdin) && sscanf(input, "%x", &wdata) == 1) {
+					FERS_WriteRegister(handle, addr, wdata);
+				} else {
+					printf("Invalid data!\n");
+				}
+				//scanf("%x", &wdata);
+				//FERS_WriteRegister(handle, addr, wdata);
 			}
 			if (c=='s') {
 				printf("Command = ");
-				scanf("%x", &cmd);
-				FERS_SendCommand(handle, cmd);
+				if (fgets(input, sizeof(input), stdin) && sscanf(input, "%x", &cmd) == 1) {
+					FERS_SendCommand(handle, cmd);
+				} else {
+					printf("Invalid command!\n");
+				}
+				//scanf("%x", &cmd);
+				//FERS_SendCommand(handle, cmd);
 			}
 			if (c=='r') {
 				FERS_ReadRegister(handle, addr, &rdata);
+			}
+			if (c == 'g') {				// generic I2C Read/Write
+				int i2c_data_nb = 1, i2c_addr_nb = 1, i2c_bus = 1, i2c_dev_addr = 0, i2c_rw = 0, i2c_reg_data = 0, last_cyc = 0, val = 0, endianess = 0;
+				c = 0;
+				char bytewise_vis[15] = "LITTLE ENDIAN";
+				while (1) {
+					ClearScreen();
+					printf("[d] I2C Dev Addr  : %02X\n", i2c_dev_addr);
+					printf("[a] I2C Reg Addr  : %04X\n", i2c_reg_addr & 0xFFFF);
+					printf("[n] Addr width    : %01X\n", i2c_addr_nb);
+					printf("[m] Data width    : %01X\n", i2c_data_nb);
+					printf("[e] Endianess     : %s\n",   bytewise_vis);
+					printf("[r] Read Cycle    : %08X\n", i2c_reg_rdata);
+					printf("[w] Write Cycle   : %08X\n", i2c_reg_wdata);
+					printf("[c] Repeat Cycle\n");
+					printf("[q] Quit I2C generic controller\n");
+					c = getch();
+					if (c == 'd') {
+						printf("Enter Device ID (Hex): ");
+						char valx[16];
+						Con_GetString(valx, 16);
+						int isHex = 1;
+						for (int ic = 0; ic < strlen(valx)-1; ++ic) {
+							if (isxdigit(valx[ic]) == 0) {
+								isHex = 0;
+								printf("Invalid Hex value!\n");
+								Sleep(1500);
+								break;
+							}
+						}
+						if (isHex) {
+							sscanf(valx, "%x", &i2c_dev_addr);
+							if (i2c_dev_addr > 0xFF) {
+								printf("Invalid Device Address!\n");
+								i2c_dev_addr = 0;
+								Sleep(1500);
+							}
+						}
+					}
+					if (c == 'q') {
+						c = 0;
+						break;
+					}
+					if ((c == 'a') || (c == '1')) {
+						printf("Enter Reg Addr (Hex): ");
+						char valx[16];
+						Con_GetString(valx, 16);
+						int isHex = 1;
+						for (int ic = 0; ic < strlen(valx)-1; ++ic) {
+							if (isxdigit(valx[ic]) == 0) {
+								isHex = 0;
+								printf("Invalid Hex value!\n");
+								Sleep(2);
+								break;
+							}
+						}
+						if (isHex) {
+							sscanf(valx, "%x", &i2c_reg_addr);
+							if (i2c_reg_addr > 0xFFFF) {
+								printf("Invalid Register Address!\n");
+								i2c_reg_addr = 0;
+								Sleep(2);
+							}
+						}
+					}
+					if (c == 'n') {
+						if (i2c_addr_nb == 1)
+							i2c_addr_nb = 2;
+						else
+							i2c_addr_nb = 1;
+					}
+					if (c == 'm') {
+						if (i2c_data_nb == 1) 
+							i2c_data_nb = 2;
+						else if (i2c_data_nb == 2)
+							i2c_data_nb = 4;
+						else
+							i2c_data_nb = 1;
+					}
+					if (c == 'e') {
+						if (endianess == 0) {
+							endianess = 1;
+							strcpy(bytewise_vis, "BIG ENDIAN");
+						}
+						else {
+							endianess = 0;
+							strcpy(bytewise_vis, "LITTLE ENDIAN");
+						}
+					}
+					if ((c == 'w') || ((c == 'c') && (last_cyc == 'w'))) {
+						if (c == 'w') {
+							printf("Enter Reg Data (Hex): ");
+							char valx[16];
+							Con_GetString(valx, 16);
+							int isHex = 1;
+							for (int ic = 0; ic < strlen(valx) - 1; ++ic) {
+								if (isxdigit(valx[ic]) == 0) {
+									isHex = 0;
+									printf("Invalid Hex value!\n");
+									Sleep(2);
+									break;
+								}
+							}
+							if (isHex) {
+								sscanf(valx, "%x", &i2c_reg_wdata);
+								if (i2c_reg_wdata > 0xFFFF) {
+									printf("Invalid wRegister Address!\n");
+									i2c_reg_wdata = 0;
+									Sleep(2);
+								}
+							}
+						}
+						FERS_I2C_WriteRegister_External(handle, i2c_dev_addr, endianess, i2c_addr_nb, i2c_reg_addr, i2c_data_nb, i2c_reg_wdata);
+						last_cyc = 'w';
+					}
+					if ((c == 'r') || ((c == 'c') && (last_cyc == 'r'))) {
+						FERS_I2C_ReadRegister_External(handle, i2c_dev_addr, endianess, i2c_addr_nb, i2c_reg_addr, i2c_data_nb, &i2c_reg_rdata);
+						last_cyc = 'r';
+					}
+				}
 			}
 			if (c=='i') {
 				int last_cyc = 0;
 				c = 0;
 				while(1) {
 					ClearScreen();
-					printf("[d] I2C Dev Addr  : %s\n", i2c_dev_name[i2c_dev_index]);
+					printf("[d] I2C Dev Addr  : %s\n",   i2c_dev_name[i2c_dev_index]);
 					printf("[a] I2C Reg Addr  : %04X\n", i2c_reg_addr);
 					printf("[r] Read Cycle    : %08X\n", i2c_reg_rdata);
 					printf("[w] Write Cycle   : %08X\n", i2c_reg_wdata);
@@ -479,13 +731,25 @@ void ManualController(int b_handle)
 						break;
 					}
 					if ((c == 'a') || (c == '1')) {
+						uint32_t tmp;
 						printf("Enter Reg Addr (Hex): ");
-						scanf("%x", &i2c_reg_addr);
+						if (fgets(input, sizeof(input), stdin) && sscanf(input, "%x", &tmp) == 1) {
+							i2c_reg_addr = tmp;
+						} else {
+							printf("Invalid address!\n");
+						}
+						//scanf("%x", &i2c_reg_addr);
 					}
 					if ((c == 'w') || ((c == 'c') && (last_cyc == 'w'))) {
 						if (c == 'w') {
+							uint32_t tmp;
 							printf("Enter Reg Data (Hex): ");
-							scanf("%x", &i2c_reg_wdata);
+							if (fgets(input, sizeof(input), stdin) && sscanf(input, "%x", &tmp) == 1) {
+								i2c_reg_wdata = tmp;
+							} else {
+								printf("Invalid data!\n");
+							}
+							//scanf("%x", &i2c_reg_wdata);
 						}
 						FERS_I2C_WriteRegister(handle, i2c_dev_addr[i2c_dev_index], i2c_reg_addr, i2c_reg_wdata);
 						last_cyc = 'w';
@@ -558,38 +822,52 @@ void ManualController(int b_handle)
 
 
 			if (c=='R') {
+				int tmp;
 				printf("Enter page number : ");
-				scanf("%d", &pagenum);
-				FERS_ReadFlashPage(handle, pagenum, FLASH_PAGE_SIZE, fpage);
-				ClearScreen();
-				fp = fopen("flashpage.txt", "w");
-				for(i=0; i<FLASH_PAGE_SIZE; i++) {
-					if ((i%16) == 0) printf("[%03d:%03d] ", i, i+15);
-					printf("%02X ", fpage[i]);
-					if ((i%16) == 15) printf("\n");
-					if (fp != NULL) fprintf(fp, "%02X\n", fpage[i]);
-				}
-				if (fp != NULL) {
-					printf("Flash data saved to file flashpage.txt\n");
-					fclose(fp);
+				if (fgets(input, sizeof(input), stdin) && sscanf(input, "%d", &tmp) == 1 && tmp >= 0) {
+					pagenum = tmp;
+					FERS_ReadFlashPage(handle, pagenum, FLASH_PAGE_SIZE, fpage);
+					ClearScreen();
+					fp = fopen("flashpage.txt", "w");
+					for (i = 0; i < FLASH_PAGE_SIZE; i++) {
+						if ((i % 16) == 0) printf("[%03d:%03d] ", i, i + 15);
+						printf("%02X ", fpage[i]);
+						if ((i % 16) == 15) printf("\n");
+						if (fp != NULL) fprintf(fp, "%02X\n", fpage[i]);
+					}
+					if (fp != NULL) {
+						printf("Flash data saved to file flashpage.txt\n");
+						fclose(fp);
+					}
+				} else {
+					printf("Invalid page number!\n");
 				}
 			}
 			if (c=='W') {
+				int tmp;
 				printf("Enter page number : ");
-				scanf("%d", &pagenum);
-				printf("Enter file name : ");
-				scanf("%s", fname);
-				fp = fopen("flashpage.txt", "r");
-				if (fp != NULL) {
-					for(i=0; i<FLASH_PAGE_SIZE; i++) {
-						int v;
-						fscanf(fp, "%x", &v);
-						fpage[i] = (uint8_t)v;
-						if (feof(fp)) break;
+				if (fgets(input, sizeof(input), stdin) && sscanf(input, "%d", &tmp) == 1 && tmp >= 0) {
+					pagenum = tmp;
+					printf("Enter file name : ");
+					if (fgets(input, sizeof(input), stdin)) {
+						input[strcspn(input, "\n")] = 0;  // strip newline
+						strncpy(fname, input, sizeof(fname) - 1);
+						fname[sizeof(fname) - 1] = '\0';
+						fp = fopen("flashpage.txt", "r");
+						if (fp != NULL) {
+							for (i = 0; i < FLASH_PAGE_SIZE; i++) {
+								int v;
+								fscanf(fp, "%x", &v);
+								fpage[i] = (uint8_t)v;
+								if (feof(fp)) break;
+							}
+							fclose(fp);
+						}
+						FERS_WriteFlashPage(handle, pagenum, FLASH_PAGE_SIZE, fpage);
 					}
-					fclose(fp);
+				} else {
+					printf("Invalid page number!\n");
 				}
-				FERS_WriteFlashPage(handle, pagenum, FLASH_PAGE_SIZE, fpage);
 			}
 #if defined FERS_5202 | FERS_5204
 			if (c=='p') {
@@ -626,6 +904,7 @@ void ManualController(int b_handle)
 			printf("[w] Write reg        (%08X)\n", wdata);
 			printf("[s] Send command     (%02X)\n", cmd);
 			printf("[i] I2C R/W reg\n");
+			printf("[g] Generic I2C R/W\n");
 			printf("[R] Read flash page\n");
 			printf("[W] Write flash page\n");
 #if defined FERS_5202 | FERS_5204
@@ -768,7 +1047,7 @@ int ScanThreshold(int handle)
 	int i, s, brd;
 	uint32_t thr;
 	uint32_t hitcnt[FERSLIB_MAX_NCH_5202], Tor_cnt, Qor_cnt;
-	uint64_t Tlogic_mask = FERS_GetParam_hex64(handle, "Tlogic_Mask");
+	uint64_t Tlogic_mask = FERS_GetParam_uint64(handle, "Tlogic_Mask");
 	FILE *st;
 
 	brd = FERS_INDEX(handle);
@@ -861,7 +1140,7 @@ int ScanHoldDelay(int handle)
 	if (nstep > MAX_SH_NSTEP) nstep = MAX_SH_NSTEP;
 
 	if (!(FERS_GetParam_int(handle, "AcquisitionMode") & ACQMODE_SPECT)) {
-		Con_printf("CSw", "WARNING: Scan: Need Spectroscopy mode for Hold Scan\n");
+		Con_printf("CSw", "WARNING:Hold delay Scan can be performed only in Spectroscopy mode\n");
 		return 1;
 	}
 
@@ -876,9 +1155,9 @@ int ScanHoldDelay(int handle)
 	FERS_StopAcquisition(&hh, 1, STARTRUN_ASYNC, -100);
 	FERS_WriteRegisterSlice(handle, a_acq_ctrl, 0, 3, ACQMODE_SPECT);
 	FERS_WriteRegisterSlice(handle, a_acq_ctrl, 12, 13, 3); // 0=auto, 1=high gain, 2=low gain, 3=both
-	FERS_WriteRegister(handle, a_trg_mask, FERS_GetParam_hex(handle, "TriggerMask"));
+	FERS_WriteRegister(handle, a_trg_mask, FERS_GetParam_uint32(handle, "TriggerMask"));
 	FERS_WriteRegister(handle, a_run_mask, 0x01); 
-	FERS_SetCommonPedestal(handle, FERS_GetParam_hex(handle, "Pedestal"));
+	FERS_SetCommonPedestal(handle, FERS_GetParam_uint32(handle, "Pedestal"));
 
 	for(si = 0; si < nstep; si++) {
 		delay = start + step * si;
@@ -929,3 +1208,19 @@ int ScanHoldDelay(int handle)
     return 0;
 }
 #endif
+
+
+// ---------------------------------------------------------------------------------
+// Description: Compare two version strings in the format "X.Y.Z.W"
+// Return:		>0 if ver1 > ver2, <0 if ver1 < ver2, 0 if equal
+// ---------------------------------------------------------------------------------
+int compare_version(const char* ver1, const char* ver2)
+{
+	int v1[4] = { 0 }, v2[4] = { 0 };
+	sscanf(ver1, "%d.%d.%d.%d", &v1[0], &v1[1], &v1[2], &v1[3]);
+	sscanf(ver2, "%d.%d.%d.%d", &v2[0], &v2[1], &v2[2], &v2[3]);
+	for (int i = 0; i < 4; i++) {
+		if (v1[i] != v2[i]) return v1[i] - v2[i];
+	}
+	return 0;
+}

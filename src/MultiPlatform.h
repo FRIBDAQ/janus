@@ -56,9 +56,14 @@
 	#include <unistd.h>
 	#include <errno.h>
 
+	#include <semaphore.h>
+
 	#include <endian.h>
 #endif
 
+#ifndef INFINITE
+#define INFINITE		INT32_C(-1)
+#endif
 
 // Socket definition
 #ifdef linux
@@ -86,7 +91,8 @@ typedef int							ssize_t;			//!< Used on Linux as return type of send() an recv
 // Thread??
 #ifdef _WIN32
 	typedef HANDLE                  mutex_t;
-	typedef int						f_thread_t;
+	typedef int						j_thread_t;
+	typedef HANDLE					j_sem_t;
 	#define initmutex(m)            (m = CreateMutex(NULL, FALSE, NULL))==NULL ? GetLastError() : 0
 	#define destroymutex(m)         ReleaseMutex(m) != FALSE ? 0 : GetLastError()
 	#define lock(m)                 (WaitForSingleObject(m, INFINITE) == WAIT_FAILED) ? GetLastError() : 0
@@ -104,7 +110,8 @@ typedef int							ssize_t;			//!< Used on Linux as return type of send() an recv
 
 	// LINUX VERSION NOT TESTED!!!
 	typedef pthread_mutex_t			mutex_t;
-	typedef pthread_t				f_thread_t;
+	typedef pthread_t				j_thread_t;
+	typedef sem_t					j_sem_t;
 	#define initmutex(m)			pthread_mutex_init(&m, NULL)
 //	#define initmutex(m)			(m = PTHREAD_MUTEX_INITIALIZER)
 	#define destroymutex(m)			(m = 0) // pthread_mutex_destroy(m)
@@ -121,8 +128,25 @@ typedef int							ssize_t;			//!< Used on Linux as return type of send() an recv
 
 #endif
 
+// File Management
+#ifdef _WIN32
+
+#define j_fseek _fseeki64
+#define j_ftell _ftelli64
+
+#else
+
+#define j_fseek fseeko
+#define j_ftell ftello
+
+#endif
+
 // SOCKET, TAKEN FROM CAENUtility
 
 int GetFileUpdateTime(char *fname, uint64_t *ftime);
+int j_sem_init(j_sem_t* s);
+int j_sem_destroy(j_sem_t* s);
+int j_sem_wait(j_sem_t* s, int32_t ms);
+int j_sem_post(j_sem_t* s);
 
 #endif

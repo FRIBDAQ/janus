@@ -21,7 +21,7 @@ from tkinter.filedialog import askopenfilename, asksaveasfilename, askdirectory
 from PIL import ImageTk, Image
 #import tk_tools
 
-import shared as sh
+import janus_shared as sh
 import cfgfile_rw as cfg
 import socket2daq as comm
 import leds as leds
@@ -29,8 +29,7 @@ import ctrl as ctrl
 import tabs as tabs
 import ctypes
 
-
-
+# ------------------------------------------------------------------
 if sys.platform.find('win') == 0:
 	ctypes.windll.shcore.SetProcessDpiAwareness(2) # PROCESS_PER_MONITOR_DPI_AWARE = 2
 
@@ -44,12 +43,14 @@ class Open_GUI(Frame):
 	def __init__(self, master):
 		Frame.__init__(self, master)
 		self.master = master
-		# self.style = Style() # DNIN: can be useful for deal with Linux GUI?
+		# Track custom non-blocking message boxes so we can keep them above the main window
+		# (e.g. after a modal tkinter messagebox steals focus).
+		self._jmsgbox_windows = []
+		try:
+			self.master.bind("<FocusIn>", self._on_master_focus_in, add="+")
+		except Exception:
+			pass
 
-		# images and logos
-		if sys.platform.find('win') < 0:
-			sh.ImgPath = '../img/'
-		
 		# print(os.getcwd())
 		self.img_logo = PhotoImage(file=sh.ImgPath + "logo.png").subsample(3, 3)
 
@@ -75,28 +76,30 @@ class Open_GUI(Frame):
 
 		self.Ctrl = ctrl.CtrlPanel()
 		self.Ctrl.OpenControlPanel(self.master)
-		self.Ctrl.plugged.trace('w', lambda name, index, mode: self.DAQconnect())
+		sh.trace_bind(self.Ctrl.plugged, 'write', lambda name, index, mode: self.DAQconnect())
+		self.Ctrl.LoadRunVars()
 
 		self.Tabs = tabs.TabsPanel()
 		self.Tabs.OpenTabs(self.master)
 		self.Tabs.combobox_state(1)
 
-		self.Tabs.CfgChanged.trace('w', lambda name, index, mode:self.Set_b_apply()) # To prevent overwrite of Janus_Config when a run of a job is performed
-		self.Tabs.ActiveBrd.trace('w', lambda name, index, mode: self.AssignActiveBrd())  # self.Ctrl.active_board.set(str(self.Tabs.ActiveBrd.get())))
-		# self.Ctrl.bstart.trace('w', lambda name, index, mode:self.Set_b_apply())
-		self.Ctrl.CfgReloaded.trace('w', lambda name, index, mode:self.Tabs.Params2Tabs(self.Ctrl.CfgReloaded.get()))
-		self.Ctrl.CfgFileName.trace('w', lambda name, index, mode:self.CfgLoadOnLog(self.Ctrl.CfgFileName.get())) 
-		self.Ctrl.CfgNameSaved.trace('w', lambda name, index, mode:self.CfgSaveOnLog(self.Ctrl.CfgNameSaved.get()))
-		self.Ctrl.CfgWarning.trace('w', lambda name, index, mode:self.WrittenEmptyEntries())
-		self.Ctrl.ConvCsvTrace.trace('w', lambda name, index, mode:self.NotifyCsvStarted())
-		# self.Ctrl.combobox_writing.trace('w', lambda name, index, mode: self.Tabs.combobox_state(self.Ctrl.combobox_writing.get()))
+		sh.trace_bind(self.Tabs.CfgChanged, 'write', lambda name, index, mode:self.Set_b_apply())# To prevent overwrite of Janus_Config when a run of a job is performed
+		sh.trace_bind(self.Tabs.ActiveBrd, 'write', lambda name, index, mode: self.AssignActiveBrd())  # self.Ctrl.active_board.set(str(self.Tabs.ActiveBrd.get())))# self.Ctrl.bstart.trace_add('write', lambda name, index, mode:self.Set_b_apply())
+		sh.trace_bind(self.Ctrl.CfgReloaded, 'write', lambda name, index, mode:self.Tabs.Params2Tabs(self.Ctrl.CfgReloaded.get()))
+		sh.trace_bind(self.Ctrl.CfgFileName, 'write', lambda name, index, mode:self.CfgLoadOnLog(self.Ctrl.CfgFileName.get()))
+		sh.trace_bind(self.Ctrl.CfgNameSaved, 'write', lambda name, index, mode:self.CfgSaveOnLog(self.Ctrl.CfgNameSaved.get()))
+		sh.trace_bind(self.Ctrl.CfgWarning, 'write', lambda name, index, mode:self.WrittenEmptyEntries())
+		sh.trace_bind(self.Ctrl.ConvCsvTrace, 'write', lambda name, index, mode:self.NotifyCsvStarted())# self.Ctrl.combobox_writing.trace_add('write', lambda name, index, mode: self.Tabs.combobox_state(self.Ctrl.combobox_writing.get()))
 
 		# set gui apparence according to acq mode		
 		self.guimodegui = StringVar()
 		self.guimodegui.set(self.Ctrl.guimode.get())   #  'a') 
-		self.guimodegui.trace('w', lambda name, index, mode:self.update_guimode())
-		self.Tabs.par_def_svar["AcquisitionMode"].trace('w', lambda name, index, mode:self.Tabs.update_guimode(self.guimodegui.get(), 0))
-		self.Tabs.par_def_svar["EnableJobs"].trace("w", lambda name, index, mode: self.Tabs.update_guimode(self.guimodegui.get()))
+		sh.trace_bind(self.guimodegui, 'write', lambda name, index, mode:self.update_guimode())
+		sh.trace_bind(self.Tabs.par_def_svar["AcquisitionMode"], 'write', lambda name, index, mode:self.Tabs.update_guimode(self.guimodegui.get(), 0))
+		sh.trace_bind(self.Tabs.par_def_svar["StartRunMode"], 'write', lambda name, index, mode: self.Tabs.update_guimode(self.guimodegui.get()))
+		sh.trace_bind(self.Tabs.par_def_svar["EnableJobs"], 'write', lambda name, index, mode: self.Tabs.update_guimode(self.guimodegui.get()))
+		sh.trace_bind(self.Tabs.par_def_svar["ExtRunSource"], 'write', lambda name, index, mode: self.Tabs.update_guimode(self.guimodegui.get()))
+		sh.trace_bind(self.Tabs.par_def_svar["BunchTrgSource"], 'write', lambda name, index, mode: self.Tabs.update_trigger_tref())
 		self.Tabs.update_guimode(self.guimodegui.get())
 		
 		self.verbose = {}
@@ -105,7 +108,6 @@ class Open_GUI(Frame):
 		self.verbose['service'] = IntVar()
 		self.verbose['service'].set(0)
 		self.OfflineJanus = False	# Raw data process only
-		# self.DebugGUI.trace('w', lambda name, index, mode: self.LibDumpMsg())
 
 		self.OpenAndFWupg = IntVar()
 		self.OpenAndFWupg.set(0)
@@ -113,9 +115,11 @@ class Open_GUI(Frame):
 
 		self.AddMenu()
 		self.update_guimode()
+		self.Ctrl.SaveCfgFile()  # Save the config file at the end of the initialization
 		self.bglabel.place_forget()
 
 		# start thread for reading messages from the client and print to output window
+		# (DEPRECATED, the thread start when JanusPy connects to the DAQ)
 		# self.stop_thread = False
 		# self.t = Thread(target=self.ClientMsg)
 		# self.t.daemon = True # thread dies with the program
@@ -146,6 +150,7 @@ class Open_GUI(Frame):
 
 		self.Ctrl.guimode.set(self.guimodegui.get())
 		self.Tabs.update_guimode(self.guimodegui.get())
+		self.Tabs.special_options()
 
 
 	def check_radioVerbose(self, key1: str):
@@ -208,13 +213,13 @@ class Open_GUI(Frame):
 	def WrittenEmptyEntries(self):
 		wrmsg = ""
 		if len(cfg.gain_check) > 0 or len(cfg.empty_field) > 0:
-			for empt in cfg.empty_field:
-				empt = self.Tabs.param_rename[empt]
-				mymsg = empt + " entry value is empty. Janus will use its default value\n"
-				wrmsg = wrmsg + empt + "\n"
+			for pname in cfg.empty_field:
+				empt = self.Tabs.param_rename[pname]
+				mymsg = empt + " entry value is empty. Default value used: " + str(params[pname].JanusDefault) + "\n"
+				wrmsg = wrmsg + empt + f" : {params[pname].JanusDefault}\n"
 				self.Tabs.set_output_log(mymsg, 'empty')
-			if len(cfg.empty_field) > 1: wrmsg = wrmsg + " entries value are empty.\nJanus will use its default values\n\n" 
-			elif len(cfg.empty_field) > 0: wrmsg = wrmsg + " entry value is empty.\nJanus will use its default value\n\n" 
+			if len(cfg.empty_field) > 1: wrmsg = "Empty fields detected. The following default values will be used:\n\n" +  wrmsg
+			elif len(cfg.empty_field) > 0: wrmsg = "Empty field detected. The following default value will be used:\n\n" + wrmsg
 			if len(cfg.gain_check) > 0:
 				mm = "".join(gcheck for gcheck in cfg.gain_check)
 				self.Tabs.set_output_log(mm, 'warning')
@@ -222,6 +227,10 @@ class Open_GUI(Frame):
 				wrmsg = wrmsg + mm
 			if self.Ctrl.show_warning.get(): 
 				messagebox.showwarning(title=None, message=wrmsg)
+			
+			# Reset the default value in the fields
+			for pname in cfg.empty_field:
+				self.Tabs.par_def_svar[pname].set(params[pname].JanusDefault)
 
 		if len(cfg.jobs_check) > 0: # Last job < first job 
 			self.Tabs.set_output_log(cfg.jobs_check[0], 'empty')
@@ -232,7 +241,7 @@ class Open_GUI(Frame):
 			mmsg = "You are overwriting the paramters with other cfg file:\n"
 			for cfile in cfg.cfg_file_list:
 				mmsg = mmsg + " - " + cfile + "\n"
-			mmsg = mmsg + "The previous parameter values are lost, the new ones are displaied on GUI!\n"	
+			mmsg = mmsg + "The previous parameter values are lost, the new ones are displayed on GUI!\n"	
 			# mmsg = mmsg + "The new parameter values are loaded on JanusC but not shown on GUI!"
 			self.Tabs.set_output_log(mmsg, 'empty')
 			return
@@ -271,32 +280,35 @@ class Open_GUI(Frame):
 		self.mGuiMenu.add_cascade(label='Help', menu=self.menu_help)
 		# Add menu mode Basic / Expert
 		self.master.config(menu=self.mGuiMenu)
-		self.mGuiMenu.entryconfig("FWupgrade", state="disabled") # DNIN: commented for debug
+		self.mGuiMenu.entryconfig("FWupgrade")#, state="disabled") 
 		self.UpgradeWinIsOpen = False
 
 	def Help_About(self):
 		messagebox.showinfo("", "JanusPy Rel. " + sh.Release)
 
+
 	# *******************************************************************************
 	# Connect / Disconnect function
 	# *******************************************************************************
 	def DAQconnect(self):
+		# if (self.Tabs.)
+
 		if self.Ctrl.plugged.get() == 1:
 			self.stop_thread = False
 			self.t = Thread(target=self.ClientMsg)
-			self.t.daemon = True # thread dies with the program
+			self.t.daemon = True # Thread dies with the program
 			self.t.start()
 			self.Ctrl.SetAcqStatus(1, 'Connecting JanusC...')
 			self.Tabs.status_now = 1
 			cfg.status = 1
 			self.Tabs.TabsUpdateStatus(1)
 			t1 = Thread(target=self.DAQconnect_Thread)
-			t1.daemon = True # thread dies with the program
+			t1.daemon = True # Thread dies with the program
 			t1.start()
 		else:	
 			self.stop_thread = True
 			comm.SendCmd('V0')	# Stop updating
-			time.sleep(0.2)		# 			
+			time.sleep(0.2)		 			
 			comm.SendCmd('q0')	# Closing
 			time.sleep(0.2)
 			self.CheckHVIsOn()	# Check if HV is still on
@@ -314,19 +326,20 @@ class Open_GUI(Frame):
 		if sys.platform.find('win') < 0: exe_name = "JanusC"
 		else: exe_name = "JanusC.exe"
 
-		if not sh.is_exe():
+		if not sh.is_exe(): # DNIN: the two cases are threated when JanusPy is run, deprecated
 			fname = os.path.join(sh.cfgfile_path, exe_name)
 			wdir = sh.cfgfile_path
 		else:
 			fname = exe_name
 			wdir = os.path.curdir
 
-		if not os.path.exists(fname):	#   Error: JanusC is not in the folder and cannot be launched
+		if not os.path.exists(fname):	# Error: JanusC is not in the expected folder and cannot be launched
 			Jmsg="Warning, JanusC executable is missing!!!\nPlease, check if the antivirus cancel it during the unzip (Windows)"
 			Jmsg=Jmsg+"or run make from the main folder (Linux)"
 			messagebox.showwarning(title=None, message=Jmsg)
 			self.Ctrl.plugged.set(0)
 			return
+		
 		if comm.SckConnected == 0:
 			# start PyCROS
 			ON_POSIX = 'posix' in sys.builtin_module_names
@@ -340,8 +353,8 @@ class Open_GUI(Frame):
 				if comm.SckConnected: break
 				time.sleep(0.1)
 
+
 	def CheckHVIsOn(self):
-		# brd_hvon = [i for i in range(sh.MaxBrd) if self.Tabs.HVcb_status[i].get()]
 		mmsg = ""
 		timeout2 = time.time() + 4 # in case "Quitting" got lost during communication
 		while "WARNING" not in mmsg:
@@ -353,11 +366,17 @@ class Open_GUI(Frame):
 		if "WARNING" in mmsg:
 			# print("\a")
 			res = messagebox.askyesno("Shut HV down?", mmsg[1:])
-			if res: comm.SendCmd("y") # DNIN: a confirm of the turn off is needed?
+			if res: comm.SendCmd("y") 
 			else: comm.SendCmd("n")	
 
 
 	def CloseAndQuit(self):
+		# Ask before quitting if boards are still connected
+		if cfg.status != sh.ACQSTATUS_DISCONNECTED:
+			res = messagebox.askyesno('Quitting', 'WARNING: An active connection to the boards has been detected. \
+Exiting the program will disconnect the boards and disable the HV (if enabled). Continue?')
+			if res == False: return
+
 		if cfg.status == 4: # JanusC is in Running
 			comm.SendCmd('S')
 			time.sleep(0.1)
@@ -366,7 +385,7 @@ class Open_GUI(Frame):
 		self.stop_thread = True
 		time.sleep(0.1)
 		try: 
-			if self.t.is_alive(): self.t.join()
+			if self.t.is_alive(): self.t.join(timeout=1.0)
 		except: pass
 		if comm.SckConnected and not comm.SckError:
 			comm.SendCmd('q0')
@@ -375,7 +394,6 @@ class Open_GUI(Frame):
 			time.sleep(0.1)
 			comm.Close()
 		if self.Ctrl.b_apply['bg'] == 'red':	# Changes not applied
-			# print("\a") # seems it doesn't work
 			res = messagebox.askyesnocancel('Save Changes', 'Do you want to save current configuration?')
 			if res == None: return False
 			if res: 
@@ -383,7 +401,7 @@ class Open_GUI(Frame):
 				self.Ctrl.plugged.set(0)
 
 		# Dump on file LogGUI
-		if any(list(tval.get() for tval in self.verbose.values())):   #self.verbose['socket'].get() or self.verbose['service'].get():
+		if any(list(tval.get() for tval in self.verbose.values())):   
 			with open("JanusPyLog.log", "w") as f:
 				for line in self.Tabs.Output.dump(1.0, END, text=True):
 					f.write(line[1])
@@ -394,18 +412,21 @@ class Open_GUI(Frame):
 	# *******************************************************************************
 	# Customized not blocking message box for warning during run 
 	# *******************************************************************************
-	# Insert \n in a string in order to fit a label of a given width
 	def parse_string(self, mmsg: str, lab_len:int, mframe: Frame):
+		# Insert \n in a string in order to fit a label of a given width
 		# Create temp label to get the string dimension inside a label
 		temp_label = Label(mframe, text=mmsg)
 		temp_label.update_idletasks()  # Update the label to ensure it's fully configured
 		tlw = temp_label.winfo_reqwidth()
 		temp_label.destroy()
 		if (tlw > lab_len):
-			r=(lab_len)/tlw
+			r=(lab_len-20)/tlw
 			inLen = int(len(mmsg)*r)  # The string position where to cut
-			# Find the closest space before the cut position:
-			for pos in range(inLen,-1,-1):
+			# Search only within a bounded window (max word length), not the whole prefix.
+			max_word_len = 24
+			start_pos = max(inLen - max_word_len, 0)
+			r = inLen
+			for pos in range(inLen, start_pos - 1, -1):
 				if mmsg[pos].isspace():
 					r = pos
 					break
@@ -415,17 +436,63 @@ class Open_GUI(Frame):
 		return nmsg
 	
 	# Create a no-blocking messagebox of error and warning with fixed dimension
+	def _on_master_focus_in(self, event=None):
+		self._raise_j_messageboxes()
+
+	def _raise_j_messageboxes(self):
+		# Keep only existing windows, lift them above the main window.
+		alive = []
+		for win in getattr(self, '_jmsgbox_windows', []):
+			try:
+				if win is not None and win.winfo_exists():
+					win.lift(self.master)
+					alive.append(win)
+			except Exception:
+				pass
+		self._jmsgbox_windows = alive
+
+	def _close_j_messagebox(self, win):
+		try:
+			self._jmsgbox_windows = [w for w in self._jmsgbox_windows if w != win]
+		except Exception:
+			pass
+		try:
+			win.destroy()
+		except Exception:
+			pass
+
 	def j_messagebox(self, type: str, msg: str):
+		# Create a no-blocking messagebox of error and warning with fixed dimension
 		selfJanusMsgBox = Toplevel()
+		try:
+			self._jmsgbox_windows.append(selfJanusMsgBox)
+		except Exception:
+			pass
 		self.t_fname = "."
 		x_l = 450
 		y_l = 180
 		selfJanusMsgBox.geometry("{}x{}+{}+{}".format(x_l, y_l, 150, 400))
 		selfJanusMsgBox.wm_title(type.upper())
 		selfJanusMsgBox.resizable(False, False)
+		# Keep above the main window (but don't make it modal / blocking)
+		try:
+			selfJanusMsgBox.transient(self.master)
+		except Exception:
+			pass
+		try:
+			selfJanusMsgBox.lift(self.master)
+			# "topmost" toggle is a common Tk trick to reliably bring a window to front
+			selfJanusMsgBox.attributes('-topmost', True)
+			selfJanusMsgBox.after(250, lambda w=selfJanusMsgBox: w.attributes('-topmost', False))
+		except Exception:
+			pass
+		try:
+			selfJanusMsgBox.focus_force()
+		except Exception:
+			pass	
 		# selfJanusMsgBox.attributes('-toolwindow', True)
 		# selfJanusMsgBox.grab_set()
-		selfJanusMsgBox.protocol("WM_DELETE_WINDOW", selfJanusMsgBox.destroy)  # self.CloseJanusMsgBox)
+		selfJanusMsgBox.protocol("WM_DELETE_WINDOW", lambda w=selfJanusMsgBox: self._close_j_messagebox(w))  # self.CloseJanusMsgBox)
 		# Pop-up frames
 		msgFrame = Frame(selfJanusMsgBox, bg='white')
 		msgFrame.place(relx=0, rely=0, relwidth=1, relheight=1)
@@ -435,7 +502,7 @@ class Open_GUI(Frame):
 		nmsg = self.parse_string(msg, x_l-90, msgFrame)
 		msgLabel = Label(msgFrame, text = nmsg, justify=LEFT, bg='white')
 		msgLabel.place(x=81, rely=0.05, relheight=0.68, width=x_l-90)
-		Button(btnFrame, text='OK', bg='white', relief=GROOVE, command=selfJanusMsgBox.destroy).place(x=x_l-100, y=10, height=22, width=80)
+		Button(btnFrame, text='OK', bg='white', relief=GROOVE, command=lambda w=selfJanusMsgBox: self._close_j_messagebox(w)).place(x=x_l-100, y=10, height=22, width=80)
 		
 		# Image of warning and error
 		if type.upper() == 'WARNING':
@@ -446,12 +513,13 @@ class Open_GUI(Frame):
 			img_label = Label(msgFrame, image=self.error_image, bg='white')
 			img_label.image = self.error_image
 			img_label.place(relx=0.04,rely=0.28, width=50, height=50)
+		# ADD INFO
 
 
-	# *******************************************************************************
-	# Thread that manages the messages coming from client
-	# *******************************************************************************
 	def ClientMsg(self):
+		# *******************************************************************************
+		# Thread that manages the messages coming from client
+		# *******************************************************************************
 		enable_hvmon = 0
 		pcmsg = ""
 		wmsg = ""
@@ -470,7 +538,8 @@ class Open_GUI(Frame):
 			if comm.SckConnected:
 				try: self.Tabs.Mtabs_nb.index('current')
 				except: 
-					time.sleep(100)
+					# During shutdown widgets may already be destroyed; don't hang for long.
+					time.sleep(0.1)
 					continue
 				if (list(self.Tabs.Mtabs)[self.Tabs.Mtabs_nb.index('current')] == 'HV_bias'):
 					if enable_hvmon == 0: comm.SendCmd('V1')
@@ -533,7 +602,10 @@ class Open_GUI(Frame):
 					if status == sh.ACQSTATUS_ERROR: 
 						self.Tabs.set_output_log('\n', 'normal')
 						self.Tabs.set_output_log(cmsg[3:], 'error')
-						self.j_messagebox("error", cmsg[3:].rstrip())
+						if "Readout failure" in cmsg: # Readout error must block the standard loop to recover once the pop-up is closed
+							messagebox.showerror("Readout failure", cmsg[3:]) 
+						else:
+							self.j_messagebox("error", cmsg[3:].rstrip())
 						# messagebox.showerror("ERROR", cmsg[3:])
 						comm.SendCmd("K") # Reset error status
 					if status == sh.ACQSTATUS_READY: 
@@ -543,7 +615,7 @@ class Open_GUI(Frame):
 							comm.SendCmd("\t{}".format(self.Tabs.change_statistics.get()))
 							time.sleep(1)
 							comm.SendCmd("I{}".format(self.Tabs.change_stat_integral.get()))
-					# if status != sh.ACQSTATUS_READY: self.mGuiMenu.entryconfig("FWupgrade", state="disabled")
+					if status != sh.ACQSTATUS_READY: self.mGuiMenu.entryconfig("FWupgrade", state="disabled") # Disable FW upgrade during Run or Error
 					if status == sh.ACQSTATUS_UPGRADING_FW:
 						if "Progress" in status_msg:
 							self.UpgStat.configure(text = f"{status_msg}%")
@@ -557,10 +629,7 @@ class Open_GUI(Frame):
 							self.Tabs.set_output_log("\n")							
 							try: self.UpgStat.configure(text = status_msg)
 							except: pass
-						# s = status_msg.split()
-						# if len(s) > 1 and s[0].find('Progress') >= 0:
-						# 	if float(s[1]) >= 100: self.notify_succesfull("Firmware Upgrade") # self.CloseUpgradeWin()
-						# 	else: self.upg_progress['value'] = float(s[1])
+
 				elif cmsg[0] == 'F': # Firmware not found in the board
 					ret = messagebox.askyesno("FPGA Firmware not found", cmsg[1:-8])
 					brd_noFW = list(filter(lambda x: x.isdigit() ,cmsg.replace(".", "").split()))[0]			
@@ -587,27 +656,34 @@ class Open_GUI(Frame):
 						brd = int(hvs[0])
 						hv_on = int(hvs[1]) & 1
 						self.Ctrl.HV_ON[brd] = hv_on
-				elif cmsg[0] == 'S': # strings with statistics info (to Stats panel)
+				elif cmsg[0] == 'S': # Strings with statistics info (to Stats panel)
 					self.Tabs.UpdateStatsTab(cmsg)
 				elif cmsg[0] == 'R' and (not int(sh.params['EnableJobs'].default)): # Decoupling RunNumber in enable job
 					self.Ctrl.RunNumber.set(int(cmsg[1:]))
 				elif cmsg[0] == 'e':
 					self.Tabs.set_output_log('\n', 'normal')
 					self.Tabs.set_output_log(cmsg[1:], 'error')
-					self.j_messagebox("ERROR", cmsg[3:])
+					self.j_messagebox("ERROR", cmsg[1:])
 					# messagebox.showerror("ERROR", cmsg[3:])
-				elif cmsg[0] == 'w': # Create the Warning message	
+				elif cmsg[0] == 'w': # Create the Warning message
+					if "DEBUG MODE ACTIVE" in cmsg:	
+						self.Ctrl.SetDebugModeWarning()
+						self.Tabs.set_output_log('\n', 'normal')
+						self.Tabs.set_output_log(cmsg[1:], 'warning')
+						continue	# Do not show debug mode warning
 					pcmsg = 'w'
-					my_msg = cmsg[10:].split(':')
-					if len(my_msg) > 1:
+					my_msg = cmsg[1:].split(':')
+					if len(my_msg) > 2:
 						try:
-							wmsg = wmsg + self.Tabs.param_rename[my_msg[0]] + ":" + my_msg[1]
+							wmsg = wmsg + self.Tabs.param_rename[my_msg[1].strip()] + ":" + my_msg[2]
 						except:
 							wmsg = wmsg + my_msg[0] + ":" + my_msg[1]
 					else:
-						wmsg += my_msg[0]
+						for i in range(len(my_msg)):
+							if 'warning' not in my_msg[i].lower():
+								wmsg += my_msg[i]
 					# wmsg = wmsg + cmsg[10:]
-				elif cmsg[0] == "u": # Messages related to frmware upgrade fails
+				elif cmsg[0] == "u": # Messages related to firmware upgrade 
 					if "LED" in cmsg[1:]:
 						brd_status = cmsg[1:].replace("LED", "").split('-')
 						if int(brd_status[1]) == 1: self.UpgStatusLed[int(brd_status[0])].set_color(sh.WrCol)
@@ -616,7 +692,7 @@ class Open_GUI(Frame):
 					elif "END" in cmsg[1:]:
 						mstr = cmsg[1:].replace("END", "")
 						self.notify_succesfull(mstr)
-				elif cmsg[0] == 's':
+				elif cmsg[0] == 's': # offline or online JanusC connection
 					if 'offline' in cmsg[1:]:
 						self.OfflineJanus = True
 						self.Tabs.offline = True
@@ -625,12 +701,20 @@ class Open_GUI(Frame):
 						self.OfflineJanus = False
 						self.Tabs.offline = False
 						self.Tabs.button_names['EnableJobs'][0]['state'] = NORMAL
-				elif cmsg[0] == 'M':
+				elif cmsg[0] == 'M': # JanusC commands the set of a parameter. Msg sent: "MPar_Name: Par_Values"
 					tmp_par = cmsg[1:].rstrip().split(':') # [Par_Name, Par_Values]
 					tmp_val = ""
 					tmp_lval = {}
 					tmp_type = "g"
-					if tmp_par[0] == "StartRunMode": tmp_val = sh.STARTRUN_MODE[int(tmp_par[1])]
+					if params[tmp_par[0]].type == 'c':   # True for the parameters taken into account in JanusC
+						tmp_val = params[tmp_par[0]].options[int(tmp_par[1])]
+					else:
+						tmp_val = tmp_par[1]
+					# if tmp_par[0] == "StartRunMode" or \
+					#    tmp_par[0] == "TrefSource" or \
+					#    tmp_par[0] == "StopRunMode": 
+					# 	try: tmp_val = sh.InverValues[tmp_par[0]][int(tmp_par[1], 10)]
+					# 	except: tmp_val = sh.InverValues[tmp_par[0]][int(tmp_par[1], 16)]
 					if tmp_par[0] == "HV_Vbias": 
 						hv_set = {index:value for index, value in enumerate(self.Tabs.par_brd_svar[tmp_par[0]]) if len(value.get().strip()) > 0}
 						if len(hv_set) == 0: # Just global HV bias set
@@ -641,7 +725,7 @@ class Open_GUI(Frame):
 							elif float(self.Tabs.par_def_svar[tmp_par[0]].get().split()[0]) > 85: self.Tabs.par_def_svar[tmp_par[0]].set("85 V")
 							tmp_lval = {int(t.split()[0]):int(t.split()[1]) for t in tmp_par[1].split(',') if len(t) > 0}
 							tmp_type = 'b'							
-							
+
 					if tmp_type == "g": # global parameter
 						self.Tabs.par_def_svar[tmp_par[0]].set(tmp_val)
 					elif tmp_type == 'b': # board parameter
@@ -649,9 +733,15 @@ class Open_GUI(Frame):
 							if len(self.Tabs.par_brd_svar[tmp_par[0]][b].get()):	# Overwrite only when values are actually written
 								self.Tabs.par_brd_svar[tmp_par[0]][b].set(str(v))
 					self.Ctrl.SaveCfgFile()
-				elif cmsg[0] == 'd':	# Get the time to attach JanusC for debugging with GUI
+				elif cmsg[0] == 'd':	# Get the time to attach JanusC for debugging with GUI - or to show message on pop-up
 					ret = messagebox.showinfo("JanusC", cmsg[1:])
+					self.Tabs.set_output_log(cmsg[1:], "normal")
 					comm.SendCmd('1')
+				elif cmsg[0] == 'W':  # Specific for HoldDelay scan parameter
+					self.j_messagebox("warning", cmsg[1:])
+					self.Tabs.set_output_log(cmsg[1:], "warning")
+					self.Ctrl.DwellNpts.set(10) # Set to minimum value
+					self.Ctrl.HoldScanSettings = self.Ctrl.SpecialRunBoard.get() + ' ' + self.Ctrl.MinScan.get() + ' ' + self.Ctrl.MaxScan.get() + ' ' + self.Ctrl.StepScan.get() + ' ' + self.Ctrl.DwellNpts.get()
 				elif cmsg[0] == 'p':   # Force print on log tab. This as workaround to not show the missing SrvEnt pop up
 					self.Tabs.set_output_log(cmsg[1:], "normal")
 			else:	
@@ -716,10 +806,8 @@ class Open_GUI(Frame):
 		self.UpgStatusLed = [leds.Led(self.UpgradeWin, 18) for i in range(brd_connected)]
 		self.Tbrd = StringVar()
 		self.Tbrd.set(brd)
-		#if os.path.isfile("FWupgfile.txt"):
-		#	ff = open("FWupgfile.txt", "r")
-		#	self.FWupg_fname = ff.readline()
-		#	ff.close()
+
+		self.info_new_fw = []
 
 		# x0 = 5
 		y0 = 5
@@ -737,6 +825,7 @@ class Open_GUI(Frame):
 		y0 += 20 
 		for bb in range(brd_connected):
 			self.CheckBrd.append(Checkbutton(self.UpgradeWin, variable = self.cBrd[bb], state=NORMAL))
+			sh.trace_bind(self.cBrd[bb], 'write', lambda name, index, mode, bb=bb: self.RefreshNewFwUpgrade())
 			self.CheckBrd[bb].place(relx=x0/x_l, rely=y0/y_l)
 			if self.OpenAndFWupg.get():
 				Label(self.UpgradeWin, text='%2s' % (str(self.Tbrd.get()))).place(relx=xr[0], rely=y0/y_l) # Brd
@@ -757,14 +846,15 @@ class Open_GUI(Frame):
 			self.CheckBrd[0]['state'] = DISABLED
 		Label(self.UpgradeWin, text = "Upgrade File").place(relx=x0/x_l, rely=y0/y_l) # x = x0, y = y0)
 		y0 += 20
+		btnHeight = 0.13
 		self.fnlabel = Text(self.UpgradeWin, bg = 'white') #, height=1, width = 60)
 		self.fnlabel.place(relx=x0/x_l, rely=y0/y_l, relheight=0.125*(y_0/y_l), relwidth=0.85) #  x = x0, y = y0)
 		self.FWUpgBrowseButton=Button(self.UpgradeWin, text='Browse', command=self.SelectUpgFile)
-		self.FWUpgBrowseButton.place(relx=0.87, rely=(y0-4)/y_l, relwidth=0.12)  #  x = x0 + 487, y = y0-4)
+		self.FWUpgBrowseButton.place(relx=0.87, rely=(y0-4)/y_l, relwidth=0.12, relheight=btnHeight)  #  x = x0 + 487, y = y0-4)
 
 		y0 += 25
 		self.FWUpgUpgradeButton = Button(self.UpgradeWin, text='Upgrade', command=self.DoUpgrade)
-		self.FWUpgUpgradeButton.place(relx=0.87, rely=y0/y_l, relwidth=0.12)  #  x = x0, y = y0)
+		self.FWUpgUpgradeButton.place(relx=0.87, rely=y0/y_l, relwidth=0.12, relheight=btnHeight)  #  x = x0, y = y0)
 		self.upg_progress = Progressbar(self.UpgradeWin, orient = HORIZONTAL, length = 474, mode = 'determinate') 
 		self.upg_progress.place(relx=x0/x_l, rely=(y0+3)/y_l, relwidth=0.85, relheight=0.125*(y_0/y_l))  #  x = x0 + 75, y = y0+3)
 
@@ -772,6 +862,43 @@ class Open_GUI(Frame):
 		Label(self.UpgradeWin, text = "Messages", relief=GROOVE, justify=CENTER).place(relx=0.87, rely=y0/y_l, relwidth=0.12)  #  x = x0, y = y0)
 		self.UpgStat = Label(self.UpgradeWin, text = "", anchor = "w", relief = 'groove')
 		self.UpgStat.place(relx=x0/x_l, rely=y0/y_l, relheight=0.125*(y_0/y_l), relwidth=0.85) # x = x0 + 75, y = y0)
+
+
+	def RefreshNewFwUpgrade(self):
+		"""Refresh 'New FW Rev' labels based on current checkboxes and loaded FW header."""
+		try:
+			info = self.info_new_fw
+		except Exception:
+			info = []
+
+		# If no valid header info, clear all labels
+		if not info or len(info) < 2:
+			for lbl in getattr(self, 'NewFwVersion', []):
+				try:
+					lbl['text'] = ""
+				except Exception:
+					pass
+			return
+		
+		new_text = f"{info[0]} (Build {info[1]})"
+		# Update labels based on selected boards
+		for idx, lbl in enumerate(getattr(self, 'NewFwVersion', [])):
+			try:
+				is_checked = bool(self.cBrd[idx].get())
+			except Exception:
+				is_checked = False
+			try:
+				lbl['text'] = new_text if is_checked else ""
+			except Exception:
+				pass
+			except Exception:
+				pass
+
+		return
+	
+
+	def OnToggleFWupg(self):
+		self.RefreshNewFwUpgrade()
 
 
 	def ChangeBrd(self):
@@ -805,7 +932,6 @@ class Open_GUI(Frame):
 
 
 	def read_header(self):
-		self.info_new_fw = []
 		# r = re.compile("[a-f0-9]", re.IGNORECASE) # hex filter for firmware Build
 		with open(self.FWupg_fname,"rb") as fw_file:
 			first_line = fw_file.readline().split()[0]
@@ -825,16 +951,6 @@ class Open_GUI(Frame):
 
 			return 2
 
-		# 	while b"$$$$" not in line:
-		# 		if b"Rev" in line:
-		# 			self.info_new_fw.append(str(fw_file.readline()).split()[0].split("'")[1][:-4])	# Removed \r\n
-		# 		if b"Build" in line:
-		# 			self.info_new_fw.append(''.join(filter(lambda x: x.isalnum(), str(fw_file.readline())[1:-4])))
-		# 		if b"Board" in line:
-		# 			tmp_line = str(fw_file.readline()).split("'")[1].split("\\")[0].split()	
-		# 			self.info_new_fw.append(tmp_line)
-		# 		line = fw_file.readline()
-		# return 0
 
 	def SelectUpgFile(self):
 		self.FWupg_fname = askopenfilename(initialdir=self.t_fname, filetypes=(("Binary files", "*.bin *.ffu"), ("All Files", "*.*")), title="Choose a file.")
@@ -849,7 +965,8 @@ class Open_GUI(Frame):
 		#self.NewVers = Label(self.UpgradeWin, text = "New Version: -", fg="#990000")
 		#self.NewVers.place(relx=0.62, rely=55/170.)  #  x=350, y=55)
 		if len(self.FWupg_fname)>3:
-			if self.read_header() == 1 or len(self.info_new_fw)<3: 
+			hdr_status = self.read_header()
+			if hdr_status == 1 or len(self.info_new_fw)<3: 
 				mmsg="WARNING: the firmware selected does not contain any check on boards compatility."
 				mmsg = mmsg + "\nContinue?"
 				# Set yes/no box
@@ -857,24 +974,31 @@ class Open_GUI(Frame):
 				if not ret:
 					self.fnlabel.delete(1.0, END)
 					self.FWupg_fname = ""
-			elif self.read_header() == 2:
+					self.info_new_fw = []
+					self.RefreshNewFwUpgrade()
+			elif hdr_status == 2:
 				mmsg="ERROR: the ffu Header cannot be properly read."
 				mmsg=mmsg+"\nExiting ..."
-				messagebox.showwarning(title=None, message=mmsg, parent=self.master)
+				messagebox.showerror(title=None, message=mmsg, parent=self.master)
 				self.fnlabel.delete(1.0, END)
 				self.FWupg_fname = ""
+				self.info_new_fw = []
+				self.RefreshNewFwUpgrade()
 				return -1
 			elif ''.join(filter(lambda x: x.isdigit(), self.Tabs.info_board_model[int(self.Tbrd.get())].cget('text'))) not in str(self.info_new_fw[2]):
 				mmsg="ERROR: the firmware you want to upgrade (valid for FERS "+','.join(self.info_new_fw[2])+") is not suitable for the board selected ("+self.Tabs.info_board_model[int(self.Tbrd.get())].cget('text')+")."
 				mmsg=mmsg+"\nExiting ..."
-				messagebox.showwarning(title=None, message=mmsg, parent=self.master)
+				messagebox.showerror(title=None, message=mmsg, parent=self.master)
 				self.fnlabel.delete(1.0, END)
 				self.FWupg_fname = ""
+				self.info_new_fw = []
+				self.RefreshNewFwUpgrade()
 				return -1
 			else:
-				for newFW_label in self.NewFwVersion:
-					if self.cBrd[self.NewFwVersion.index(newFW_label)].get() == 1:
-						newFW_label['text'] = str(self.info_new_fw[0]) + " (Build = " + str(self.info_new_fw[1]) + ")"
+				self.RefreshNewFwUpgrade()
+				# for newFW_label in self.NewFwVersion:
+				# 	if self.cBrd[self.NewFwVersion.index(newFW_label)].get() == 1:
+				# 		newFW_label['text'] = str(self.info_new_fw[0]) + " (Build = " + str(self.info_new_fw[1]) + ")"
 				# self.NewVers['text'] = "New Version: " + str(self.info_new_fw[0]) + " (Build = " + str(self.info_new_fw[1]) + ")"
 				# self.NewVers.config(font=("Arial", 10))
 
@@ -882,6 +1006,8 @@ class Open_GUI(Frame):
 	def CloseUpgradeWin(self):
 		self.UpgradeWin.destroy()
 		self.UpgradeWinIsOpen = False
+		self.info_new_fw.clear()
+		self.FWupg_fname = ""
 		if self.FWUpgrading.get()==1:
 			comm.SendCmd('q')
 			self.OpenAndFWupg.set(0)
@@ -895,6 +1021,7 @@ if sh.is_exe():
 else:
 	sh.cfgfile_path = os.path.join("..", "bin")
 
+# Redefine all the file path based on the cfgfile_path
 pardef_file = os.path.join(sh.cfgfile_path, "param_defs.txt")
 sh.CfgFile = os.path.join(sh.cfgfile_path, sh.CfgFile)
 sh.GuiModeFile = os.path.join(sh.cfgfile_path, sh.GuiModeFile)
@@ -904,24 +1031,27 @@ sh.ParRename = os.path.join(sh.cfgfile_path, sh.ParRename)
 sh.PixelMap = os.path.join(sh.cfgfile_path, sh.PixelMap)
 
 
-sh.Version = cfg.ReadParamDescription(pardef_file, sh.sections, sh.params)
+tmp = cfg.ReadParamDescription(pardef_file, sh.sections, sh.params)
+if "ERROR" in tmp:
+	messagebox.showerror("ERROR", tmp)
+	sys.exit(1)
+
 cfg.ReadConfigFile(sh.params, sh.CfgFile, 0)
-cfg.WriteConfigFile(sections, sh.params, sh.CfgFile, 1)
+#cfg.WriteConfigFile(sections, sh.params, sh.CfgFile, 1)
 
 # create GUI
 mGui = Tk()
 Gui_W = sh.Win_W
-if sys.platform.find('win') < 0: Gui_W += 150 
+#if sys.platform.find('win') < 0: Gui_W += 150 
+Gui_W = sh.multiplatform_width(sh.Win_W, 21)
 mGui.geometry("{}x{}+{}+{}".format(Gui_W, sh.Win_H, 10, 10)) # sh.Win_W
 # mGui.geometry("{}x{}+{}+{}".format(Gui_W, 1000, 10, 10)) # sh.Win_W
 # mGui.tk.call('tk', 'scaling', 1.0) # test
 
-
-
 mGui.title('Janus')
 mGui.resizable(True, True)
 
-app = Open_GUI(master=mGui)	# ok it works 
+app = Open_GUI(master=mGui)	
 
 mGui.mainloop()
 

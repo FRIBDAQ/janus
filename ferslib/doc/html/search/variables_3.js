@@ -1,0 +1,23 @@
+var searchData=
+[
+  ['delayadjust_0',['DelayAdjust',['../a00203.html#a540eff2b32d5822f7b4be2d5968ee4cb',1,'picoTDC_Cfg_t']]],
+  ['dig_5fprobes_1',['dig_probes',['../a00151.html#a02f87a4018ffd8005831ce3b4a2d1045',1,'WaveEvent_t']]],
+  ['dig_5frst_5fext_5fen_2',['dig_rst_ext_en',['../a00203.html#adffe161ccb693bb274b2b57c798a1529',1,'picoTDC_Cfg_t']]],
+  ['digital_5freset_3',['digital_reset',['../a00203.html#afbf2c979233e35248c731d8e19c11c03',1,'picoTDC_Cfg_t']]],
+  ['digitalprobe_4',['DigitalProbe',['../a00179.html#a957f9dca02546816e3917b136f75ea45',1,'Config_t']]],
+  ['dis_5ftdl_5',['Dis_tdl',['../a00179.html#a615558c164ad92a58744e6dd0c811ad0',1,'Config_t']]],
+  ['disable_5fro_5freject_6',['disable_ro_reject',['../a00203.html#adee0596d943f1c958a81f653fb66c0e7',1,'picoTDC_Cfg_t']]],
+  ['disablethresholdcalib_7',['DisableThresholdCalib',['../a00179.html#a2af7bbef8cb03b1508e9d7525cfa6687',1,'Config_t']]],
+  ['discrthreshold_8',['DiscrThreshold',['../a00179.html#a8b2aaafdb991e9d07e9789bb070b380f',1,'Config_t']]],
+  ['discrthreshold2_9',['DiscrThreshold2',['../a00179.html#a9480493b15b7e68fbd0a4511dcaf51c1',1,'Config_t']]],
+  ['dll_5fbias_5fcal_10',['dll_bias_cal',['../a00203.html#ad04f933f982eb0e41f2cf76f623f9214',1,'picoTDC_Cfg_t']]],
+  ['dll_5fbias_5fval_11',['dll_bias_val',['../a00203.html#a82d502a0586281606d215ee1ad855f3f',1,'picoTDC_Cfg_t']]],
+  ['dll_5fcp_5fcomp_12',['dll_cp_comp',['../a00203.html#a305926c74887a30d53c1a27a18c80490',1,'picoTDC_Cfg_t']]],
+  ['dll_5fcp_5fcomp_5fdir_13',['dll_cp_comp_dir',['../a00203.html#a4a1e1d9fe2a3fbe4b6f8a3e40d59c998',1,'picoTDC_Cfg_t']]],
+  ['dll_5fctrlval_14',['dll_ctrlval',['../a00203.html#a84740dae21173788eeeb789b60ff2d9a',1,'picoTDC_Cfg_t']]],
+  ['dll_5fen_5fbias_5fcal_15',['dll_en_bias_cal',['../a00203.html#a4fdb3e16857e92f00dc6b8c3995ca2c4',1,'picoTDC_Cfg_t']]],
+  ['dll_5fextctrl_16',['dll_extctrl',['../a00203.html#a669cb03d4deb28258932f121bc58d445',1,'picoTDC_Cfg_t']]],
+  ['dll_5ffixctrl_17',['dll_fixctrl',['../a00203.html#ab9360208697b16ed4ca5162d8ad11901',1,'picoTDC_Cfg_t']]],
+  ['dll_5ftg_18',['DLL_TG',['../a00203.html#a200e22ffa2af3946b8a2fd3b07687460',1,'picoTDC_Cfg_t']]],
+  ['dropcnts_5freset_19',['dropcnts_reset',['../a00203.html#a962da73377f1fa3c1e9254cfb6dbfe76',1,'picoTDC_Cfg_t']]]
+];

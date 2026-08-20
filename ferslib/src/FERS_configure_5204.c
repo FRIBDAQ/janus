@@ -61,7 +61,7 @@ int Configure5204(int handle, int mode) {
 	// Set USB or Eth communication mode
 	if ((FERS_CONNECTIONTYPE(handle) == FERS_CONNECTIONTYPE_ETH) || (FERS_CONNECTIONTYPE(handle) == FERS_CONNECTIONTYPE_USB))
 		ret |= FERS_WriteRegisterSlice(handle, a_acq_ctrl, 20, 20, 1); // Force disable of TDlink
-	else if (FERS_FPGA_FW_MajorRev(handle) >= 4)
+	else
 		ret |= FERS_WriteRegister(handle, a_uC_shutdown, 0xDEAD); // Shut down uC (PIC) if not used (readout via TDL)
 
 	// Acq Mode
@@ -75,9 +75,6 @@ int Configure5204(int handle, int mode) {
 		ret |= FERS_WriteRegisterSlice(handle, a_acq_ctrl, 18, 19, FERScfg[brd]->EnableServiceEvents & 0x1);
 	else
 		ret |= FERS_WriteRegisterSlice(handle, a_acq_ctrl, 18, 19, FERScfg[brd]->EnableServiceEvents);
-
-	// Disable Autoscan
-	ret |= FERS_WriteRegisterSlice(handle, a_acq_ctrl, 31, 31, 1);
 
 	ret |= FERS_WriteRegisterSlice(handle, a_acq_ctrl, 24, 25, FERScfg[brd]->Validation_Mode); // 0=disabled, 1=accept, 2=reject
 
@@ -101,10 +98,10 @@ int Configure5204(int handle, int mode) {
 	// Set LEMO I/O mode
 	ret |= FERS_WriteRegister(handle, a_t0_out_mask, FERScfg[brd]->T0_outMask);
 	if (FERScfg[brd]->T0_outMask == 0x2000) // XROC_TRG_ASYN
-		ret |= FERS_WriteRegister(handle, 0x0100006C, FERScfg[brd]->ProbeChannel[0]);  // HACK CTIN: manage channel index from the same reg of the DPROBE (???)
+		ret |= FERS_WriteRegisterSlice(handle, 0x0100006C, 0, 7, FERScfg[brd]->ProbeChannel[0]);  
 	ret |= FERS_WriteRegister(handle, a_t1_out_mask, FERScfg[brd]->T1_outMask);
 	if (FERScfg[brd]->T1_outMask == 0x2000) // XROC_TRG_ASYN
-		ret |= FERS_WriteRegister(handle, 0x0100006C, FERScfg[brd]->ProbeChannel[1]);
+		ret |= FERS_WriteRegisterSlice(handle, 0x0100006C, 8, 15, FERScfg[brd]->ProbeChannel[1]);
 
 	// Waveform length
 	if (FERScfg[brd]->WaveformLength > 0) {
@@ -142,9 +139,19 @@ int Configure5204(int handle, int mode) {
 			ret |= FERS_WriteRegister(handle, a_t1_out_mask, 1);  // set T1-OUT = T1-IN
 		}
 		//if (FERScfg[brd]->T0_outMask != (1 << 4)) Con_printf("LCSw", "WARNING: T1-OUT setting has been overwritten for Start daisy chaining\n");
-	} else if (FERScfg[brd]->StartRunMode == STARTRUN_TDL) {
+	} else if (FERScfg[brd]->StartRunMode == STARTRUN_TDL || 
+		FERScfg[brd]->StartRunMode == STARTRUN_TDL_EXTRUN || 
+		FERScfg[brd]->StartRunMode == STARTRUN_TDL_GPS) {
 		ret |= FERS_WriteRegister(handle, a_run_mask, 0x01);
 	}
+	//if (FERS_CONNECTIONTYPE(handle) == FERS_CONNECTIONTYPE_TDL) {
+	//	if ((FERScfg[brd]->StartRunMode == STARTRUN_TDL_GPS))
+	//		ret |= FERS_WriteRegister(FERS_CNC_HANDLE(handle), VR_IO_PPS_SOURCE, FERScfg[brd]->GPSPPSSource); // Set PPS source if GPS start is selected
+	//	else
+	//		ret |= FERS_WriteRegister(FERS_CNC_HANDLE(handle), VR_IO_PPS_SOURCE, VR_PPS_DISABLE); // Set PPS source if GPS start is selected
+	//} else {
+	//	FERS_LibMsg("[WARNING] Cannot set GPS PPS source: TDL connection not established\n");
+	//}
 
 	// Set Trigger Logic
 	FERS_WriteRegister(handle, a_tlogic_def, (FERScfg[brd]->MajorityLevel << 8) | (FERScfg[brd]->TriggerLogic & 0xFF));
@@ -157,16 +164,17 @@ int Configure5204(int handle, int mode) {
 	if (FERScfg[brd]->TestPulseSource == -1) {  // OFF
 		ret |= FERS_WriteRegister(handle, a_tpulse_ctrl, 0);  // Set Tpulse = external 
 		ret |= FERS_WriteRegister(handle, a_tpulse_dac, 0);
+		ret |= FERS_WriteRegister(handle, a_dc_offset, (2 << 14) | FERScfg[brd]->TestPulseAmplitude);   
 	} else {
 		Tpulse_ctrl = FERScfg[brd]->TestPulseSource;
 		ret |= FERS_WriteRegister(handle, a_tpulse_ctrl, Tpulse_ctrl);
-		ret |= FERS_WriteRegister(handle, a_tpulse_dac, FERScfg[brd]->TestPulseAmplitude);
+		ret |= FERS_WriteRegister(handle, a_dc_offset, (2 << 14) | FERScfg[brd]->TestPulseAmplitude);  
 	}
 	ConfigureProbe(handle);
 	// Set Digital Probe in concentrator (if present)
 	if (FERS_CONNECTIONTYPE(handle) == FERS_CONNECTIONTYPE_TDL) {
-		if (FERScfg[brd]->CncProbe_A >= 0) FERS_WriteRegister(FERS_CNC_HANDLE(handle), VR_IO_FA_FN, VR_IO_FUNCTION_ZERO);  // Set FA function = ZERO
-		if (FERScfg[brd]->CncProbe_B >= 0) FERS_WriteRegister(FERS_CNC_HANDLE(handle), VR_IO_FB_FN, VR_IO_FUNCTION_ZERO);  // Set FB function = ZERO
+		if (FERScfg[brd]->CncProbe_A > 0) FERS_WriteRegister(FERS_CNC_HANDLE(handle), VR_IO_FA_FN, VR_IO_FUNCTION_ZERO);  // Set FA function = ZERO
+		if (FERScfg[brd]->CncProbe_B > 0) FERS_WriteRegister(FERS_CNC_HANDLE(handle), VR_IO_FB_FN, VR_IO_FUNCTION_ZERO);  // Set FB function = ZERO
 		FERS_WriteRegister(FERS_CNC_HANDLE(handle), VR_IO_DEBUG, FERScfg[brd]->CncProbe_A | (FERScfg[brd]->CncProbe_B << 8));
 	}
 
@@ -182,7 +190,7 @@ int Configure5204(int handle, int mode) {
 	ret |= FERS_WriteRegisterSlice(handle, a_amux_seq_ctrl, 8, 9, FERScfg[brd]->MuxNSmean);
 
 	// Set Trigger Hold-off (for channel triggers)
-	FERS_WriteRegister(handle, a_trgho, (uint32_t)(FERScfg[brd]->TrgHoldOff / CLK_PERIOD[brd]));
+	ret |= FERS_WriteRegister(handle, a_trgho, (uint32_t)(FERScfg[brd]->TrgHoldOff / CLK_PERIOD[brd]));
 
 	if (ret) goto abortcfg;
 
@@ -192,7 +200,7 @@ int Configure5204(int handle, int mode) {
 	for (i = 0; i < FERSLIB_MAX_NCH_5204; i++) {
 		uint16_t PedHG, PedLG, zs_thr_lg, zs_thr_hg, ediv;
 
-		FERS_GetChannelPedestalBeforeCalib(handle, i, &PedLG, &PedHG);
+		ret |= FERS_GetChannelPedestalBeforeCalib(handle, i, &PedLG, &PedHG);
 		//if (FERScfg[brd]->EHistoNbin > 0)
 		//	ediv = FERScfg[brd]->Range_14bit ? ((1 << 14) / FERScfg[brd]->EHistoNbin) : ((1 << 13) / FERScfg[brd]->EHistoNbin);
 		//else
@@ -217,7 +225,7 @@ int Configure5204(int handle, int mode) {
 		ret = Configure_Psiroc(handle);
 
 	//ret = Configure_XROC_from_file("weeroc_cfg.txt", handle);
-	save_XROC_Config_to_file("xroc_cfg.txt", handle);
+	ret |= save_XROC_Config_to_file("xroc_cfg.txt", handle);
 	if (ret) goto abortcfg;
 
 	// ########################################################################################################
@@ -226,8 +234,21 @@ int Configure5204(int handle, int mode) {
 	ret = 0;
 	
 	// Write default cfg
-	Set_picoTDC_Default(&pcfg);
-	Write_picoTDC_Cfg(handle, 0, pcfg, 1);
+	Set_picoTDC_Default(handle, &pcfg);
+
+	// Set Low Resolution Mode
+	// HACK CTIN: for the moment, the low res mode doesn't work for channels 32..63. Need more investigation... 
+	//            Keep high res mode, at the cost of an increment of power consumption (from 0.67A to 0.79A @ 12V)
+/*	pcfg.Enable.bits.highres_en = 0;
+	for (i = 0; i < PICOTDC_NCH; i++)
+		pcfg.Ch_Control[i].bits.highres_en_tm = 0;
+	pcfg.DLL_TG.bits.tg_bot_nen_fine = 1;     // Active low
+	pcfg.DLL_TG.bits.tg_bot_nen_coarse = 1;   // Active low
+	pcfg.DLL_TG.bits.tg_top_nen_fine = 1;     // Active low
+	pcfg.DLL_TG.bits.tg_top_nen_coarse = 1;   // Active low
+*/
+
+	ret |= Write_picoTDC_Cfg(handle, 0, pcfg, 1);
 	
 	// Initialize PLL with AFC
 	pcfg.PLL2.bits.pll_afcrst = 1;
@@ -264,20 +285,27 @@ int Configure5204(int handle, int mode) {
 	pcfg.Header.bits.untriggered = 0;
 
 	// Acquisition Mode
-	double trgwin=0;
-	if (FERScfg[brd]->AcquisitionMode == ACQMODE_TIMING_GATED) {
-		if (FERScfg[brd]->GateWidth < 50000 - 7 * TDC_CLK_PERIOD) {	// the max TrgWindow is 50 us: GATE + extra clock (5+2)
-			trgwin = (FERScfg[brd]->GateWidth / TDC_CLK_PERIOD) + 2;
+	double trgwin_w = 0;
+	if ((FERScfg[brd]->AcquisitionMode == ACQMODE_TIMING_TRG_MATCHING) || (FERScfg[brd]->AcquisitionMode == ACQMODE_TSPECT)) {
+		if (FERScfg[brd]->TrgWindowWidth < 50000 - 7 * TDC_XROC_CLK_PERIOD) {	// the max TrgWindow is 50 us: GATE + extra clock (5+2)
+			trgwin_w = (FERScfg[brd]->TrgWindowWidth / TDC_XROC_CLK_PERIOD) + 2;
 		} else {
-			trgwin = ((50000 / TDC_CLK_PERIOD) - 7 + 2);
-			FERScfg[brd]->GateWidth = (uint32_t)((50000 / TDC_CLK_PERIOD) - 7);
+			trgwin_w = ((50000 / TDC_XROC_CLK_PERIOD) - 7 + 2);
+			FERScfg[brd]->TrgWindowWidth = (uint32_t)((50000 / TDC_XROC_CLK_PERIOD) - 7);
 		}
 	}
-
-	pcfg.TrgWindow.bits.trigger_window = (uint32_t)trgwin;
-	if (FERScfg[brd]->AcquisitionMode == ACQMODE_TIMING_GATED) {
-		ret |= FERS_WriteRegister(handle, a_trg_delay, (uint32_t)(2 * trgwin + 2));  // trg_delay is expressed in FPGA clock cycles = tdc_clk * 2
-		pcfg.TrgWindow.bits.trigger_latency = (uint32_t)(trgwin + 5);  // latency is expressed in tdc_clk cycles
+	pcfg.TrgWindow.bits.trigger_window = (uint32_t)trgwin_w;
+	if (FERScfg[brd]->AcquisitionMode == ACQMODE_TSPECT) {
+		ret |= FERS_WriteRegister(handle, a_trg_delay, (uint32_t)(2 * trgwin_w + 2));  // trg_delay is expressed in FPGA clock cycles = tdc_clk * 2
+		pcfg.TrgWindow.bits.trigger_latency = (uint32_t)(trgwin_w + 5);  // latency is expressed in tdc_clk cycles
+	} else if (FERScfg[brd]->AcquisitionMode == ACQMODE_TIMING_TRG_MATCHING) {
+		if ((FERScfg[brd]->TrgWindowOffset + FERScfg[brd]->TrgWindowWidth) > 0) {  // trg window ends after the trigger => need to delay the trigger (in the FPGA) and shift it to the end of the window
+			ret |= FERS_WriteRegister(handle, a_trg_delay, (uint32_t)(2 * (FERScfg[brd]->TrgWindowOffset + FERScfg[brd]->TrgWindowWidth) / TDC_CLK_PERIOD) + 1);
+			pcfg.TrgWindow.bits.trigger_latency = (uint32_t)trgwin_w;
+		} else {
+			ret |= FERS_WriteRegister(handle, a_trg_delay, 0);
+			pcfg.TrgWindow.bits.trigger_latency = (uint32_t)(-trgwin_w / TDC_CLK_PERIOD);
+		}
 	} else if (FERScfg[brd]->AcquisitionMode == ACQMODE_TIMING_STREAMING) {
 		//pcfg.TrgWindow.bits.trigger_window = strm_ptrg / 2 - 1;  // HACK CTIN: sistemare modalità streaming
 		//pcfg.TrgWindow.bits.trigger_latency = strm_ptrg / 2 + 1;
@@ -296,24 +324,11 @@ int Configure5204(int handle, int mode) {
 
 	pcfg.Buffers.bits.channel_buffer_size = 2;
 
-	// Set Measurement mode (Enable ToT or leading edge)
-	if (FERScfg[brd]->MeasMode != MEASMODE_LEAD_ONLY) {
-		pcfg.Enable.bits.falling_en = 1;
-		for (i = 0; i < 64; i++) {
-			pcfg.Ch_Control[i].bits.falling_en_tm = 1;
-		}
-		if (MEASMODE_OWLT(FERScfg[brd]->MeasMode)) {
-			pcfg.Trg0Del_ToT.bits.tot = 1;
-			pcfg.Trg0Del_ToT.bits.tot_8bit = (FERScfg[brd]->MeasMode == MEASMODE_LEAD_TOT8) ? 1 : 0;
-			pcfg.Trg0Del_ToT.bits.tot_saturate = 1;  //TOT will saturate if value bigger than dynamic range (otherwise overflow occurs)
-			pcfg.Trg0Del_ToT.bits.tot_startbit = FERScfg[brd]->ToT_LSB;
-			pcfg.Trg0Del_ToT.bits.tot_leadingstartbit = FERScfg[brd]->LeadTrail_LSB;
-		}
-	} else {
-		pcfg.Enable.bits.falling_en = 0;
-		for (i = 0; i < 64; i++) {
-			pcfg.Ch_Control[i].bits.falling_en_tm = 0;
-		}
+	// Enable lead only or lead+trail (tot calculated in the SW)
+	int en_falling = (FERScfg[brd]->MeasMode == MEASMODE_LEAD_ONLY) ? 0 : 1;  
+	pcfg.Enable.bits.falling_en = en_falling;
+	for (i = 0; i < 64; i++) {
+		pcfg.Ch_Control[i].bits.falling_en_tm = en_falling;
 	}
 
 	// Channel offset 
@@ -332,7 +347,7 @@ int Configure5204(int handle, int mode) {
 	}
 
 	// Write final configuration
-	ret = Write_picoTDC_Cfg(handle, 0, pcfg, 0);
+	ret |= Write_picoTDC_Cfg(handle, 0, pcfg, 0);
 	//if (DebugLogs & 0x10000)
 	//	Save_picoTDC_Cfg(handle, 0, "picoTDC_RegImg.txt");
 	if (ret) goto abortcfg;
@@ -347,8 +362,8 @@ int Configure5204(int handle, int mode) {
 	ret |= FERS_HV_Set_Imax(handle, FERScfg[brd]->HV_Imax); // same for Imax...
 	ret |= FERS_HV_Set_Imax(handle, FERScfg[brd]->HV_Imax);
 
-	FERS_HV_Set_Tsens_Coeff(handle, FERScfg[brd]->TempSensCoeff);
-	FERS_HV_Set_TempFeedback(handle, FERScfg[brd]->EnableTempFeedback, FERScfg[brd]->TempFeedbackCoeff);
+	ret |= FERS_HV_Set_Tsens_Coeff(handle, FERScfg[brd]->TempSensCoeff);
+	ret |= FERS_HV_Set_TempFeedback(handle, FERScfg[brd]->EnableTempFeedback, FERScfg[brd]->TempFeedbackCoeff);
 	if (ret) goto abortcfg;
 
 
@@ -422,6 +437,59 @@ int ConfigureProbe5204(int handle) {
 	return ret;
 }
 
+// ---------------------------------------------------------------------------------
+// Description: Configure analog and digital probes
+// Inputs:		handle = board handle
+// Return:		Error code (0=success) 
+// ---------------------------------------------------------------------------------
+int ConfigureProbe5205(int handle) {
+	int brd = FERS_INDEX(handle);
+	int i, ret = 0, en_aprobe;
+	static int prev_aprobe = -1, prev_probch = -1;
+
+	// Set Analog Probe (only probe0, probe1 doesn't exist for analog probe)
+	if (((int)FERScfg[brd]->AnalogProbe[0] != prev_aprobe) || ((int)FERScfg[brd]->ProbeChannel[0] != prev_probch)) {  // do not apply settings if not changed (save time)
+		en_aprobe = (FERScfg[brd]->AnalogProbe[0] > 0) && (FERScfg[brd]->AnalogProbe[0] <= 5) ? 1 : 0;
+		ret |= FERS_WriteRegisterSlice(handle, a_acq_ctrl2, 3, 3, en_aprobe);
+		for (i = 0; i < 64; i++) {
+			if (en_aprobe && (i == (int)FERScfg[brd]->ProbeChannel[0])) {
+				ret |= FERS_XROC_WriteRegister(handle, a_XR_ChControl(i), 0x42, 1 << (FERScfg[brd]->AnalogProbe[0] - 1)); // set probe enable mask 
+			}
+			else {
+				ret |= FERS_XROC_WriteRegister(handle, a_XR_ChControl(i), 0x42, 0); // disable probe
+			}
+		}
+		prev_aprobe = FERScfg[brd]->AnalogProbe[0];
+		prev_probch = FERScfg[brd]->ProbeChannel[0];
+	}
+
+	// Set Digital Probe (NOTE: address 'd_probe' is the same for both 5202 and 5204 => use a_dprobe_5202)
+	for (i = 0; i < 2; i++) {
+		if (FERScfg[brd]->DigitalProbe[i] == DPROBE_OFF)				ret |= FERS_WriteRegisterSlice(handle, a_dprobe_5202, i * 8, i * 8 + 7, 0xFF);
+		else if (FERScfg[brd]->DigitalProbe[i] == DPROBE_START_CONV)	ret |= FERS_WriteRegisterSlice(handle, a_dprobe_5202, i * 8, i * 8 + 7, 0x12);
+		else if (FERScfg[brd]->DigitalProbe[i] == DPROBE_DATA_COMMIT)	ret |= FERS_WriteRegisterSlice(handle, a_dprobe_5202, i * 8, i * 8 + 7, 0x21);
+		else if (FERScfg[brd]->DigitalProbe[i] == DPROBE_DATA_VALID)	ret |= FERS_WriteRegisterSlice(handle, a_dprobe_5202, i * 8, i * 8 + 7, 0x20);
+		else if (FERScfg[brd]->DigitalProbe[i] == DPROBE_CLK_1024)		ret |= FERS_WriteRegisterSlice(handle, a_dprobe_5202, i * 8, i * 8 + 7, 0x00);
+		else if (FERScfg[brd]->DigitalProbe[i] == DPROBE_VAL_WINDOW)	ret |= FERS_WriteRegisterSlice(handle, a_dprobe_5202, i * 8, i * 8 + 7, 0x1A);
+		else if (FERScfg[brd]->DigitalProbe[i] == DPROBE_HOLD) {
+			ret |= FERS_WriteRegisterSlice(handle, a_dprobe_5202, i * 8, i * 8 + 7, 0x10);
+			ret |= FERS_XROC_WriteRegister(handle, a_XR_common_cfg, 0x42, 0x1); // set XROC digital probe = Hold
+		}
+		else if (FERScfg[brd]->DigitalProbe[i] == DPROBE_XROC_TRG) {
+			ret |= FERS_WriteRegisterSlice(handle, a_dprobe_5202, i * 8, i * 8 + 7, 0x10);
+			ret |= FERS_XROC_WriteRegister(handle, a_XR_common_cfg, 0x42, 0x2); // set XROC digital probe = Trg
+		}
+		else if (FERScfg[brd]->DigitalProbe[i] & 0x80000000) {  // generic setting
+			uint32_t blk = (FERScfg[brd]->DigitalProbe[i] >> 16) & 0xF;
+			uint32_t sig = FERScfg[brd]->DigitalProbe[i] & 0xF;
+			ret |= FERS_WriteRegisterSlice(handle, a_dprobe_5202, i * 8, i * 8 + 7, (blk << 4) | sig);
+		}
+		ret |= FERS_WriteRegisterSlice(handle, a_dprobe_5202, i * 8 + 16, i * 8 + 21, FERScfg[brd]->ProbeChannel[i]);
+	}
+
+	Sleep(10);
+	return ret;
+}
 
 
 
@@ -443,10 +511,11 @@ static int Configure_Radioroc(int handle) {
 	uint8_t en_delay = 0; 
 	uint8_t trg_select = 0; // 0=glob_external, 1=local_T1, 2=local_T2, 3=local_TQ, 4=glob_OR_T1, 8=glob_OR_T2, 12=glob_OR_TQ
 
-	// Common settings
+
+	// Common setting
 	ret |= FERS_XROC_WriteRegister(handle, a_XR_ASIC_bias, 2, 0x74); //  trigger threshold calibration bias = 7 (suggested by Weeroc)
 
-	uint32_t th1 = min(FERScfg[brd]->TD1_CoarseThreshold, 1023);
+	uint32_t th1 = min(FERScfg[brd]->TD_CoarseThreshold, 1023);
 	uint32_t th2 = min(FERScfg[brd]->TD2_CoarseThreshold, 1023);
 	uint32_t thq = min(FERScfg[brd]->QD_CoarseThreshold, 1023);
 	ret |= FERS_XROC_WriteRegister(handle, a_XR_common_cfg, 1, th1 & 0xFF);
@@ -457,22 +526,37 @@ static int Configure_Radioroc(int handle) {
 
 	// Channel Settings (probe setting will be applied by the function ConfigureProbe5204)
 	for (i = 0; i < 64; i++) {
+		uint16_t HG_ShTime, LG_ShTime, HG_ShTime_LSB, LG_ShTime_LSB;
+		if (FERScfg[brd]->LG_ShapingTime_ind[i] <= 300) {
+			LG_ShTime = (uint16_t)(FERScfg[brd]->LG_ShapingTime_ind[i] / 20);
+			LG_ShTime_LSB = 0;
+		} else {
+			LG_ShTime = (uint16_t)(FERScfg[brd]->LG_ShapingTime_ind[i] / 200);
+			LG_ShTime_LSB = 1;
+		}
+		if (FERScfg[brd]->HG_ShapingTime_ind[i] <= 300) {
+			HG_ShTime = (uint16_t)(FERScfg[brd]->HG_ShapingTime_ind[i] / 20);
+			HG_ShTime_LSB = 0;
+		} else {
+			HG_ShTime = (uint16_t)(FERScfg[brd]->HG_ShapingTime_ind[i] / 200);
+			HG_ShTime_LSB = 1;
+		}
 		ret |= FERS_XROC_WriteRegister(handle, a_XR_ChControl(i), 0, (uint8_t)(min(FERScfg[brd]->HV_IndivAdj[i], 0xFF)));
 		ret |= FERS_XROC_WriteRegister(handle, a_XR_ChControl(i), 1, (uint8_t)((PATcomp << 6) | min(FERScfg[brd]->T_Gain[i], 0x3F)));
-		ret |= FERS_XROC_WriteRegister(handle, a_XR_ChControl(i), 2, (uint8_t)((min(FERScfg[brd]->LG_Gain[i], 0xF) << 4) | min(FERScfg[brd]->HG_Gain[i], 0xF)));
-		ret |= FERS_XROC_WriteRegister(handle, a_XR_ChControl(i), 3, (uint8_t)((min(FERScfg[brd]->LG_ShapingTime_ind[i], 0xF) << 4) | min(FERScfg[brd]->HG_ShapingTime_ind[i], 0xF)));
-		ret |= FERS_XROC_WriteRegister(handle, a_XR_ChControl(i), 4, (uint8_t)(min(FERScfg[brd]->TD1_FineThreshold[i], 0x3F)));
+		ret |= FERS_XROC_WriteRegister(handle, a_XR_ChControl(i), 2, (uint8_t)(HG_ShTime_LSB << 8 | LG_ShTime_LSB << 7 | (min(FERScfg[brd]->LG_Gain[i], 0xF) << 4) | min(FERScfg[brd]->HG_Gain[i], 0xF)));
+		ret |= FERS_XROC_WriteRegister(handle, a_XR_ChControl(i), 3, (uint8_t)((min(LG_ShTime, 0xF) << 4) | min(HG_ShTime, 0xF)));	// Shaping time
+		ret |= FERS_XROC_WriteRegister(handle, a_XR_ChControl(i), 4, (uint8_t)(min(FERScfg[brd]->TD_FineThreshold[i], 0x3F)));
 		ret |= FERS_XROC_WriteRegister(handle, a_XR_ChControl(i), 5, (uint8_t)(min(FERScfg[brd]->TD2_FineThreshold[i], 0x3F)));
-		uint8_t en_TD1 = (uint8_t)((FERScfg[brd]->TD1_Mask >> i) & 1);
+		uint8_t en_TD1 = (uint8_t)((FERScfg[brd]->TD_Mask >> i) & 1);
 		uint8_t en_TD2 = (uint8_t)((FERScfg[brd]->TD2_Mask >> i) & 1);
 		uint8_t en_QD =  (uint8_t)((FERScfg[brd]->QD_Mask >> i) & 1);
-		uint8_t en_PA =  (uint8_t)((FERScfg[brd]->ChEnableMask >> i) & 1);
+		uint8_t en_PA = 1; // (uint8_t)((FERScfg[brd]->ChEnableMask >> i) & 1);
 		enmask = 0x80 | (0x60 * en_PA) | (en_TD1 << 4) | (en_TD2 << 3) | (en_QD << 2) | (0x03 * en_PA);
 		ret |= FERS_XROC_WriteRegister(handle, a_XR_ChControl(i), 6, enmask);
 		uint8_t en_ctest = (uint8_t)((FERScfg[brd]->TestPulseDestination == i));
 		enmask = (en_ctest << 4) | 0xF;
 		ret |= FERS_XROC_WriteRegister(handle, a_XR_ChControl(i), 7, enmask); // enable mask (need to set bit 4 = test input)
-		ret |= FERS_XROC_WriteRegister(handle, a_XR_out_cfg, 46, 0x1F); // enable mux out
+		//ret |= FERS_XROC_WriteRegister(handle, a_XR_out_cfg, 46, 0x1F); // enable mux out
 	}
 
 	// Outing settings
@@ -498,36 +582,70 @@ static int Configure_Psiroc(int handle) {
 	int brd = FERS_INDEX(handle);
 	uint8_t enmask;
 
-
 	uint32_t th_td = min(FERScfg[brd]->TD_CoarseThreshold, 1023);
 	uint32_t th_totd = min(FERScfg[brd]->TOTD_CoarseThreshold, 1023);
 	uint32_t thq = min(FERScfg[brd]->QD_CoarseThreshold, 1023);
-	ret |= FERS_XROC_WriteRegister(handle, a_XR_common_cfg, 1, th_td & 0xFF);
-	ret |= FERS_XROC_WriteRegister(handle, a_XR_common_cfg, 2, ((th_totd & 0x3F) << 2) | (th_td >> 8) & 0x3);
-	ret |= FERS_XROC_WriteRegister(handle, a_XR_common_cfg, 3, ((thq & 0xF) << 4) | (th_totd >> 6) & 0xF);
-	ret |= FERS_XROC_WriteRegister(handle, a_XR_common_cfg, 4, (thq >> 4) & 0x3F);
+	uint32_t Ileak		= 0;		// default
+	uint32_t Ccomp_fsh	= 0;		// default
+	ret |= FERS_XROC_WriteRegister(handle, a_XR_common_cfg, 1, th_td & 0xFF);											// Set Trigger threshold (Low): Bits [7-0].
+	ret |= FERS_XROC_WriteRegister(handle, a_XR_common_cfg, 2, ((th_totd & 0x3F) << 2) | (th_td >> 8) & 0x3);			// Set Time Trigger threshold (Low): Bits [9-8] - Set ToT Trigger threshold (High): Bits [5-0]
+	ret |= FERS_XROC_WriteRegister(handle, a_XR_common_cfg, 3, ((thq & 0xF) << 4) | (th_totd >> 6) & 0xF);			    // Set Charge Trigger threshold: Bits [3-0] - Set ToT Trigger threshold (High): Bits [9-6]
+	ret |= FERS_XROC_WriteRegister(handle, a_XR_common_cfg, 4, (thq >> 4) & 0x3F);										// Set Charge Trigger threshold : Bits[9 - 4]
 	ret |= FERS_XROC_WriteRegister(handle, a_XR_common_cfg, 0xC, 0x10);  // use external trigger and external hold
+	ret |= FERS_XROC_WriteRegister(handle, a_XR_common_cfg, 0x7, 0xF);													
+	ret |= FERS_XROC_WriteRegister(handle, a_XR_out_cfg,    0x46, 0xFF);													
+	ret |= FERS_XROC_WriteRegister(handle, a_XR_ASIC_bias,  0xD, 0xFF);
 
 
 	// Channel Settings (probe setting will be applied by the function ConfigureProbe5204)
 	for (i = 0; i < 64; i++) {
-		ret |= FERS_XROC_WriteRegister(handle, a_XR_ChControl(i), 0, (uint8_t)(min(FERScfg[brd]->PAQ_Gain[i], 0x3F) | ((FERScfg[brd]->InputPolarity[i] & 0x1) << 6)));
-		ret |= FERS_XROC_WriteRegister(handle, a_XR_ChControl(i), 1, (uint8_t)(min(FERScfg[brd]->PAQ_Comp[i], 0x3F)));
-		// ret |= FERS_XROC_WriteRegister(handle, a_XR_ChControl(i), 2, (uint8_t)()); HACK CTIN to do... (shaper Tau range, detector leakage current, fast chaper compens)
-		ret |= FERS_XROC_WriteRegister(handle, a_XR_ChControl(i), 3, (uint8_t)((min(FERScfg[brd]->LG_ShapingTime_ind[i], 0xF) << 4) | min(FERScfg[brd]->HG_ShapingTime_ind[i], 0xF)));
+		uint16_t HG_ShTime, LG_ShTime, HG_ShTime_LSB, LG_ShTime_LSB;
+		if (FERScfg[brd]->LG_ShapingTime_ind[i] <= 300) {
+			LG_ShTime = (uint16_t)(FERScfg[brd]->LG_ShapingTime_ind[i] / 20);
+			LG_ShTime_LSB = 0;
+		} else {
+			LG_ShTime = (uint16_t)(FERScfg[brd]->LG_ShapingTime_ind[i] / 200);
+			LG_ShTime_LSB = 1;
+		}
+		if (FERScfg[brd]->HG_ShapingTime_ind[i] <= 300) {
+			HG_ShTime = (uint16_t)(FERScfg[brd]->HG_ShapingTime_ind[i] / 20);
+			HG_ShTime_LSB = 0;
+		} else {
+			HG_ShTime = (uint16_t)(FERScfg[brd]->HG_ShapingTime_ind[i] / 200);
+			HG_ShTime_LSB = 1;
+		}
+		ret |= FERS_XROC_WriteRegister(handle, a_XR_ChControl(i), 0, (uint8_t)(min(FERScfg[brd]->PAQ_Gain[i], 0x3F) | ((FERScfg[brd]->InputPolarity[i] & 0x1) << 6)));					// Preamplifier gain: Cf = 125 fF - 8 pF and Input Polarity
+		ret |= FERS_XROC_WriteRegister(handle, a_XR_ChControl(i), 1, (uint8_t)(min(FERScfg[brd]->PAQ_Comp[i], 0x3F)));																	// Preamplifier compensation: Ccomp = 0 - 7,875 pF.
+		ret |= FERS_XROC_WriteRegister(handle, a_XR_ChControl(i), 2, (uint8_t)(HG_ShTime_LSB << 8 | LG_ShTime_LSB << 7 | (Ileak & 0x7) << 3 | (Ccomp_fsh & 0x7)));
+		ret |= FERS_XROC_WriteRegister(handle, a_XR_ChControl(i), 3, (uint8_t)((min(LG_ShTime, 0xF) << 4) | min(HG_ShTime, 0xF)));	// Shaping time
+		ret |= FERS_XROC_WriteRegister(handle, a_XR_ChControl(i), 4, (uint8_t)(min(FERScfg[brd]->TD_FineThreshold[i], 0x3F)));															// Threshold calibration DAC for trigger T (15 mV - 0 mV)
+		ret |= FERS_XROC_WriteRegister(handle, a_XR_ChControl(i), 5, (uint8_t)(min(FERScfg[brd]->TOTD_FineThreshold[i], 0x3F)));														// Threshold calibration DAC for trigger ToT (15 mV - 0 mV)
 
-		ret |= FERS_XROC_WriteRegister(handle, a_XR_ChControl(i), 4, (uint8_t)(min(FERScfg[brd]->TD_FineThreshold[i], 0x3F)));
-		ret |= FERS_XROC_WriteRegister(handle, a_XR_ChControl(i), 5, (uint8_t)(min(FERScfg[brd]->TOTD_FineThreshold[i], 0x3F)));
-		uint8_t en_TD = (uint8_t)((FERScfg[brd]->TD_Mask >> i) & 1);
+		//Thresholds
+		uint8_t en_QD   = (uint8_t)((FERScfg[brd]->QD_Mask >> i) & 1);		
 		uint8_t en_TOTD = (uint8_t)((FERScfg[brd]->TOTD_Mask >> i) & 1);
-		uint8_t en_QD = (uint8_t)((FERScfg[brd]->QD_Mask >> i) & 1);
+		uint8_t en_TD = (uint8_t)((FERScfg[brd]->TD_Mask >> i) & 1);
 		uint8_t en_PA = (uint8_t)((FERScfg[brd]->ChEnableMask >> i) & 1);
 		uint8_t en_FS = (uint8_t)((FERScfg[brd]->ChEnableMask >> i) & 1);
 		enmask = (en_FS << 4) | (en_PA << 3) | (en_TD << 2) | (en_TOTD << 1) | en_QD;
 		ret |= FERS_XROC_WriteRegister(handle, a_XR_ChControl(i), 6, enmask);
+	
+		uint8_t en_pdetHG = (uint8_t)((FERScfg[brd]->ChEnableMask >> i) & 1);
+		uint8_t en_pdetLH = (uint8_t)((FERScfg[brd]->ChEnableMask >> i) & 1);
+		uint8_t en_shHG   = (uint8_t)((FERScfg[brd]->ChEnableMask >> i) & 1);
+		uint8_t en_shLG   = (uint8_t)((FERScfg[brd]->ChEnableMask >> i) & 1);
 		uint8_t en_ctest = (uint8_t)((FERScfg[brd]->TestPulseDestination == i));
-		enmask = (en_ctest << 4) | 0xF;
+		enmask = (en_ctest << 4) | (en_shLG << 3) | (en_shHG << 2) | (en_pdetLH << 1) | en_pdetHG;
 		ret |= FERS_XROC_WriteRegister(handle, a_XR_ChControl(i), 7, enmask); // enable mask (need to set bit 4 = test input)
+
+		// Set probe output
+		if (((uint32_t)i == FERScfg[brd]->ProbeChannel[0]) && (FERScfg[brd]->AnalogProbe[0] > 0) && (FERScfg[brd]->AnalogProbe[0] <= 5))
+			ret |= FERS_XROC_WriteRegister(handle, a_XR_ChControl(i), 0x42, 1 << (FERScfg[brd]->AnalogProbe[0] - 1)); // probe enable mask 
+		else
+			ret |= FERS_XROC_WriteRegister(handle, a_XR_ChControl(i), 0x42, 0); // probe enable mask 
+	
+		//ret |= FERS_XROC_WriteRegister(handle, a_XR_ChControl(i), 0x42, 0x1F);
+
 	}
 
 	// Outing settings
@@ -538,6 +656,12 @@ static int Configure_Psiroc(int handle) {
 
 	// Force ValEvent
 	ret |= FERS_XROC_WriteRegister(handle, a_XR_event_val, 0x00, 0x01); // 
+
+	ret |= FERS_XROC_WriteRegister(handle, a_XR_common_cfg, 0x0C, 0x30);			//TRG EXT - EXT. HOLD - EN_delay
+
+	// From email 17/12/2025 with JBCizel for better probeout
+	ret |= FERS_XROC_WriteRegister(handle, a_XR_out_cfg, 0x42, 0x00);		
+	ret |= FERS_XROC_WriteRegister(handle, a_XR_out_cfg, 0x43, 0x24);		 
 
 	return ret;
 }
@@ -598,6 +722,10 @@ static int save_XROC_Config_to_file(char* fname, int handle) {
 			else if ((addr <= 0x41) && (i == 14))	subaddr = 0x42;
 			else									subaddr = i;
 			ret |= FERS_XROC_ReadRegister(handle, addr, subaddr, &data);
+			if (ret != 0) {
+				FERS_LibMsg("[ERROR][BRD %02d] Failed to read XROC register in saveXROCConfigToFile (addr=0x%02X, subaddr=0x%02X)\n", FERS_INDEX(handle), addr, subaddr);
+				return ret;
+			}
 			fprintf(fout, "%02X\t%02X\t%02X\n", addr, subaddr, data);
 		}
 	}

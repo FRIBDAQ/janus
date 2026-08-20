@@ -44,10 +44,13 @@ FERS_BoardInfo_t* FERS_BoardInfo[FERSLIB_MAX_NBRD] = { NULL };	// pointers to th
 FERS_CncInfo_t* FERS_CncInfo[FERSLIB_MAX_NCNC] = { NULL };	// pointers to the cnc info structs
 uint16_t MaxEnergyRange = (1 << 13) - 1;
 int CncConnected[FERSLIB_MAX_NCNC] = { 0 };				// Concentrator connection status
-char BoardPath[FERSLIB_MAX_NBRD][20];					// Path of the FE boards
-char CncPath[FERSLIB_MAX_NCNC][20];						// Path of the concentrator
-char PedestalsFilename[500];
+int SyncCnc_Completed = 0;
+char BoardPath[FERSLIB_MAX_NBRD][64];					// Path of the FE boards
+char CncPath[FERSLIB_MAX_NCNC][64];						// Path of the concentratorchar PedestalsFilename[500];
 int CncOpenHandles[FERSLIB_MAX_NCNC] = { 0 };			// Number of handles currently open for the concentrator (slave boards or concentrator itself)
+int CncHandles[FERSLIB_MAX_NCNC] = { 0 };				// Concentrator handles
+int NumCncConnected = 0;
+uint16_t StartRunMode = 0;
 int HVinit[FERSLIB_MAX_NBRD] = { 0 };					// HV init flags
 uint16_t PedestalLG[FERSLIB_MAX_NBRD][FERSLIB_MAX_NCH_5202];	// LG Pedestals (calibrate PHA Mux Readout)      64
 uint16_t PedestalHG[FERSLIB_MAX_NBRD][FERSLIB_MAX_NCH_5202];	// HG Pedestals (calibrate PHA Mux Readout)
@@ -63,7 +66,7 @@ mutex_t FERS_RoMutex = NULL;							// Mutex for the access to FERS_ReadoutStatus
 mutex_t FERS_RoMutex;									// Mutex for the access to FERS_ReadoutStatus
 #endif
 f_sem_t FERS_StartRunSemaphore[FERSLIB_MAX_NBRD];	// Semaphore for sync the start of the run with the data receiver thread
-int DebugLogs = 0;									// Debug Logs
+uint32_t DebugLogs = 0;									// Debug Logs
 //uint8_t EnableRawData = 0;							// Enable LowLevel data saving
 uint8_t ProcessRawData = 0;							// Enable ReadingOut the RawData file saved	- Is the same of FERS_Offline, redundant
 uint8_t EnableSubRun = 1;							// Enable sub run increasing while reading Raw Data file
@@ -71,6 +74,8 @@ uint8_t EnableSubRun = 1;							// Enable sub run increasing while reading Raw D
 //float MaxSizeRawDataFile;							// Max Size for LLData saving
 char RawDataFilename[FERSLIB_MAX_NBRD][500];		// Rawdata Filename (eth, usb connection)
 char RawDataFilenameTdl[FERSLIB_MAX_NBRD][500];		// Rawdata Filename (tdl connection)
+
+FILE* WriteRegLog[FERSLIB_MAX_NBRD] = { NULL };	// Debug file for write register operations
 
 int FERS_Offline = 0;
 
@@ -96,6 +101,12 @@ void _setLastLocalError(const char* description, ...) {
 	va_start(args, description);
 	vsnprintf(lastError, ARRAY_SIZE(lastError), description, args);
 	va_end(args);
+}
+
+int FERS_GetLastError(char description[1024]) {
+	_getLastLocalError(description);
+	_resetLastLocalError();
+	return 0;
 }
 
 int FERS_LibMsg(char *fmt, ...) 
@@ -145,11 +156,46 @@ int FERS_LibMsg(char *fmt, ...)
 	return 0;
 }
 
-int FERS_GetLastError(char description[1024]) {
-	_getLastLocalError(description);
-	_resetLastLocalError();
+
+int FERS_LogWriteReg(int handle, char* fmt, ...) 
+{
+	char msg[1000];
+	char MsgString[1024];
+	int brd = FERS_INDEX(handle);
+	static int isOpen[FERSLIB_MAX_NBRD] = { 0 };
+	static uint64_t t0[FERSLIB_MAX_NBRD] = { 0 };
+	if (!isOpen[brd]) {
+		char filename[500];
+		sprintf(filename, "FERSlib_Brd%d_RegWriteLog.txt", brd);
+		WriteRegLog[brd] = fopen(filename, "w");
+
+		isOpen[brd] = 1;
+		t0[brd] = get_time();
+	}
+
+	uint64_t tstamp = get_time();
+
+	uint64_t elapsed_time = tstamp - t0[brd];
+	uint64_t ms = elapsed_time % 1000;
+	uint64_t s = (elapsed_time / 1000) % 60;
+	uint64_t m = (elapsed_time / 60000) % 60;
+	uint64_t h = (elapsed_time / 3600000);
+	
+	va_list args;
+	va_start(args, fmt);
+	vsprintf(msg, fmt, args);
+	va_end(args);
+	sprintf(MsgString, "[%02dh:%02dm:%02ds:%03dms]%s", (int)h, (int)m, (int)s, (int)ms, msg); // Added timestamp to FERSlib Log
+	if (WriteRegLog[brd] != NULL) {
+		fprintf(WriteRegLog[brd], "%s", MsgString); // Write to Log File
+		fflush(WriteRegLog[brd]);
+	}
+	//sprintf(FERS_MsgString, "[%" PRIu64 "]%s", tstamp, msg); // Added timestamp to FERSlib Log	
 	return 0;
 }
+
+
+
 
 // Get if Raw data filename is FERSlib like
 int isRawDataFilename(const char* rawdata_filename, int *a0, int *a1) {
@@ -235,6 +281,7 @@ uint16_t FERS_GetNumBrdConnected() {
 }
 
 bool FERS_IsXROC(int handle) {
+	int mybrd = FERS_INDEX(handle);
 	if ((FERS_INDEX(handle) >= 0) && ((FERS_BoardInfo[FERS_INDEX(handle)]->FERSCode == 5202) || 
 									  (FERS_BoardInfo[FERS_INDEX(handle)]->FERSCode == 5204) ||
 									  (FERS_BoardInfo[FERS_INDEX(handle)]->FERSCode == 5205)))
@@ -245,20 +292,12 @@ bool FERS_IsXROC(int handle) {
 
 
 // --------------------------------------------------------------------------------------------------------- 
-// Description: Enable Raw Data output file writing, with open and close file
-// Inputs:		DebugEnableMask: RawData Writing enable, Max size of RawData file, DataFilePath, RunNumber
-// Return:		0=OK, negative number = error code
-// --------------------------------------------------------------------------------------------------------- 
-
-
-// 
-// --------------------------------------------------------------------------------------------------------- 
 // Description: Set Raw data filename for re-processing
 // Inputs:		DataRawFilePath: filename with its path
 //				brd: board of index
 // Return:		0=OK, negative number = error code
 // --------------------------------------------------------------------------------------------------------- 
-static int FERS_SetRawdataReadFile(char DataRawFilePath[500], int brd)
+static int FERS_SetRawdataReadFile(char DataRawFilePath[1024], int brd)
 {
 	int ret = 0;
 	if (strlen(DataRawFilePath) == 0) {
@@ -300,20 +339,19 @@ static int FERS_SetRawdataReadFile(char DataRawFilePath[500], int brd)
 
 
 // Open raw data file to dump raw data
-int FERS_OpenRawDataFile(int *handle, int RunNum) 
+int FERS_OpenRawDataFile(int *handle, int RunNum, int NumBrd) 
 {
 	uint16_t brd_conn = FERS_GetNumBrdConnected();
-	uint8_t tdl_opened = 0;
+	uint8_t tdl_opened[FERSLIB_MAX_NCNC] = { 0 };
 
-	for (int i = 0; i < brd_conn; ++i) {
+	for (int i = 0; i < NumBrd; ++i) {
 		// Open if RawData saving is enabled
 		if (!FERScfg[FERS_INDEX(handle[i])]->OF_RawData) continue;
 
 		// DNIN: at the moment just one concentrator connection is handled
-		if (FERS_CONNECTIONTYPE(handle[i]) == FERS_CONNECTIONTYPE_TDL && !tdl_opened) {
-			sprintf(RawDataFilenameTdl[i], "%sRawData_cnc%d_Run%d", FERScfg[i]->OF_RawDataPath, i, RunNum); // This is not usefull
-			LLtdl_OpenRawOutputFile(handle);
-			tdl_opened = 1;
+		if (FERS_CONNECTIONTYPE(handle[i]) == FERS_CONNECTIONTYPE_TDL) {
+			sprintf(RawDataFilenameTdl[i], "%sRawData_cnc%d_Run%d", FERScfg[i]->OF_RawDataPath, FERS_CNCINDEX(handle[i]), RunNum); // This is not usefull
+			LLtdl_OpenRawOutputFile(handle, FERS_CNCINDEX(handle[i]));  // Knows if the file has already been opened
 		} else {
 			sprintf(RawDataFilename[i], "%sRawData_b%d_Run%d", FERScfg[i]->OF_RawDataPath, i, RunNum);
 			if (FERS_CONNECTIONTYPE(handle[i]) == FERS_CONNECTIONTYPE_ETH)
@@ -326,16 +364,16 @@ int FERS_OpenRawDataFile(int *handle, int RunNum)
 }
 
 // Close raw data file
-int FERS_CloseRawDataFile(int *handle)
+int FERS_CloseRawDataFile(int *handle, int NumBrd)
 {
 	uint16_t brd_conn = FERS_GetNumBrdConnected();
-	uint8_t tdl_closed = 0;
-	for (int i = 0; i < brd_conn; ++i) {
+	uint8_t tdl_closed[FERSLIB_MAX_NCNC] = { 0 };
+	for (int i = 0; i < NumBrd; ++i) {
 		if (!FERScfg[FERS_INDEX(handle[i])]->OF_RawData) continue;
 
-		if (FERS_CONNECTIONTYPE(handle[i]) == FERS_CONNECTIONTYPE_TDL && !tdl_closed) {
+		if (FERS_CONNECTIONTYPE(handle[i]) == FERS_CONNECTIONTYPE_TDL && !tdl_closed[FERS_CNCINDEX(handle[i])]) {
 			LLtdl_CloseRawOutputFile(handle[i]);
-			tdl_closed = 1;
+			tdl_closed[FERS_CNCINDEX(handle[i])] = 1;
 		}
 		else if (FERS_CONNECTIONTYPE(handle[i]) == FERS_CONNECTIONTYPE_ETH)
 			LLeth_CloseRawOutputFile(handle[i]);
@@ -368,7 +406,7 @@ static int FERS_SetClockPeriodLib(int handle)
 		CLK_PERIOD[FERS_INDEX(handle)] = (float)CLK_PERIOD_5202;
 	} else if (FERS_BoardInfo[FERS_INDEX(handle)]->FERSCode == 5203) {
 		CLK_PERIOD[FERS_INDEX(handle)] = (float)CLK_PERIOD_5203;
-	} else if (FERS_BoardInfo[FERS_INDEX(handle)]->FERSCode == 5204) {
+	} else if ((FERS_BoardInfo[FERS_INDEX(handle)]->FERSCode == 5204) || (FERS_BoardInfo[FERS_INDEX(handle)]->FERSCode == 5205)) {
 		CLK_PERIOD[FERS_INDEX(handle)] = (float)CLK_PERIOD_5204;
 	}
 	return 0;
@@ -455,6 +493,21 @@ static int FERS_ReadBoardInfo(int handle, FERS_BoardInfo_t* binfo)
 }
 
 
+int FERS_SetCncMasterSlave(int cnchandle, int MasterSlave) {
+	int val = 0;
+	if (MasterSlave == 1)	
+		val = 0; // Slave
+	else if (MasterSlave == 0) 
+		val = 1; // Master
+	else {
+		_setLastLocalError("Invalid MasterSlave value %d", MasterSlave);
+		if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[ERROR][CNC %02d] Invalid MasterSlave value %d\n", FERS_INDEX(cnchandle), MasterSlave);
+		return FERSLIB_ERR_INVALID_PARAM;
+	}
+	return FERS_WriteRegister(cnchandle, VR_IO_MASTER_SALVE, MasterSlave);
+}
+
+
 // *********************************************************************************************************
 // Open/Close
 // *********************************************************************************************************
@@ -467,11 +520,13 @@ static int FERS_ReadBoardInfo(int handle, FERS_BoardInfo_t* binfo)
 // Outputs:		handle = device handle
 // Return:		0=OK, negative number = error code
 // --------------------------------------------------------------------------------------------------------- 
-int FERS_OpenDevice(char *path, int *handle) 
+
+// This function is meant to be used in test programs, when the BIC is still not properly configured.
+int FERS_OpenBoard(const char* path, int* handle)
 {
 	int BoardIndex, CncIndex, i, ret, ns;
-	int cnc_handle=-1;
-	char *s, * sep, ss[10][20], cpath[50];
+	int cnc_handle = -1;
+	char* s, * sep, ss[10][20], cpath[512];
 	uint32_t fwrev;
 
 	if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[INFO] Opening Device with path %s\n", path);
@@ -479,8 +534,7 @@ int FERS_OpenDevice(char *path, int *handle)
 		ret = FERS_OpenOffline(path, handle);
 		ret |= FERS_SetOffline(1);
 		return ret;
-	}
-	else {
+	} else {
 		// split path into strings separated by ':'
 		ns = 0;
 		s = path;
@@ -500,7 +554,7 @@ int FERS_OpenDevice(char *path, int *handle)
 	if (((strstr(path, "cnc") != NULL) || (strstr(path, "tdl") != NULL)) && !FERS_Offline) {  // Connection through concentrator
 		// Find cnc already opened with this path or find a free cnc index and open it
 		sprintf(cpath, "%s:%s:cnc", ss[0], ss[1]);
-		for(i=0; i < FERSLIB_MAX_NCNC; i++) {
+		for (i = 0; i < FERSLIB_MAX_NCNC; i++) {
 			if (CncConnected[i]) {
 				if (strcmp(cpath, CncPath[i]) == 0) {
 					cnc_handle = FERS_CONNECTIONTYPE_CNC | i;
@@ -523,6 +577,8 @@ int FERS_OpenDevice(char *path, int *handle)
 				return FERSLIB_ERR_COMMUNICATION;
 			}
 			CncConnected[CncIndex] = 1;
+			CncHandles[FERS_INDEX(cnc_handle)] = cnc_handle;
+			++NumCncConnected;
 			strcpy(CncPath[CncIndex], cpath);
 			cnc_handle = FERS_CONNECTIONTYPE_CNC | CncIndex;
 			if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[INFO][CNC %02d] Connected CNC with index %d\n", CncIndex, CncIndex);
@@ -533,11 +589,12 @@ int FERS_OpenDevice(char *path, int *handle)
 		if (cnc_handle == -1) return FERSLIB_ERR_INVALID_PATH;
 		*handle = cnc_handle;
 		CncOpenHandles[FERS_INDEX(cnc_handle)]++;
-		return 0;
+		CncHandles[FERS_INDEX(cnc_handle)] = cnc_handle;
+		return 1;
 
 	} else {  // Open FE board
-
-	 // Find free board index 
+		// 
+		// Find free board index 
 		for (i = 0; i < FERSLIB_MAX_NBRD; i++)
 			if (!BoardConnected[i]) break;
 		if (i == FERSLIB_MAX_NBRD) {
@@ -606,14 +663,15 @@ int FERS_OpenDevice(char *path, int *handle)
 
 		// Read FW revision to verify that the board is responding
 		ret = FERS_ReadRegister(*handle, a_fw_rev, &fwrev);
-		if (ret != 0) {  
+		if (ret != 0) {
 			if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[ERROR][BRD %02d] Can't access board registers. The board is not communicating\n", BoardIndex);
 			char tmpDesc[1024];
 			sprintf(tmpDesc, "Can't access board %d registers", BoardIndex);
 			_setLastLocalError(tmpDesc);
 			free(FERS_BoardInfo[BoardIndex]);
 			FERS_BoardInfo[BoardIndex] = NULL;
-			return FERSLIB_ERR_INVALID_FW;
+			--NumBoardConnected;
+			return FERSLIB_ERR_COMMUNICATION;
 		}
 		if (fwrev == 0) {  // fwrev = 0 means that the board is responding but there is not a valid FW. 
 			if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[ERROR][BRD %02d] Board is not running a valid firmware\n", BoardIndex);
@@ -622,70 +680,99 @@ int FERS_OpenDevice(char *path, int *handle)
 			_setLastLocalError(tmpDesc);
 			free(FERS_BoardInfo[BoardIndex]);
 			FERS_BoardInfo[BoardIndex] = NULL;
+			--NumBoardConnected;
 			return FERSLIB_ERR_INVALID_FW;
 		}
-
-		// Read board info (BIC) from the flash memory via SPI bus
-		ret = FERS_ReadBoardInfo(*handle, FERS_BoardInfo[BoardIndex]);
-		// Check if board is already connected
-		//for (int bb = 0; bb < BoardIndex; ++bb) {
-		//	if (FERS_BoardInfo[BoardIndex]->pid == FERS_BoardInfo[bb]->pid) {
-		//		if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[ERROR][BRD %02d] Board is already open\n", BoardIndex);
-		//		char tmpDesc[1024];
-		//		sprintf(tmpDesc, "Board %d is already open", FERS_BoardInfo[BoardIndex]->pid);
-		//		_setLastLocalError(tmpDesc);
-		//		return FERSLIB_ERR_DEVICE_ALREADY_OPENED;
-		//	}
-		//}
-
-		FERScfg[BoardIndex]->handle = *handle;
-		FERS_SetClockPeriodLib(*handle);
-		if (ret != 0) {
-			if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[ERROR][BRD %02d] Can't read board info or invalid BIC\n", BoardIndex);
-			_setLastLocalError("Can't read board info or invalid BIC");
-			free(FERS_BoardInfo[BoardIndex]);
-			FERS_BoardInfo[BoardIndex] = NULL;
-			return FERSLIB_ERR_INVALID_BIC;
-		}
-
-		// Read pedestal calibration and DC offset from flash memory
-		if (FERS_IsXROC(*handle)) {
-			uint16_t DCoffset[4];
-			uint32_t dco = (FERS_BoardInfo[BoardIndex]->FERSCode == 5202) ? 2750 : 0xB80;  // default value in case of missing DC offset in flash memory
-			ret = FERS_ReadPedestalsFromFlash(*handle, NULL, PedestalLG[BoardIndex], PedestalHG[BoardIndex], DCoffset);
-			if (FERS_BoardInfo[BoardIndex]->FERSCode == 5202) {
-				for (i = 0; i < 4; i++) {  // 0=LG0, 1=HG0, 2=LG1, 3=HG1
-					if ((DCoffset[i] > 0) && (DCoffset[i] < 4095))
-						FERS_WriteRegister(*handle, a_dc_offset, (i << 14) | DCoffset[i]);
-					else
-						FERS_WriteRegister(*handle, a_dc_offset, (i << 14) | dco);
-					Sleep(1);
-				}
-			}
-			else if (FERS_BoardInfo[BoardIndex]->FERSCode == 5204) {
-				for (i = 0; i < 2; i++) {  // 0=LG, 1=HG
-					if ((DCoffset[i] > 0) && (DCoffset[i] < 4095))
-						FERS_WriteRegister(*handle, a_dc_offset, (i << 14) | DCoffset[i]);
-					else
-						FERS_WriteRegister(*handle, a_dc_offset, (i << 14) | dco);
-					Sleep(1);
-				}
-			}
-			if (ret != 0) {
-				if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[WARNING][BRD %02d] Failed to set DC offset for MuxOut\n", BoardIndex);
-			}
-		}
-
-		if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[INFO][BRD %02d] Connected board with index %d: Type=%s, Code=%" PRIu16 ", PID=%" PRIu32 ", Ch=%" PRIu16 ", FW_Rev=% 08X\n", BoardIndex, BoardIndex, 
-			FERS_BoardInfo[BoardIndex]->ModelName,
-			FERS_BoardInfo[BoardIndex]->FERSCode,
-			FERS_BoardInfo[BoardIndex]->pid,
-			FERS_BoardInfo[BoardIndex]->NumCh,
-			FERS_BoardInfo[BoardIndex]->FPGA_FWrev);
-
-		// Send a Stop command (in case the board is still running from a previous connection)
-		FERS_SendCommand(*handle, CMD_ACQ_STOP);
 	}
+
+	return ret;
+}
+
+
+// *********************************************************************
+// This is the function to be used to open a device in a normal program.
+// It performs some checks needed for the proper library functionality.
+// *********************************************************************
+int FERS_OpenDevice(const char* path, int* handle)
+{
+	int BoardIndex, CncIndex, i, ret, ns;
+	int cnc_handle = -1;
+	char* s, * sep, ss[10][20], cpath[512];
+	uint32_t fwrev;
+
+	if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[INFO] Opening Device with path %s\n", path);
+	if (strstr(path, "offline") != NULL) { // Open an offline connection
+		ret = FERS_OpenOffline(path, handle);
+		ret |= FERS_SetOffline(1);
+		return ret;
+	} else {
+		ret = FERS_OpenBoard(path, handle);
+		if (ret != 0) {
+			if (ret == 1) ret = 0; // In case of opening a concentrator only, the function returns 1. This is not an error, so we set ret to 0.
+			return ret;
+		}
+	}
+
+	BoardIndex = FERS_INDEX(*handle);
+
+	// Read board info (BIC) from the flash memory via SPI bus
+	ret = FERS_ReadBoardInfo(*handle, FERS_BoardInfo[BoardIndex]);
+
+	FERScfg[BoardIndex]->handle = *handle;
+	_setDefaultConfig(BoardIndex);
+	FERS_SetClockPeriodLib(*handle);
+	if (ret != 0) {
+		if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[ERROR][BRD %02d] Can't read board info or invalid BIC\n", BoardIndex);
+		_setLastLocalError("Can't read board info or invalid BIC");
+		free(FERS_BoardInfo[BoardIndex]);
+		FERS_BoardInfo[BoardIndex] = NULL;
+		--NumBoardConnected;
+		return FERSLIB_ERR_INVALID_BIC;
+	}
+
+	// Read pedestal calibration and DC offset from flash memory
+	if (FERS_IsXROC(*handle)) {
+		uint16_t DCoffset[4];
+		uint32_t dco = (FERS_BoardInfo[BoardIndex]->FERSCode == 5202) ? 2750 : 0xB80;  // default value in case of missing DC offset in flash memory
+		ret = FERS_ReadPedestalsFromFlash(*handle, NULL, PedestalLG[BoardIndex], PedestalHG[BoardIndex], DCoffset);
+		if (FERS_BoardInfo[BoardIndex]->FERSCode == 5202) {
+			for (i = 0; i < 4; i++) {  // 0=LG0, 1=HG0, 2=LG1, 3=HG1
+				if ((DCoffset[i] > 0) && (DCoffset[i] < 4095))
+					FERS_WriteRegister(*handle, a_dc_offset, (i << 14) | DCoffset[i]);
+				else
+					FERS_WriteRegister(*handle, a_dc_offset, (i << 14) | dco);
+				Sleep(1);
+			}
+		} else if ((FERS_BoardInfo[BoardIndex]->FERSCode == 5204) || (FERS_BoardInfo[BoardIndex]->FERSCode == 5205)) {
+			for (i = 0; i < 2; i++) {  // 0=LG, 1=HG
+				if ((DCoffset[i] > 0) && (DCoffset[i] < 4095))
+					FERS_WriteRegister(*handle, a_dc_offset, (i << 14) | DCoffset[i]);
+				else
+					FERS_WriteRegister(*handle, a_dc_offset, (i << 14) | dco);
+				Sleep(1);
+			}
+		}
+		if (ret != 0) {
+			if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[WARNING][BRD %02d] Failed to set DC offset for MuxOut\n", BoardIndex);
+		}
+	}
+
+	if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[INFO][BRD %02d] Connected board with index %d: Type=%s, Code=%" PRIu16 ", PID=%" PRIu32 ", Ch=%" PRIu16 ", FW_Rev=% 08X\n", BoardIndex, BoardIndex,
+		FERS_BoardInfo[BoardIndex]->ModelName,
+		FERS_BoardInfo[BoardIndex]->FERSCode,
+		FERS_BoardInfo[BoardIndex]->pid,
+		FERS_BoardInfo[BoardIndex]->NumCh,
+		FERS_BoardInfo[BoardIndex]->FPGA_FWrev);
+
+	// Send a Stop command (in case the board is still running from a previous connection)
+	FERS_SendCommand(*handle, CMD_ACQ_STOP);
+
+	//// Set VR_IO_CMD for send start when that lemo is triggered
+	//uint8_t data_reg;
+	//// bit 5 enable, 4 edge (0rising, 1 falling), 3-0 lemo number 
+	//data_reg = 0x0; // Enable functionality, on rising edgen on F_A Lemo
+	//LLtdl_CncWriteRegister(FERS_CNCINDEX(handle[0]), VR_IO_CMD, (uint32_t)data_reg);
+
 	return 0;
 }
 
@@ -703,6 +790,8 @@ int FERS_OpenDevice(char *path, int *handle)
 // --------------------------------------------------------------------------------------------------------- 
 int FERS_OpenOffline(char* path, int *handle) {
 	int ret = 0;
+	int cnc_handle = 0;
+
 	if (strstr(path, "offline") == NULL) {
 		if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[ERROR][OFFLINE] Filename provided is not correct. Please, insert the path as 'offline:path_to_filename'\n");
 		_setLastLocalError("Filename provided is not correct. Please, insert the path as 'offline:path_to_filename'");
@@ -711,7 +800,7 @@ int FERS_OpenOffline(char* path, int *handle) {
 	FERS_Offline = 1;
 	ProcessRawData = (uint8_t)FERS_Offline;
 
-	char tmpPath[100];
+	char tmpPath[512];
 	sprintf(tmpPath, "%s", path);
 	char* filename = strtok(tmpPath, ":");
 	filename = strtok(NULL, "");
@@ -736,7 +825,12 @@ int FERS_OpenOffline(char* path, int *handle) {
 	FERS_BoardInfo_t BoardInfo;
 	//fscanf(tmp_info, "%s", &file_header);
 	int fret = fread(&file_header, 32, 1, tmp_info);
-	if (strcmp(file_header, "$$$$$$$FERSRAWDATAHEADER$$$$$$$") != 0) { // No header mark found
+	int version_rfile = 0;
+	if (strcmp(file_header, "$$$$$$$FERSRAWDATAHEADER$$$$$$$")==0)
+		version_rfile = 1;
+	else if (strcmp(file_header, "$$$$$$FERSRAWDATAHEADERv2$$$$$$") == 0)
+		version_rfile = 2;
+	else if (strcmp(file_header, "$$$$$$$FERSRAWDATAHEADER$$$$$$$") != 0) { // No header mark found
 		if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[ERROR][OFFLINE] No valid keyword header found\n");
 		_setLastLocalError("No valid keyword header found");
 		return FERSLIB_ERR_GENERIC;
@@ -756,14 +850,35 @@ int FERS_OpenOffline(char* path, int *handle) {
 	}
 
 	header_size -= sizeof(header_size);
+	//read SW and File version
+	if (version_rfile > 1) {
+		int8_t tmp_vers[5] = { 0 };
+		for (int i = 0; i < 5; ++i)
+			fread(&tmp_vers[i], sizeof(int8_t), 1, tmp_info);
+
+		header_size -= 5 * sizeof(int8_t);
+	}
 
 	// if header size is larger then handle+brdInfo, a tdl connection was established.
 	// Cannot be retrieved from handle since it is not yet read
 	if (header_size > sizeof(*handle) + sizeof(FERS_BoardInfo_t) + 2 * sizeof(PedeLG)) { // For 5203, sizeof CncInfo is > 2*Pedestal. The inequality is still true.
-		FERS_CncInfo[0] = (FERS_CncInfo_t*)malloc(sizeof(FERS_CncInfo_t));
+
+		//// Read Cnc handle
+		if (version_rfile > 1) {
+			fread(&cnc_handle, sizeof(int), 1, tmp_info);
+			// overwrite cncindex
+			cnc_handle = (cnc_handle & 0xFFFF0) | NumCncConnected;
+			CncHandles[FERS_INDEX(cnc_handle)] = cnc_handle;
+			CncConnected[FERS_INDEX(cnc_handle)] = 1;
+			header_size -= sizeof(cnc_handle);
+		}
+		++NumCncConnected;
+		
+		FERS_CncInfo[FERS_INDEX(cnc_handle)] = (FERS_CncInfo_t*)malloc(sizeof(FERS_CncInfo_t));
 		//fread(&cnc_handle, sizeof(int), 1, tmp_info);
-		fret = fread(FERS_CncInfo[0], sizeof(FERS_CncInfo_t), 1, tmp_info);
+		fret = fread(FERS_CncInfo[FERS_INDEX(cnc_handle)], sizeof(FERS_CncInfo_t), 1, tmp_info);
 		header_size -= sizeof(FERS_CncInfo_t);
+		//header_size -= (sizeof(int) + sizeof(FERS_CncInfo_t));
 		//FERS_SetConcentratorInfo(cnc_handle, &tmpCInfo);
 	}
 
@@ -788,9 +903,26 @@ int FERS_OpenOffline(char* path, int *handle) {
 
 		int tmp_handle = 0;
 		fread(&tmp_handle, sizeof(int), 1, tmp_info);
+		// overwrite the handle, cncindex and board index:
+		//(cindex << 30) | (chain << 24) | (node << 20) | FERS_CONNECTIONTYPE_TDL | BoardIndex;
+		if (FERS_CONNECTIONTYPE(tmp_handle) == FERS_CONNECTIONTYPE_TDL) {
+			int cindex = FERS_INDEX(cnc_handle);
+			int chain = (tmp_handle >> 24) & 0xF;
+			int node = (tmp_handle >> 20) & 0xF;
+			if ((cindex < 0) || (cindex >= FERSLIB_MAX_NCNC) || (chain < 0) || (chain >= FERSLIB_MAX_NTDL) || (node < 0) || (node >= FERSLIB_MAX_NNODES)) {
+				if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[ERROR][OFFLINE] Invalid TDL path %d:%d:%d\n", cindex, chain, node);
+				_setLastLocalError("Invalid TDL path");
+				return FERSLIB_ERR_INVALID_PATH;
+			}
+			tmp_handle = (cindex << 30) | (chain << 24) | (node << 20) | FERS_CONNECTIONTYPE_TDL | b;
+		} else {
+			tmp_handle |= b; // Set board index
+		}
+
 		handle[b] = tmp_handle;
 
-		fread(&BoardInfo, sizeof(FERS_BoardInfo_t), 1, tmp_info);		if (BoardInfo.FERSCode == 5202) {
+		fread(&BoardInfo, sizeof(FERS_BoardInfo_t), 1, tmp_info);		
+		if (BoardInfo.FERSCode == 5202) {
 			fret = fread(&PedeLG, sizeof(PedeLG), 1, tmp_info);
 			fret = fread(&PedeHG, sizeof(PedeHG), 1, tmp_info);
 		}
@@ -832,8 +964,6 @@ int FERS_OpenOffline(char* path, int *handle) {
 
 
 // For offline. Board info should contain at least the FERSCode and ModelName
-
-
 int FERS_GetBoardInfo(int handle, FERS_BoardInfo_t* BrdInfo)
 {
 	if ((FERS_BoardInfo[FERS_INDEX(handle)] == NULL) || (FERS_BoardInfo[FERS_INDEX(handle)]->ModelCode == 0))
@@ -842,13 +972,12 @@ int FERS_GetBoardInfo(int handle, FERS_BoardInfo_t* BrdInfo)
 	return 0;
 }
 
-int FERS_GetCncInfo(int handle, FERS_CncInfo_t* BrdInfo) 
-{
+
+int FERS_GetCncInfo(int handle, FERS_CncInfo_t* CncInfo) {
 	int cnc_index = FERS_CNCINDEX(handle);
 	if (FERS_CncInfo[cnc_index] == NULL)
-		return 0;  // Maybe should return something else
-	memcpy(BrdInfo, FERS_CncInfo[cnc_index], sizeof(FERS_CncInfo_t));
-	return 0;
+		return FERSLIB_ERR_OPER_NOT_ALLOWED;
+	memcpy(CncInfo, FERS_CncInfo[cnc_index], sizeof(FERS_CncInfo_t));	return 0;
 }
 
 // --------------------------------------------------------------------------------------------------------- 
@@ -866,6 +995,25 @@ int FERS_IsOpen(char *path)
 	return 0;
 }
 
+
+// --------------------------------------------------------------------------------------------------------- 
+// Description: Check if a device is already open, passing the handle
+// Inputs:		path = device path
+// Inputs: 		handle = device handle
+// Return:		0=not open, 1=open
+// --------------------------------------------------------------------------------------------------------- 
+int FERS_IsOpenByHandle(int handle, char* path)
+{
+	int ib = FERS_INDEX(handle);
+	if (ib < 0 || ib >= FERSLIB_MAX_NBRD) return 0;
+	int ic = FERS_CNCINDEX(handle);
+	if (ic < 0 || ic >= FERSLIB_MAX_NCNC) return 0;
+	if (BoardConnected[ib] && (strcmp(BoardPath[ib], path) == 0)) return 1;
+	if (CncConnected[ic] && (strcmp(CncPath[ic], path) == 0)) return 1;
+	return 0;
+}
+
+
 // --------------------------------------------------------------------------------------------------------- 
 // Description: Close device (either FERS board or concentrator)
 // Inputs:		handle = device handle
@@ -874,15 +1022,19 @@ int FERS_IsOpen(char *path)
 int FERS_CloseDevice(int handle) 
 {
 	if (FERS_CONNECTIONTYPE(handle) == FERS_CONNECTIONTYPE_CNC) {
-		CncOpenHandles[FERS_CNCINDEX(handle)]--;
-		if (CncOpenHandles[FERS_CNCINDEX(handle)] == 0) {
-			LLtdl_CloseDevice(FERS_CNCINDEX(handle));
-			CncConnected[FERS_CNCINDEX(handle)] = 0;
-			if (FERS_CncInfo[FERS_CNCINDEX(handle)] != NULL) {
-				free(FERS_CncInfo[FERS_CNCINDEX(handle)]);
-				FERS_CncInfo[FERS_CNCINDEX(handle)] = NULL;
+		// Here is CNC handle
+		CncOpenHandles[FERS_INDEX(handle)]--;
+		--NumCncConnected;
+		if (CncOpenHandles[FERS_INDEX(handle)] == 0) {
+			LLtdl_CloseDevice(FERS_INDEX(handle));
+			CncConnected[FERS_INDEX(handle)] = 0;
+			memset(CncPath[FERS_INDEX(handle)], 0, sizeof(CncPath[FERS_INDEX(handle)]));
+			if (FERS_CncInfo[FERS_INDEX(handle)] != NULL) {
+				free(FERS_CncInfo[FERS_INDEX(handle)]);
+				FERS_CncInfo[FERS_INDEX(handle)] = NULL;
 			}
 		}
+		if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[INFO][CNC %02d] Device closed\n", FERS_INDEX(handle));
 	} else {
 		if ((handle < 0) || (FERS_INDEX(handle) >= FERSLIB_MAX_NBRD)) return FERSLIB_ERR_INVALID_HANDLE;
 		if (BoardConnected[FERS_INDEX(handle)]  && !FERS_Offline) {
@@ -905,13 +1057,16 @@ int FERS_CloseDevice(int handle)
 		FERS_TotalAllocatedMem -= sizeof(FERS_BoardInfo[FERS_INDEX(handle)]);
 
 		BoardConnected[FERS_INDEX(handle)] = 0;
+		memset(BoardPath[FERS_INDEX(handle)], 0, sizeof(BoardPath[FERS_INDEX(handle)]));
 		--NumBoardConnected;
 
 		free(FERScfg[FERS_INDEX(handle)]);
 		FERScfg[FERS_INDEX(handle)] = NULL;
 		FERS_TotalAllocatedMem -= sizeof(FERScfg[FERS_INDEX(handle)]);
+
+		if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[INFO][BRD %02d] Device closed\n", FERS_INDEX(handle));
 	}
-	if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[INFO][BRD %02d] Device closed\n", FERS_INDEX(handle));
+
 	return 0;
 }
 
@@ -959,20 +1114,26 @@ int FERS_Get_CncPath(char *dev_path, char *cnc_path)
 //				DelayAdjust = individual fiber delay adjust
 // Return:		0=OK, negative number = error code
 // --------------------------------------------------------------------------------------------------------- 
-int FERS_InitTDLchains(int handle, float DelayAdjust[FERSLIB_MAX_NTDL][FERSLIB_MAX_NNODES])
+int FERS_EnumTDLchains(int handle, float DelayAdjust[FERSLIB_MAX_NTDL][FERSLIB_MAX_NNODES])
 {
 	//int cnc = FERS_CNCINDEX(handle);
-	return LLtdl_InitTDLchains(FERS_CNCINDEX(handle), DelayAdjust);
+	return LLtdl_EnumerateTDLChains(FERS_INDEX(handle), DelayAdjust);
+	//return LLtdl_InitTDLchains(FERS_INDEX(handle), DelayAdjust);
+}
+
+
+int FERS_SyncTDLchains(int *cnchandle, uint32_t StartRunMode) {
+	return LLtdl_SyncTDLchains(cnchandle, StartRunMode);
 }
 
 // --------------------------------------------------------------------------------------------------------- 
 // Description: Check if TDL chains are initialized
-// Inputs:		handle = concentrator handle
+// Inputs:		cnchandle = concentrator handle
 // Return:		false = not init, true = init done
 // --------------------------------------------------------------------------------------------------------- 
-bool FERS_TDLchainsInitialized(int handle)
+bool FERS_TDLchainsInitialized(int cnchandle)
 {
-	return LLtdl_TDLchainsInitialized(FERS_CNCINDEX(handle));
+	return LLtdl_TDLchainsInitialized(FERS_INDEX(cnchandle));
 }
 
 
@@ -1010,7 +1171,7 @@ int FERS_ReadRegister(int handle, uint32_t address, uint32_t *data) {
 	else if (FERS_CONNECTIONTYPE(handle) == FERS_CONNECTIONTYPE_TDL)
 		return LLtdl_ReadRegister(FERS_CNCINDEX(handle), FERS_CHAIN(handle), FERS_NODE(handle), address, data);
 	else if (FERS_CONNECTIONTYPE(handle) == FERS_CONNECTIONTYPE_CNC)
-		return LLtdl_CncReadRegister(FERS_CNCINDEX(handle), address, data);
+		return LLtdl_CncReadRegister(FERS_INDEX(handle), address, data);
 	else 
 		return FERSLIB_ERR_INVALID_HANDLE;
 }
@@ -1023,17 +1184,25 @@ int FERS_ReadRegister(int handle, uint32_t address, uint32_t *data) {
 // Return:		0=OK, negative number = error code
 // --------------------------------------------------------------------------------------------------------- 
 int FERS_WriteRegister(int handle, uint32_t address, uint32_t data) {
+	int ret = 0;
 	if (FERS_CONNECTIONTYPE(handle) == FERS_CONNECTIONTYPE_ETH)
-		return LLeth_WriteRegister(FERS_INDEX(handle), address, data);
+		ret = LLeth_WriteRegister(FERS_INDEX(handle), address, data);
 	else if (FERS_CONNECTIONTYPE(handle) == FERS_CONNECTIONTYPE_USB)
-		return LLusb_WriteRegister(FERS_INDEX(handle), address, data);
+		ret = LLusb_WriteRegister(FERS_INDEX(handle), address, data);
 	else if (FERS_CONNECTIONTYPE(handle) == FERS_CONNECTIONTYPE_TDL)
-		return LLtdl_WriteRegister(FERS_CNCINDEX(handle), FERS_CHAIN(handle), FERS_NODE(handle), address, data);
+		ret = LLtdl_WriteRegister(FERS_CNCINDEX(handle), FERS_CHAIN(handle), FERS_NODE(handle), address, data);
 	else if (FERS_CONNECTIONTYPE(handle) == FERS_CONNECTIONTYPE_CNC)
-		return LLtdl_CncWriteRegister(FERS_CNCINDEX(handle), address, data);
+		ret = LLtdl_CncWriteRegister(FERS_INDEX(handle), address, data);
 	else 
-		return FERSLIB_ERR_INVALID_HANDLE;
+		ret = FERSLIB_ERR_INVALID_HANDLE;
+
+	if (DebugLogs & DBLOG_WRITEREG) {
+		FERS_LogWriteReg(handle, "[BRD %02d] Write Register ADDR: 0x% " PRIx32 ", DATA: %" PRIx32 ", ret = %d\n", 
+			FERS_INDEX(handle), address, data, ret);
+	}
+	return ret;
 }
+
 
 int FERS_MultiWriteRegister(int handle, uint32_t* address, uint32_t* data, int ncycle) {
 	return LLtdl_MultiWriteRegister(FERS_CNCINDEX(handle), FERS_CHAIN(handle), FERS_NODE(handle), address, data, ncycle);
@@ -1067,10 +1236,79 @@ int FERS_SendCommandBroadcast(int *handle, uint32_t cmd, uint32_t delay) {
 	if (cmd == CMD_ACQ_STOP) FERS_ReadoutStatus = ROSTATUS_IDLE;
 	if (FERS_CONNECTIONTYPE(*handle) == FERS_CONNECTIONTYPE_TDL) {
 		if (delay == 0) delay = TDL_COMMAND_DELAY;  // CTIN: manage auto delay mode (the minimum depends on the num of boards in the TDL chain)
-		return (LLtdl_SendCommandBroadcast(FERS_CNCINDEX(handle[0]), cmd, delay));  // CTIN: manage multiple concentrators
+		int ret = 0;
+		for (int cncnum = 0; cncnum < NumCncConnected; ++cncnum)
+			ret |= LLtdl_SendCommandBroadcast(FERS_INDEX(CncHandles[cncnum]), cmd, delay);
+		return ret;  // CTIN: manage multiple concentrators
 	}
 	else return FERSLIB_ERR_NOT_APPLICABLE;
 }
+
+// --------------------------------------------------------------------------------------------------------- 
+// Description: Send a broadcast command to multiple boards connected to concentrators
+//				(Master or Master/Slave) only when an external signal arrives on dt5216 LEMO (connector I/O ...)
+// Inputs:		cnchandle = handles of all cnc that should send the command
+//				cmd = command opcode
+//				delay = execution delay (0 for automatic). 
+// Return:		0=OK, negative number = error code
+// --------------------------------------------------------------------------------------------------------- 
+int FERS_SendDCommandBroadcast(int *cnchandle, uint32_t cmd, uint32_t delay) {
+	if (cmd == CMD_ACQ_START) FERS_ReadoutStatus = ROSTATUS_RUNNING;
+	if (cmd == CMD_ACQ_STOP) FERS_ReadoutStatus = ROSTATUS_IDLE;
+	if (FERS_CONNECTIONTYPE(cnchandle[0]) == FERS_CONNECTIONTYPE_CNC) {
+		if (delay == 0) delay = TDL_COMMAND_DELAY;  // CTIN: manage auto delay mode (the minimum depends on the num of boards in the TDL chain)
+		return (LLtdl_SendDCommandBroadcast(cnchandle, cmd, delay));  // CTIN: manage multiple concentrators
+	} else return FERSLIB_ERR_NOT_APPLICABLE;
+}
+
+
+int FERS_SetDCommandBroadcast(int cnchandle, uint32_t cmd, uint32_t delay) {
+	if (cmd == CMD_ACQ_START) FERS_ReadoutStatus = ROSTATUS_RUNNING;
+	if (cmd == CMD_ACQ_STOP) FERS_ReadoutStatus = ROSTATUS_IDLE;
+	if (FERS_CONNECTIONTYPE(cnchandle) == FERS_CONNECTIONTYPE_CNC) {
+		if (delay == 0) delay = TDL_COMMAND_DELAY;  // CTIN: manage auto delay mode (the minimum depends on the num of boards in the TDL chain)
+		return LLtdl_SetDCommandBroadcast(FERS_INDEX(cnchandle), cmd, delay);
+	} else return FERSLIB_ERR_NOT_APPLICABLE;
+}
+
+
+int FERS_SetCncCmdTrgSource(int* cnchandle, uint32_t CmdTrgSrc, uint32_t CmdTrgLvl, int numcnc) {
+	int ret = 0;
+	for (int cindex = 0; cindex < numcnc; ++cindex) {
+		// Master Cfg, Slave has its own cfg
+		if (FERS_isCncMaster(FERS_INDEX(cnchandle[cindex]))) {
+			// If LEMO, set as input50Ohm and Logic Level
+			// LEMO CMD are 0 1 2 3, Register for level are 1 2 3 4
+			if (CmdTrgSrc < 4) { // LEMO
+				ret |= LLtdl_CncWriteRegister(cindex, VR_IO_STANDARD, CmdTrgLvl); // Set Logic Level
+				ret |= LLtdl_CncWriteRegister(cindex, CmdTrgSrc + 1, (uint32_t)1);	// Set Input50Ohm
+				if (ret < 0) {
+					if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[ERROR][CNC %02d] Failed to set LEMO %d as input50Ohm\n", cindex, CmdTrgSrc);
+					_setLastLocalError("Failed to set LEMO %d as input50Ohm", CmdTrgSrc);
+					return ret;
+				}
+			}
+
+			// Set the Cmd Trigger source 0x20 is for enabling
+			uint32_t val = 0x20 | CmdTrgSrc;
+			ret |= LLtdl_CncWriteRegister(cindex, VR_IO_CMD, val); // Set the start source
+
+			if (CmdTrgSrc != VR_IO_CMD_SYNC)
+				ret |= LLtdl_CncWriteRegister(cindex, VR_IO_SYNC_OUT_B_FN, (uint32_t)VR_IO_SYNCSOURCE_DELAY);
+			else
+				ret |= LLtdl_CncWriteRegister(cindex, VR_IO_SYNC_OUT_B_FN, (uint32_t)VR_IO_SYNCSOURCE_SW_PULSE);
+
+			//ret |= LLtdl_CncWriteRegister(cindex, VR_IO_SYNC_SEND, FERScfg[0]->SyncSource);
+			if (ret < 0) {
+				if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[ERROR][CNC %02d] Failed to set command trigger source %d\n", cindex, CmdTrgSrc);
+				_setLastLocalError("Failed to set command trigger source %d", CmdTrgSrc);
+				return ret;
+			}
+		}
+	}
+	return ret;
+}
+
 
 // --------------------------------------------------------------------------------------------------------- 
 // Description: Write a slice of a register 
@@ -1193,20 +1431,20 @@ int FERS_I2C_ReadRegister(int handle, uint32_t i2c_dev_addr, uint32_t reg_addr, 
 		ret |= FERS_WriteRegister(handle, a_i2c_data, (reg_addr >> 8) & 0xFF);
 		ret |= FERS_WriteRegister(handle, a_i2c_addr, i2c_dev_addr << 17 | 0x01);
 		ack |= Wait_i2c_busy(handle);
-		ret |= FERS_WriteRegister(handle, a_i2c_addr, i2c_dev_addr << 17 | 0x10000 | (reg_addr & 0xFF));
+		ret |= FERS_WriteRegister(handle, a_i2c_addr, (i2c_dev_addr << 17) | 0x10000 | (reg_addr & 0xFF));
 	} else if (i2c_dev_addr == I2C_ADDR_EEPROM_MEM) {
 		if (FERS_BoardInfo[FERS_INDEX(handle)]->PCBrevision <= 2) {				//PcbRev > 2 has I2C aux. bus
-			uint32_t device_address_25bit = ((i2c_dev_addr & 0x7F) << 17) | 1 << 16;
+			uint32_t device_address_25bit = ((i2c_dev_addr & 0x7F) << 17) | (1 << 16);
 			ret |= FERS_WriteRegister(handle, a_i2c_addr, device_address_25bit | reg_addr);
 		} else {
-			uint32_t device_address_25bit = (1 << 24) | ((i2c_dev_addr & 0x7F) << 17 | 1 << 16);
+			uint32_t device_address_25bit = (1 << 24) | ((i2c_dev_addr & 0x7F) << 17 | (1 << 16));
 			ret |= FERS_WriteRegister(handle, a_i2c_addr, device_address_25bit | reg_addr);
 		}
 	} else if ((i2c_dev_addr == 0x10 || i2c_dev_addr == 0x0C) && FERS_BoardInfo[FERS_INDEX(handle)] -> PCBrevision > 2) {
 		ret |= FERS_WriteRegister(handle, a_i2c_data, *reg_data);
-		ret |= FERS_WriteRegister(handle, a_i2c_addr, 1 << 24 | i2c_dev_addr << 17 | reg_addr);
+		ret |= FERS_WriteRegister(handle, a_i2c_addr, (1 << 24) | (i2c_dev_addr << 17) | reg_addr);
 	} else {
-		ret |= FERS_WriteRegister(handle, a_i2c_addr, i2c_dev_addr << 17 | 0x10000 | reg_addr);
+		ret |= FERS_WriteRegister(handle, a_i2c_addr, (i2c_dev_addr << 17) | 0x10000 | reg_addr);
 	}
 
 	if (i2c_dev_addr == I2C_ADDR_EEPROM_MEM) {
@@ -1227,6 +1465,91 @@ int FERS_I2C_ReadRegister(int handle, uint32_t i2c_dev_addr, uint32_t reg_addr, 
 	if (AckBit | ack) {
 		return FERSLIB_ERR_I2C_NACK;
 	}
+	return ret;
+}
+
+// --------------------------------------------------------------------------------------------------------- 
+// Description: Write a register of a generic I2C device on the external I2C bus
+// Inputs:		handle = device handle
+//				i2c_dev_addr = I2C device address (7 bit)
+//				endianess = 0: big-endian, 1: little-endian	
+//				reg_addr_nb = number of bytes of the register address (1 or 2 bytes)	
+//				reg_addr = register address (in the device)
+//				reg_data_nb = number of bytes of the register data (1, 2 or 4 bytes)
+//				reg_data = reg data
+// Return:		0=OK, negative number = error code
+// --------------------------------------------------------------------------------------------------------- 
+int FERS_I2C_WriteRegister_External(int handle, uint32_t i2c_dev_addr, int endianess, int reg_addr_nb, uint32_t reg_addr, int reg_data_nb, uint32_t reg_data) {
+	int ret = 0, ack = 0;
+	int a_i2c_data = 0;
+	int a_i2c_addr = 0;
+	uint8_t fpga_reg_addr_nb = 0, fpga_reg_data_nb = 0;
+	uint32_t i2c_reg_addr = 0;
+
+	if (reg_addr_nb == 1)
+		fpga_reg_addr_nb = 0;
+	else if(reg_addr_nb == 2)
+		fpga_reg_addr_nb = 1;
+	else 
+		return FERSLIB_ERR_INVALID_PARAM;
+
+	if (reg_data_nb == 1)
+		fpga_reg_data_nb = 0;
+	else if (reg_data_nb == 2)
+		fpga_reg_data_nb = 1;
+	else if (reg_data_nb == 4)
+		fpga_reg_data_nb = 3;
+	else
+		return FERSLIB_ERR_INVALID_PARAM;
+
+	if(endianess < 0 || endianess > 1)
+		return FERSLIB_ERR_INVALID_PARAM;
+
+	i2c_reg_addr = ((endianess << 29) | (fpga_reg_addr_nb << 28)) | (fpga_reg_data_nb << 26) | (1 << 24) | (i2c_dev_addr << 17) | (reg_addr & 0xFFFF);
+	ret |= FERS_I2C_WriteRegister(handle, i2c_dev_addr, i2c_reg_addr, reg_data);
+
+	return ret;
+}
+
+// --------------------------------------------------------------------------------------------------------- 
+// Description: Read a register of a generic I2C device on the external I2C bus
+// Inputs:		handle = device handle
+//				i2c_dev_addr = I2C device address (7 bit)
+//				endianess = 0: big-endian, 1: little-endian
+//				reg_addr_nb = number of bytes of the register address (1 or 2 bytes)
+//				reg_addr = register address (in the device)
+//				reg_data_nb = number of bytes of the register data (1, 2 or 4 bytes)	
+// Outputs:		reg_data = reg data
+// Return:		0=OK, negative number = error code
+// --------------------------------------------------------------------------------------------------------- 
+int FERS_I2C_ReadRegister_External(int handle, uint32_t i2c_dev_addr, int endianess, int reg_addr_nb, uint32_t reg_addr, int reg_data_nb, uint32_t* reg_data) {
+	int ret = 0, ack = 0;
+	int a_i2c_data = 0;
+	int a_i2c_addr = 0;
+	uint8_t fpga_reg_addr_nb = 0, fpga_reg_data_nb = 0;
+	uint32_t i2c_reg_addr = 0;
+
+	if (reg_addr_nb == 1)
+		fpga_reg_addr_nb = 0;
+	else if (reg_addr_nb == 2)
+		fpga_reg_addr_nb = 1;
+	else
+		return FERSLIB_ERR_INVALID_PARAM;
+
+	if (reg_data_nb == 1)
+		fpga_reg_data_nb = 0;
+	else if (reg_data_nb == 2)
+		fpga_reg_data_nb = 1;
+	else if (reg_data_nb == 4)
+		fpga_reg_data_nb = 3;
+	else
+		return FERSLIB_ERR_INVALID_PARAM;
+
+	if (endianess < 0 || endianess > 1)
+		return FERSLIB_ERR_INVALID_PARAM;
+	i2c_reg_addr = ((endianess << 29) | (fpga_reg_addr_nb << 28)) | (fpga_reg_data_nb << 26) | (1 << 24) | (i2c_dev_addr << 17) | (reg_addr & 0xFFFF);
+	FERS_I2C_ReadRegister(handle, i2c_dev_addr, i2c_reg_addr, reg_data);
+
 	return ret;
 }
 
@@ -1335,7 +1658,7 @@ int FERS_ReadA5256EEPROMInfo(int handle, FERS_A5256_Info_t* binfo) {
 // Inputs:		handle = board handle 
 // Return:		0=OK, negative number = error code
 // --------------------------------------------------------------------------------------------------------- 
-int FERS_checkA5256presence(int handle, FERS_A5256_Info_t* tinfo) {
+int FERS_checkA5256presence(int handle) {	
 	int ret = 0;
 	uint32_t data = 0, addr = 0;
 
@@ -1530,11 +1853,11 @@ static int FERS_SetConcentratorInfo(int handle, FERS_CncInfo_t* cinfo)
 // Outputs:		cinfo = concentrator info struct
 // Return:		0=OK, negative number = error code
 // --------------------------------------------------------------------------------------------------------- 
-int FERS_ReadConcentratorInfo(int handle, FERS_CncInfo_t* cinfo)
+int FERS_ReadConcentratorInfo(int cnchandle, FERS_CncInfo_t* cinfo)
 {
 	int ret;
 	uint16_t i;
-	ret = LLtdl_GetCncInfo(FERS_CNCINDEX(handle), cinfo);
+	ret = LLtdl_GetCncInfo(FERS_INDEX(cnchandle), cinfo);
 	if (ret) return ret;
 	// CTIN: the following info are hard-coded for the moment. Will be read from the concentrator...
 	//strcpy(cinfo->ModelCode, "WDT5215XAAAA");
@@ -1542,17 +1865,96 @@ int FERS_ReadConcentratorInfo(int handle, FERS_CncInfo_t* cinfo)
 	//cinfo->PCBrevision = 1;
 	//cinfo->NumLink = 8;
 	for (i = 0; i < 8; i++) {
-		ret = LLtdl_GetChainInfo(FERS_CNCINDEX(handle), i, &cinfo->ChainInfo[i]);
+		ret = LLtdl_GetChainInfo(FERS_INDEX(cnchandle), i, &cinfo->ChainInfo[i]);
 	}
 
-	if (FERS_CncInfo[FERS_CNCINDEX(handle)] == NULL) {
-		FERS_CncInfo[FERS_CNCINDEX(handle)] = (FERS_CncInfo_t*)malloc(sizeof(FERS_CncInfo_t));
+	if (FERS_CncInfo[FERS_INDEX(cnchandle)] == NULL) {
+		FERS_CncInfo[FERS_INDEX(cnchandle)] = (FERS_CncInfo_t*)malloc(sizeof(FERS_CncInfo_t));
 		FERS_TotalAllocatedMem += sizeof(FERS_CncInfo_t);
 	}
-	memcpy(FERS_CncInfo[FERS_CNCINDEX(handle)], cinfo, sizeof(FERS_CncInfo_t));
+	memcpy(FERS_CncInfo[FERS_INDEX(cnchandle)], cinfo, sizeof(FERS_CncInfo_t));
 
 	return 0;
 }
+
+int FERS_isCncMaster(int cindex) {
+	return FERS_CncInfo[cindex]->MasterSlave;
+}
+
+int FERS_GetCncInfo2(int cindex, FERS_CncInfo_t* cinfo) {
+	int cnc_index = cindex;
+	if (cnc_index < 0 || cnc_index >= FERSLIB_MAX_NCNC) {
+		return FERSLIB_ERR_INVALID_HANDLE;
+	}
+	if (FERS_CncInfo[cnc_index] == NULL)
+		return FERSLIB_ERR_GENERIC;  // Maybe should return something else
+	memcpy(cinfo, FERS_CncInfo[cnc_index], sizeof(FERS_CncInfo_t));
+	return 0;
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// Description: Functions to convert UTC time to unix Epoch time and vice versa
+// Inputs:		Time to convert
+// Outputs:		Converted time
+// Return:		0=OK, negative number = error code
+// ----------------------------------------------------------------------------------------------------------
+// Funzione multipiattaforma per ottenere epoch UTC
+static time_t my_timegm(struct tm* t) {
+#if defined(_WIN32)
+	// Windows: _mkgmtime fa quello che fa timegm su Linux
+	return _mkgmtime(t);
+#else
+	// Linux/macOS: timegm interpreta tm come UTC
+	return timegm(t);
+#endif
+}
+
+
+int FERS_ConvertUTCtoEpoch(char* UTC, uint32_t* epoch_time_s) {
+	struct tm t = { 0 };
+#ifndef _WIN32
+	// Su Linux/Unix usa strptime
+	if (strptime(UTC, "%Y-%m-%d %H:%M:%S", &t) == NULL) {
+		return FERSLIB_ERR_INVALID_PARAM_VALUE;
+	}
+#else
+	// Su Windows usa sscanf
+	if (sscanf(UTC, "%d-%d-%d %d:%d:%d",
+		&t.tm_year, &t.tm_mon, &t.tm_mday,
+		&t.tm_hour, &t.tm_min, &t.tm_sec) != 6) {
+		return FERSLIB_ERR_INVALID_PARAM_VALUE;
+	}
+	t.tm_year -= 1900;
+	t.tm_mon -= 1;
+#endif
+	t.tm_isdst = 0;
+	time_t temp = my_timegm(&t);
+	if (temp == (time_t)-1) {
+		return FERSLIB_ERR_GENERIC;
+	}
+	*epoch_time_s = (uint32_t)temp; 
+	return 0;
+}
+
+
+int FERS_ConvertEpochToUTC(uint32_t epoch_time_s, char* UTC) {
+	time_t epoch_sec = (time_t)(epoch_time_s); // <-- Conversione corretta!
+	struct tm t;
+#ifndef _WIN32
+	if (gmtime_r(&epoch_sec, &t) == NULL) {
+		return -1;
+	}
+#else
+	if (gmtime_s(&t, &epoch_sec) != 0) {
+		return -1;
+	}
+#endif
+	if (strftime(UTC, 20, "%Y-%m-%d %H:%M:%S", &t) == 0) {
+		return -1;
+	}
+	return 0;
+}
+
 
 // --------------------------------------------------------------------------------------------------------- 
 // Description: Get FPGA Die Temperature
@@ -1563,15 +1965,18 @@ int FERS_ReadConcentratorInfo(int handle, FERS_CncInfo_t* cinfo)
 int FERS_Get_FPGA_Temp(int handle, float *temp) {
 	uint32_t data;
 	int i, ret;
+	int brd = FERS_INDEX(handle);
 	for (i = 0; i < 5; i++) {
-		ret = FERS_ReadRegister(handle, a_fpga_temp, &data);
+		if(FERS_BoardInfo[brd]->FERSCode == 5204)
+			ret = FERS_ReadRegister(handle, a_fpga_temp_5204, &data);
+		else
+			ret = FERS_ReadRegister(handle, a_fpga_temp, &data);
 		*temp = (float)(((data * 503.975) / 4096) - 273.15);
 		if ((*temp > 0) && (*temp < 125)) break;
 	}
 	if (i == 5) *temp = INVALID_TEMP;
 	return ret;
 }
-
 
 
 // --------------------------------------------------------------------------------------------------------- 
@@ -1583,8 +1988,12 @@ int FERS_Get_FPGA_Temp(int handle, float *temp) {
 int FERS_Get_Board_Temp(int handle, float* temp) {
 	uint32_t data;
 	int i, ret;
+	int brd = FERS_INDEX(handle);
 	for (i = 0; i < 5; i++) {
-		ret = FERS_ReadRegister(handle, a_board_temp, &data);
+		if (FERS_BoardInfo[brd]->FERSCode == 5204)
+			ret = FERS_ReadRegister(handle, a_board_temp_5204, &data);
+		else
+			ret = FERS_ReadRegister(handle, a_board_temp, &data);
 		*temp = (float)(data / 4.);
 		if ((*temp > -20) && (*temp < 125)) break;
 	}
@@ -1602,13 +2011,18 @@ int FERS_Get_TDC0_Temp(int handle, float* temp) {
 	if (FERS_IsXROC(handle)) return FERSLIB_ERR_NOT_APPLICABLE;
 	uint32_t data;
 	int ret;
+	int brd = FERS_INDEX(handle);
 	for (int i = 0; i < 5; i++) {
-		ret = FERS_ReadRegister(handle, a_tdc0_temp, &data);
+		if (FERS_BoardInfo[brd]->FERSCode == 5204)
+			ret = FERS_ReadRegister(handle, a_tdc_temp_5204, &data);
+		else
+			ret = FERS_ReadRegister(handle, a_tdc0_temp, &data);
 		*temp = (float)(data / 4.);
 		if ((*temp > 0) && (*temp < 125)) break;
 	}
 	return ret;
 }
+
 
 // --------------------------------------------------------------------------------------------------------- 
 // Description: Get TDC1 Temperature
@@ -1627,7 +2041,6 @@ int FERS_Get_TDC1_Temp(int handle, float* temp) {
 	}
 	return ret;
 }
-
 
 
 // --------------------------------------------------------------------------------------------------------- 
@@ -1662,10 +2075,11 @@ int FERS_WritePedestals(int handle, uint16_t *PedLG, uint16_t *PedHG, uint16_t *
 	ret = FERS_WriteFlashPage(handle, pedpage, 16 + sz*2, ped);
 
 	// Update local pedestals and DC offset (used in the library)
-	memcpy(PedestalLG, PedLG, sz);
-	memcpy(PedestalHG, PedHG, sz);
+	memcpy(PedestalLG[FERS_INDEX(handle)], PedLG, sz);  //HACK DA VERIFICARE
+	memcpy(PedestalHG[FERS_INDEX(handle)], PedHG, sz);
 	return ret;
 }
+
 
 // --------------------------------------------------------------------------------------------------------- 
 // Description: Read Pedestal calibration and DC offset
@@ -1713,6 +2127,7 @@ int FERS_PedestalBackupPage(int handle, int EnBckPage)
 	PedestalBackupPage[FERS_INDEX(handle)] = EnBckPage;
 	return 0;
 }
+
 
 // --------------------------------------------------------------------------------------------------------- 
 // Description: Set a common pedestal (applied to all channels after pedestal calibration)
@@ -1832,7 +2247,7 @@ int FERS_HV_Init(int handle)
 	HVinit[FERS_INDEX(handle)] = 1;
 
 	// Set PID = 1 (for more precision)
-	FERS_HV_WriteReg(handle, 30, 2, 1);
+	ret |= FERS_HV_WriteReg(handle, 30, 2, 1);
 
 	// Set Ramp Speed = 10 V/s
 	//HV_WriteReg(handle, 3, 1, 50000);
@@ -1909,23 +2324,39 @@ int FERS_HV_Get_Status(int handle, int *OnOff, int *Ramping, int *OvC, int *OvV)
 	if (FERS_BoardInfo[FERS_INDEX(handle)]->FERSCode == (uint16_t)5203) return FERSLIB_ERR_NOT_APPLICABLE;
 	int i, ret = 0;
 	uint32_t d32;
-	if (FERS_FPGA_FW_MajorRev(handle) >= 4) {
+	if (FERS_BoardInfo[FERS_INDEX(handle)]->FERSCode == (uint16_t)5202 && FERS_FPGA_FW_MajorRev(handle) < 4) {
+		for (i = 0; i < 5; i++) {
+			ret |= FERS_HV_ReadReg(handle, 0, 2, (uint32_t*)OnOff);
+			if ((*OnOff == 0) || (*OnOff == 1)) break;
+		}
+		ret |= FERS_HV_ReadReg(handle, 32, 2, (uint32_t*)Ramping);
+		ret |= FERS_HV_ReadReg(handle, 250, 2, (uint32_t*)OvC);
+		ret |= FERS_HV_ReadReg(handle, 249, 2, (uint32_t*)OvV);
+	} else {
 		ret = FERS_ReadRegister(handle, a_hv_status, &d32);
 		*OnOff =   (d32 >> 26) & 0x1;
 		*Ramping = (d32 >> 27) & 0x1;
 		*OvC     = (d32 >> 28) & 0x1;
 		*OvV     = (d32 >> 29) & 0x1;
-	} else {
-		for (i=0; i<5; i++) {
-			ret |= FERS_HV_ReadReg(handle, 0, 2, (uint32_t *)OnOff);
-			if ((*OnOff == 0) || (*OnOff == 1)) break;
-		}
-		ret |= FERS_HV_ReadReg(handle, 32, 2, (uint32_t *)Ramping);
-		ret |= FERS_HV_ReadReg(handle, 250, 2, (uint32_t *)OvC);
-		ret |= FERS_HV_ReadReg(handle, 249, 2, (uint32_t *)OvV);
 	}
 	return ret;
 }
+
+
+// --------------------------------------------------------------------------------------------------------- 
+// Description: Get HV Firmware Version
+// Inputs:		handle = device handle
+// Outputs:		FWver = Firmware version
+// Return:		0=OK, negative number = error code
+// --------------------------------------------------------------------------------------------------------- 
+int FERS_HV_Get_FWVer(int handle, uint32_t* FWver) {
+	if (!FERS_IsXROC(handle)) return FERSLIB_ERR_NOT_APPLICABLE;
+	int ret = 0;
+	ret |= FERS_HV_ReadReg(handle, 252, 3, FWver);
+	return ret;
+}
+
+
 
 // --------------------------------------------------------------------------------------------------------- 
 // Description: Get HV Serial Number
@@ -1935,7 +2366,7 @@ int FERS_HV_Get_Status(int handle, int *OnOff, int *Ramping, int *OvC, int *OvV)
 // --------------------------------------------------------------------------------------------------------- 
 int FERS_HV_Get_SerNum(int handle, int *sernum)
 {
-	if (FERS_BoardInfo[FERS_INDEX(handle)]->FERSCode == (uint16_t)5203) return FERSLIB_ERR_NOT_APPLICABLE;
+	if (!FERS_IsXROC(handle)) return FERSLIB_ERR_NOT_APPLICABLE;
 	int ret = 0;
 	ret |= FERS_HV_ReadReg(handle, 254, 2, (uint32_t*)sernum);
 	return ret;
@@ -1949,7 +2380,7 @@ int FERS_HV_Get_SerNum(int handle, int *sernum)
 // --------------------------------------------------------------------------------------------------------- 
 int FERS_HV_Set_Vbias(int handle, float vbias)
 {
-	if (FERS_BoardInfo[FERS_INDEX(handle)]->FERSCode == (uint16_t)5203) return FERSLIB_ERR_NOT_APPLICABLE;
+	if (!FERS_IsXROC(handle)) return FERSLIB_ERR_NOT_APPLICABLE;
 	return FERS_HV_WriteReg(handle, 2, 1, (uint32_t)(vbias * 10000));
 }
 
@@ -1961,7 +2392,7 @@ int FERS_HV_Set_Vbias(int handle, float vbias)
 // --------------------------------------------------------------------------------------------------------- 
 int FERS_HV_Get_Vbias(int handle, float *vbias)
 {
-	if (FERS_BoardInfo[FERS_INDEX(handle)]->FERSCode == (uint16_t)5203) return FERSLIB_ERR_NOT_APPLICABLE;
+	if (!FERS_IsXROC(handle)) return FERSLIB_ERR_NOT_APPLICABLE;
 	uint32_t d32;
 	int ret;
 	ret = FERS_HV_ReadReg(handle, 2, 1, &d32);
@@ -1977,14 +2408,13 @@ int FERS_HV_Get_Vbias(int handle, float *vbias)
 // --------------------------------------------------------------------------------------------------------- 
 int FERS_HV_Get_Vmon(int handle, float *vmon)
 {
-	if (FERS_BoardInfo[FERS_INDEX(handle)]->FERSCode == (uint16_t)5203) return FERSLIB_ERR_NOT_APPLICABLE;
+	if (!FERS_IsXROC(handle)) return FERSLIB_ERR_NOT_APPLICABLE;
 	uint32_t d32;
 	int ret = 0;
-	if (FERS_FPGA_FW_MajorRev(handle) >= 4) {
-		ret = FERS_ReadRegister(handle, a_hv_Vmon, &d32);
-	} else {
+	if (FERS_BoardInfo[FERS_INDEX(handle)]->FERSCode == (uint16_t)5202 && FERS_FPGA_FW_MajorRev(handle) < 4) 
 		ret = FERS_HV_ReadReg(handle, 231, 1, &d32);
-	}
+	else
+		ret = FERS_ReadRegister(handle, a_hv_Vmon, &d32);
 	*vmon = (float)d32 / 10000;
 	return ret;
 }
@@ -1997,7 +2427,7 @@ int FERS_HV_Get_Vmon(int handle, float *vmon)
 // --------------------------------------------------------------------------------------------------------- 
 int FERS_HV_Set_Imax(int handle, float imax)
 {
-	if (FERS_BoardInfo[FERS_INDEX(handle)]->FERSCode == (uint16_t)5203) return FERSLIB_ERR_NOT_APPLICABLE;
+	if (!FERS_IsXROC(handle)) return FERSLIB_ERR_NOT_APPLICABLE;
 	return FERS_HV_WriteReg(handle, 5, 1, (uint32_t)(imax * 10000));
 }
 
@@ -2009,7 +2439,7 @@ int FERS_HV_Set_Imax(int handle, float imax)
 // --------------------------------------------------------------------------------------------------------- 
 int FERS_HV_Get_Imax(int handle, float *imax)
 {
-	if (FERS_BoardInfo[FERS_INDEX(handle)]->FERSCode == (uint16_t)5203) return FERSLIB_ERR_NOT_APPLICABLE;
+	if (!FERS_IsXROC(handle)) return FERSLIB_ERR_NOT_APPLICABLE;
 	uint32_t d32;
 	int ret = 0;
 	ret = FERS_HV_ReadReg(handle, 5, 1, &d32);
@@ -2025,14 +2455,13 @@ int FERS_HV_Get_Imax(int handle, float *imax)
 // --------------------------------------------------------------------------------------------------------- 
 int FERS_HV_Get_Imon(int handle, float *imon)
 {
-	if (FERS_BoardInfo[FERS_INDEX(handle)]->FERSCode == (uint16_t)5203) return FERSLIB_ERR_NOT_APPLICABLE;
+	if (!FERS_IsXROC(handle)) return FERSLIB_ERR_NOT_APPLICABLE;
 	uint32_t d32;
 	int ret = 0;
-	if (FERS_FPGA_FW_MajorRev(handle) >= 4) {
-		ret = FERS_ReadRegister(handle, a_hv_Imon, &d32);
-	} else {
+	if (FERS_BoardInfo[FERS_INDEX(handle)]->FERSCode == (uint16_t)5202 && FERS_FPGA_FW_MajorRev(handle) < 4)
 		ret = FERS_HV_ReadReg(handle, 232, 1, &d32);
-	}
+	else
+		ret = FERS_ReadRegister(handle, a_hv_Imon, &d32);
 	*imon = (d32>>31) ? 0 : (float)d32 / 10000;
 	return ret;
 }
@@ -2045,15 +2474,15 @@ int FERS_HV_Get_Imon(int handle, float *imon)
 // --------------------------------------------------------------------------------------------------------- 
 int FERS_HV_Get_IntTemp(int handle, float *temp)
 {
-	if (FERS_BoardInfo[FERS_INDEX(handle)]->FERSCode == (uint16_t)5203) return FERSLIB_ERR_NOT_APPLICABLE;
+	if (!FERS_IsXROC(handle)) return FERSLIB_ERR_NOT_APPLICABLE;
 	uint32_t d32;
 	int ret = 0;
-	if (FERS_FPGA_FW_MajorRev(handle) >= 4) {
+	if (FERS_BoardInfo[FERS_INDEX(handle)]->FERSCode == (uint16_t)5202 && FERS_FPGA_FW_MajorRev(handle) < 4){
+		ret = FERS_HV_ReadReg(handle, 228, 1, &d32);
+		*temp = (float)(d32 & 0x1FFFFF) / 10000;
+	} else {
 		ret = FERS_ReadRegister(handle, a_hv_status, &d32);
 		*temp = (float)((d32 >> 13) & 0x1FFF) * 256 / 10000;
-	} else {
-		ret = FERS_HV_ReadReg(handle, 228, 1, &d32);
-		*temp = (float)(d32 & 0x1FFFFF)/10000;
 	}
 	return ret;
 }
@@ -2066,15 +2495,15 @@ int FERS_HV_Get_IntTemp(int handle, float *temp)
 // --------------------------------------------------------------------------------------------------------- 
 int FERS_HV_Get_DetectorTemp(int handle, float *temp)
 {
-	if (FERS_BoardInfo[FERS_INDEX(handle)]->FERSCode == (uint16_t)5203) return FERSLIB_ERR_NOT_APPLICABLE;
+	if (!FERS_IsXROC(handle)) return FERSLIB_ERR_NOT_APPLICABLE;
 	uint32_t d32;
 	int ret = 0;
-	if (FERS_FPGA_FW_MajorRev(handle) >= 4) {
+	if (FERS_BoardInfo[FERS_INDEX(handle)]->FERSCode == (uint16_t)5202 && FERS_FPGA_FW_MajorRev(handle) < 4) {
+		ret = FERS_HV_ReadReg(handle, 234, 1, &d32);
+		*temp = (float)(d32 & 0x1FFFFF) / 10000;
+	} else {
 		ret = FERS_ReadRegister(handle, a_hv_status, &d32);
 		*temp = (float)(d32 & 0x1FFF) * 256 / 10000;
-	} else {
-		ret = FERS_HV_ReadReg(handle, 234, 1, &d32);
-		*temp = (float)(d32 & 0x1FFFFF)/10000;
 	}
 	return ret;
 }
@@ -2086,7 +2515,7 @@ int FERS_HV_Get_DetectorTemp(int handle, float *temp)
 // --------------------------------------------------------------------------------------------------------- 
 int FERS_HV_Set_Tsens_Coeff(int handle, float Tsens_coeff[3])
 {
-	if (FERS_BoardInfo[FERS_INDEX(handle)]->FERSCode == (uint16_t)5203) return FERSLIB_ERR_NOT_APPLICABLE;
+	if (!FERS_IsXROC(handle)) return FERSLIB_ERR_NOT_APPLICABLE;
 	int ret = 0;
 	for(int i=0; i<2; i++) {
 		ret |= FERS_HV_WriteReg(handle, 7, 1, (uint32_t)(Tsens_coeff[2] * 10000));
@@ -2103,7 +2532,7 @@ int FERS_HV_Set_Tsens_Coeff(int handle, float Tsens_coeff[3])
 // --------------------------------------------------------------------------------------------------------- 
 int FERS_HV_Set_TempFeedback(int handle, int enable, float Tsens_coeff)
 {
-	if (FERS_BoardInfo[FERS_INDEX(handle)]->FERSCode == (uint16_t)5203) return FERSLIB_ERR_NOT_APPLICABLE;
+	if (!FERS_IsXROC(handle)) return FERSLIB_ERR_NOT_APPLICABLE;
 	int ret = 0;
 	for(int i=0; i<2; i++) {
 		ret |= FERS_HV_WriteReg(handle, 28, 1, (uint32_t)(-Tsens_coeff * 10000));
@@ -2144,7 +2573,7 @@ int FERS_TDC_ReadReg(int handle, int tdc_id, uint32_t addr, uint32_t *data)
 {
 	int ret = 0;
 	int size_bit = (addr <= 0x09) ? 0 : 1;  // 0 = 8 bits, 1 = 24 bits
-	FERS_WriteRegister(handle, a_tdc_data, (size_bit << 25) | ((tdc_id & 1) << 24) | ((addr & 0xFF) << 8));
+	ret |= FERS_WriteRegister(handle, a_tdc_data, (size_bit << 25) | ((tdc_id & 1) << 24) | ((addr & 0xFF) << 8));
 	ret |= FERS_ReadRegister(handle, a_tdc_data, data);
 	return ret;
 }
@@ -2166,7 +2595,7 @@ int FERS_TDC_Config(int handle, int tdc_id, int StartSrc, int StopSrc)
 	int num_stops = 1;		// num of stops (1 to 5)
 	int cal_mode = 1;		// 0=2 periods, 1=10 periods, 2=20 periods, 3=40 periods
 
-	FERS_WriteRegister(handle, a_tdc_mode, ((StopSrc << 4) | StartSrc) << tdc_id * 8);
+	ret |= FERS_WriteRegister(handle, a_tdc_mode, ((StopSrc << 4) | StartSrc) << tdc_id * 8);
 	calib_periods = (cal_mode == 0) ? 2 : cal_mode * 10;
 	ret |= FERS_TDC_WriteReg(handle, tdc_id, 0x00, (stopEdge << 4) | (startEdge << 3) | (meas_mode << 1)); // Config1
 	ret |= FERS_TDC_WriteReg(handle, tdc_id, 0x01, (cal_mode << 6) | num_stops); // Config2
@@ -2215,6 +2644,7 @@ static int waitFlashfree(int handle)
 	uint32_t reg_add;
 	uint32_t status;
 	int8_t tout = -1;
+	int ret = 0;
 	if (FERS_CONNECTIONTYPE(handle) == FERS_CONNECTIONTYPE_TDL)
 		reg_add = FUP_BA + FUP_RESULT_REG;
 	else
@@ -2223,7 +2653,11 @@ static int waitFlashfree(int handle)
 		//Inserire qui un timeout a 5 secondi
 		if (tout >= 0)
 			Sleep(1);
-		FERS_ReadRegister(handle, reg_add, &status);
+		ret = FERS_ReadRegister(handle, reg_add, &status);
+		if (ret < 0) {
+			if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[ERROR][BRD%02d] Failed firmware upgrade: error reading flash status register\n");
+			return ret;
+		}
 		++tout;
 	} while (status != 1 && tout < 300);
 	if (tout == 300)
@@ -2438,11 +2872,12 @@ static int EraseFPGAFirmwareFlash(int handle, uint32_t size_in_byte, void(*ptr)(
 	return 0;
 }
 
+
 static int RebootFromFWuploader(int handle)
 {
-	FERS_WriteRegister(handle, a_rebootfpga, 1);
+	int ret = FERS_WriteRegister(handle, a_rebootfpga, 1);
 	Sleep(10);
-	return 0;
+	return ret;
 }
 
 
@@ -2573,7 +3008,7 @@ int FERS_FirmwareUpgrade(int handle, char filen[200], void(*ptr)(char *msg, int 
 	int board_compatibility = 0;
 	char *firmware;
 	char b0;
-	int firmware_size_byte = 0;
+	int64_t firmware_size_byte = 0;
 
 	FILE *fp = fopen(filen, "r");
 	if (fp == NULL) {
@@ -2610,7 +3045,7 @@ int FERS_FirmwareUpgrade(int handle, char filen[200], void(*ptr)(char *msg, int 
 		}
 		fclose(fp);
 		fp = fopen(filen, "rb");
-		fseek(fp, 0x40, SEEK_CUR);
+		f_fseek(fp, 0x40, SEEK_CUR);
 		char read_bit;
 		while (!feof(fp)) {	// find the last carriage of header and return byte written in the header - last byte '0x0a'
 			int fret = fread(&read_bit, sizeof(read_bit), 1, fp);
@@ -2628,7 +3063,7 @@ int FERS_FirmwareUpgrade(int handle, char filen[200], void(*ptr)(char *msg, int 
 		retfsf = FERS_GetBoardInfo(handle, &BInfo);
 		if (retfsf == 0) {
 			// NOTE: if the firmware is corrupted, then the board info cannot be read and it is not possible to check the compatibility.
-			//       Nevertheless, the upgrade cannot be skipped, otherwise it won't be possible to recover
+			//      
 			char tmpAllBrd[256] = "";
 			for (int i = 0; i < valid_board; ++i) {
 				sprintf(tmpAllBrd, "%s%" PRIu16 ",", tmpAllBrd, board_family[i]);
@@ -2646,11 +3081,11 @@ int FERS_FirmwareUpgrade(int handle, char filen[200], void(*ptr)(char *msg, int 
 			}
 		}
 	} else
-		fseek(fp, 0, SEEK_SET);	// back to the begin of the file
+		f_fseek(fp, 0, SEEK_SET);	// back to the begin of the file
 
 	FERS_LibMsg("[INFO][BRD %02d] New Firmware: Rev %s (Build %s)\n", FERS_INDEX(handle), header[2], header[3], header[4]);
 
-	int firmware_start = ftell(fp); // in case of header, this offset point to begin of the firmware anyway (0 or byte_of_header)
+	int firmware_start = f_ftell(fp); // in case of header, this offset point to begin of the firmware anyway (0 or byte_of_header)
 	// Check 1st byte (must be -1 in Xilinx .bin files)
  	int fret = fread(&b0, 1, 1, fp);
 	if (b0 != -1) {
@@ -2658,9 +3093,9 @@ int FERS_FirmwareUpgrade(int handle, char filen[200], void(*ptr)(char *msg, int 
 		return FERSLIB_ERR_INVALID_FWFILE;
 	}
 	//Get file length
-	fseek(fp, 0, SEEK_END);
-	firmware_size_byte = ftell(fp) - firmware_start; // offset in case of header
-	fseek(fp, firmware_start, SEEK_SET);
+	f_fseek(fp, 0, SEEK_END);
+	firmware_size_byte = f_ftell(fp) - firmware_start; // offset in case of header
+	f_fseek(fp, firmware_start, SEEK_SET);
 	
 	// Read file contents into buffer
 	msize = firmware_size_byte + (8192*4);
@@ -2694,7 +3129,14 @@ int FERS_FirmwareUpgrade(int handle, char filen[200], void(*ptr)(char *msg, int 
 	} else {
 		// Reboot from FWloader
 		(*ptr)("Reboot from Firmware loader\n", -1);
-		RebootFromFWuploader(handle);
+		int ret = RebootFromFWuploader(handle);
+		if (ret < 0) {
+			if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[ERROR][BRD%02d] Failed firmware upgrade: error rebooting from FW loader\n", FERS_INDEX(handle));
+			char err[1024];
+			sprintf(err, "ERROR: failed firmware upgrade: error rebooting from FW loader\n");
+			(*ptr)(err, -1);
+			return ret;
+		}
 		if (FERS_CONNECTIONTYPE(handle) == FERS_CONNECTIONTYPE_USB)
 			LLusb_StreamEnable(FERS_INDEX(handle), false);
 		FERS_FlushData(handle);
@@ -2717,9 +3159,9 @@ int FERS_FirmwareUpgrade(int handle, char filen[200], void(*ptr)(char *msg, int 
 	(*ptr)("Erasing FPGA...", -1);
 	int ret = EraseFPGAFirmwareFlash(handle, firmware_size_byte, ptr);
 	if (ret < 0) {
-		if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[ERROR][BRD%02d] Failed firmware upgrade: timeout in waitFlashFree function\n", FERS_INDEX(handle));
+		if (ENABLE_FERSLIB_LOGMSG) FERS_LibMsg("[ERROR][BRD%02d] Failed firmware upgrade: timeout in EraseFPGAFirmwareFlash function\n", FERS_INDEX(handle));
 		char err[1024];
-		sprintf(err, "ERROR: failed firmware upgrade: timeout in waitFlashFree function\n");
+		sprintf(err, "ERROR: failed firmware upgrade: timeout in EraseFPGAFirmwareFlash function\n");
 		(*ptr)(err, -1);
 		return ret;
 	}

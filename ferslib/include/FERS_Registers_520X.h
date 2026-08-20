@@ -55,6 +55,7 @@
 #define a_acq_status       0x01000304   //!< Acquisition Status
 #define a_real_time        0x01000308   //!< Real Time in ms
 #define a_dead_time        0x01000310   //!< Dead Time in ms
+#define a_board_temp       0x01000340	//!< Board Temp
 #define a_fpga_temp        0x01000348   //!< FPGA die Temperature 
 #define a_pid              0x01000400	//!< PID
 #define a_pcb_rev          0x01000404	//!< PCB revision
@@ -140,7 +141,6 @@
 #define a_rej_trg_cnt      0x0100031C   //!< Rejected Trigger counter
 #define a_zs_trg_cnt       0x01000320   //!< Zero Suppressed Trigger counter
 #define a_clk_out_phase    0x01000330   //!< Phase between TDC clock and FPGA clock (0x0000 = 0 deg; 0xFFFF = 180 deg)
-#define a_board_temp       0x01000340	//!< Board Temp
 #define a_tdc0_temp		   0x01000354	//!< TDC0 Temperature
 #define a_tdc1_temp		   0x01000358	//!< TDC1 Temperature
 #define a_spi_data         0x01000224   //!< SPI R/W data (for Flash Memory access)
@@ -150,6 +150,9 @@
 // *****************************************************************
 #define a_tlogic_mask_0    0x01000140	//!< Trigger FPGA-Tlogic mask (in A5202 it corresponds to a_tdiscr_mask_0)
 #define a_tlogic_mask_1    0x01000144	//!< Trigger FPGA-Tlogic mask (in A5202 it corresponds to a_tdiscr_mask_1)
+#define a_fpga_temp_5204   0x01000450	//!< FPGA die Temperature
+#define a_board_temp_5204  0x01000454	//!< Board temperature near PIC/FPGA 
+#define a_tdc_temp_5204    0x01000458	//!< Board temperature near TDC0
 
 /*! @} */
 
@@ -181,6 +184,11 @@
 // *****************************************************************
 // FPGA Commands
 // *****************************************************************
+/*!
+* @ingroup FERS_Commands
+* @brief FERS board commands
+* @{
+*/
 #define CMD_TIME_RESET     0x11  //!< Absolute Time reset
 #define CMD_ACQ_START      0x12  //!< Start acquisition
 #define CMD_ACQ_STOP       0x13  //!< Stop acquisition
@@ -195,8 +203,8 @@
 #define CMD_TDL_SYNC	   0x1C  //!< Sync signal from TDL
 #define CMD_USE_ICLK	   0x1E  //!< Use internal CLK for FPGA
 #define CMD_USE_ECLK	   0x1F  //!< Use external CLK for FPGA
-#define CMD_CFG_ASIC	   0x20  //!< Configure ASIC (load shift register)
-
+#define CMD_CFG_ASIC	   0x20  //!< Configure ASIC (load shift register). If used, refer to FERS_configure_5202.c, at @snippet FERS_configure_5202.c SetCitiroc
+/*! @} */
 
 // ############################################################################################
 // CITIROC REGISTERS
@@ -261,9 +269,6 @@
 
 #define FAST_SHAPER_INPUT_HGPA			0
 #define FAST_SHAPER_INPUT_LGPA			1
-
-
-
 
 // ############################################################################################
 // RADIOROC REGISTERS

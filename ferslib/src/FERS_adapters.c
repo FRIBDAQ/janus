@@ -228,7 +228,7 @@ int FERS_Set_DiscrThreshold(int handle, int Adapter_ch, float thr_mv, int brd)
 
 	if (FERScfg[brd]->AdapterType == ADAPTER_NONE)
 		return 0;
-	if (Adapter_ch >= nch)
+	if (Adapter_ch >= (nch-1))
 		return -1;
 
 	b = FERS_INDEX(handle);
@@ -551,13 +551,14 @@ int FERS_CalibThresholdOffset(int handle, float min_thr, float max_thr, int *don
 //				ThrOffset = Threshold offsets (use NULL pointer to keep old values)
 // Return:		0=OK, negative number = error code
 // --------------------------------------------------------------------------------------------------------- 
-int FERS_WriteThrCalib(int handle, int npts, int MemThrDest,float *ThrOffset)
+int FERS_WriteThrCalib(int handle, int npts, int MemThrDest, float *ThrOffset)
 {
 	int ret, sz=0;
 	uint8_t cal[FLASH_PAGE_SIZE];
 	time_t t = time(NULL);
 	struct tm tm = *localtime(&t);
 	int calpage = FLASH_THR_OFFS_PAGE;
+	int oversize = 0;
 
 	cal[0] = 'T';	// Tag
 	cal[1] = 0;		// Format
@@ -565,14 +566,36 @@ int FERS_WriteThrCalib(int handle, int npts, int MemThrDest,float *ThrOffset)
 	cal[4] = (uint8_t)(tm.tm_mon + 1);
 	cal[5] = (uint8_t)(tm.tm_mday);
 	cal[6] = (uint8_t)(npts);
-	if (ThrOffset != NULL) memcpy(cal + 7, ThrOffset, sz);
 
-	if (MemThrDest == A5256_EEPROM)	//eeprom present
+	if (npts * sizeof(float) > EEPROM_CAL_SIZE - 7) oversize = 1;
+	sz = npts * sizeof(float);
+	if (sz > (EEPROM_CAL_SIZE - 7)) oversize = 1;
+	
+	if (ThrOffset == NULL) {
+		FERS_LibMsg("[WARNING][BRD %02d] No data provided for threshold offsets. Old values will be kept (if present)\n", FERS_INDEX(handle));
+		_setLastLocalError("No data provided for threshold offsets. Old values will be kept (if present)\n");
+		return FERSLIB_ERR_OPER_NOT_ALLOWED;
+	}
+	
+	if (ThrOffset != NULL) memcpy(cal + 7, ThrOffset, sz);
+	
+	if (MemThrDest == A5256_EEPROM) {//eeprom present
+		if (oversize) {
+			FERS_LibMsg("[ERROR][BRD %02d] Size to write in EEPROM exceeds limit (nPts=%d, MAX npts=%d)\n", FERS_INDEX(handle), npts, (EEPROM_CAL_SIZE - 7) / sizeof(float));
+			_setLastLocalError("Size to write in EEPROM exceeds limit (nPts=%d, MAX npts=%d)\n", npts, (EEPROM_CAL_SIZE - 7) / sizeof(float));
+			return FERSLIB_ERR_OPER_NOT_ALLOWED;
+		}
 		ret = FERS_WriteEEPROMBlock(handle, EEPROM_CAL_PAGE, 7 + sz, cal);
-	else
+	} else {
+		if (oversize) {
+			FERS_LibMsg("[ERROR][BRD %02d] Size to write in flash exceeds the size limit (nPts=%d, MAX npts=%d)\n", FERS_INDEX(handle), npts, (EEPROM_CAL_SIZE - 7) / sizeof(float));
+			_setLastLocalError("Size to write in flash exceeds the size limit (nPts=%d, MAX npts=%d)\n", npts, (EEPROM_CAL_SIZE - 7) / sizeof(float));
+			return FERSLIB_ERR_OPER_NOT_ALLOWED;
+		}
 		ret = FERS_WriteFlashPage(handle, calpage, 7 + sz, cal);
+	}
 	// Update local variables
-	memcpy(CalibratedThrOffset, ThrOffset, sz);
+	memcpy(CalibratedThrOffset[FERS_INDEX(handle)], ThrOffset, sz);
 	ThrCalibLoaded[FERS_INDEX(handle)] = 1;
 	return ret;
 }

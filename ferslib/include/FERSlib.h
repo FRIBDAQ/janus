@@ -18,10 +18,9 @@
 *	\brief		CAEN FERS Library
 *	\author		Daniele Ninci, Carlo Tintori
 * 
-*	@version 1.2.0
-*	@date 06/05/2025
+*	@version 2.2.0
+*	@date 11/06/2026
 ********************************************************************************/
-
 /*!
  * @file FERSlib.h
  * @brief CAEN FERS Library
@@ -93,6 +92,11 @@
  * @brief FERS configuration registers
  */
 
+ /*!
+  * @defgroup FERS_Commands FERS 520X Board commands
+  * @brief FERS board commands
+  */
+
 /*! 
  * @defgroup Macros Macros
  * @brief Common macros
@@ -109,14 +113,18 @@
  * @brief Macros to define the library version.
  * @{
  */
-#define FERSLIB_VERSION_MAJOR			1
+#define FERSLIB_VERSION_MAJOR			2
 #define FERSLIB_VERSION_MINOR			2
-#define FERSLIB_VERSION_PATCH			0
+#define FERSLIB_VERSION_PATCH			1
+
 #define FERSLIB_RELEASE_NUM				(FERSLIB_VERSION_MAJOR * 10000) + (FERSLIB_VERSION_MINOR * 100) + (FERSLIB_VERSION_PATCH)	/*!< Library release version (int) */
 #define FERSLIB_RELEASE_STRING			FERSLIB_STR(FERSLIB_VERSION_MAJOR) "." FERSLIB_STR(FERSLIB_VERSION_MINOR) "." FERSLIB_STR(FERSLIB_VERSION_PATCH) /*!<Library release version (string) */
-#define FERSLIB_RELEASE_DATE			"06/06/2025"
-/*! @} */
+#define FERSLIB_RELEASE_DATE			"21/07/2026"
 
+#define FERSLIB_RAWDATA_VERSION_MAJOR		2
+#define FERSLIB_RAWDATA_VERSION_MINOR		0
+#define FERSLIB_RAWDATA_VERSION				FERSLIB_STR(FERSLIB_RAWDATA_VERSION_MAJOR) "." FERSLIB_STR(FERSLIB_RAWDATA_VERSION_MINOR) /*!< Raw data format version */
+/*! @} */
 #define THROUGHPUT_METER			0		///< Must be 0 in normal operation (can be used to test the data throughput in different points of the readout process)
 
 #define INVALID_TEMP				999		///< Invalid temperature 
@@ -154,6 +162,7 @@
 #define	DBLOG_LL_READDUMP		 0x0040	/*!< Enable low level read data to dump raw data (from usb, eth and tdl) into a text file */
 #define	DBLOG_PARAMS			 0x0080	/*!< Enable dump of Board Parameters */
 #define	DBLOG_CONFIG			 0x0100	/*!< Enable dump of Board Configuration */
+#define DBLOG_WRITEREG			 0x0200	/*!< Enable write register log */
 #define	ENABLE_FERSLIB_LOGMSG	 1		/*!< Force the dump of FERSlib log message*/
 /*! @} */
 
@@ -222,19 +231,19 @@ typedef enum {
 * @brief Acquisition modes
 * @{
 */
-#define	ACQMODE_SPECT			  0x01	/*!< Spectroscopy Mode (Energy) */
-#define	ACQMODE_TSPECT			  0x03	/*!< Spectroscopy + Timing Mode (Energy + Tstamp) */
-#define	ACQMODE_TIMING_CSTART	  0x02	/*!< Timing Mode - Common Start (List) XROC */
-#define	ACQMODE_TIMING_GATED      0x02	/*!< Timing Mode - Gated XROC */
-#define	ACQMODE_TIMING_CSTOP	  0x12	/*!< Timing Mode - Common Stop (List) XROC */
-#define	ACQMODE_TIMING_STREAMING  0x22  /*!< Timing Mode - Streaming (List) XROC */
-#define	ACQMODE_COMMON_START	  0x02	/*!< Timing Mode - Common Start (List) 5203 */
-#define	ACQMODE_COMMON_STOP		  0x12	/*!< Timing Mode - Common Stop (List) 5203 */
-#define	ACQMODE_STREAMING		  0x22	/*!< Timing Mode - Streaming (List) 5203 */
-#define	ACQMODE_TRG_MATCHING	  0x32	/*!< Timing Mode - Trigger Matching (List) 5203 */
-#define	ACQMODE_TEST_MODE		  0x01	/*!< Test Mode - (Common start, List) 5203 */
-#define	ACQMODE_COUNT			  0x04	/*!< Counting Mode (MCS) */
-#define	ACQMODE_WAVE			  0x08	/*!< Waveform Mode */
+#define	ACQMODE_SPECT				0x01	/*!< Spectroscopy Mode (Energy) */
+#define	ACQMODE_TSPECT				0x03	/*!< Spectroscopy + Timing Mode (Energy + Tstamp) */
+#define	ACQMODE_TIMING_CSTART		0x02	/*!< Timing Mode - Common Start (List) XROC */
+#define	ACQMODE_TIMING_CSTOP		0x12	/*!< Timing Mode - Common Stop (List) XROC */
+#define	ACQMODE_TIMING_STREAMING	0x22	/*!< Timing Mode - Streaming (List) XROC */
+#define	ACQMODE_TIMING_TRG_MATCHING	0x02	/*!< Timing Mode - Gated XROC */
+#define	ACQMODE_COMMON_START		0x02	/*!< Timing Mode - Common Start (List) 5203 */
+#define	ACQMODE_COMMON_STOP			0x12	/*!< Timing Mode - Common Stop (List) 5203 */
+#define	ACQMODE_STREAMING			0x22	/*!< Timing Mode - Streaming (List) 5203 */
+#define	ACQMODE_TRG_MATCHING		0x32	/*!< Timing Mode - Trigger Matching (List) 5203 */
+#define	ACQMODE_TEST_MODE			0x01	/*!< Test Mode - (Common start, List) 5203 */
+#define	ACQMODE_COUNT				0x04	/*!< Counting Mode (MCS) */
+#define	ACQMODE_WAVE				0x08	/*!< Waveform Mode */
 /*! @} */
 
 /*!
@@ -309,10 +318,21 @@ typedef enum {
 
 /*!
 * @ingroup Macros
+* @defgroup TDC_CONST_XROC TDC constants in XROC boards
+* @brief Configuration contants for TDC operations in XROC boards (5204, 5205, etc...)
+* @{
+*/
+#define TDC_XROC_CLK_PERIOD			(CLK_PERIOD_5204*2)					/*!< TDC clock period in ns */
+#define TDC_XROC_LSB_ps				(TDC_XROC_CLK_PERIOD / 8 / 0.256)	/*!< TDC LSB in ps. Low resolution mode */
+/*! @} */
+// ---------------------
+
+/*!
+* @ingroup Macros
 * @brief Readout constants
 */
 #define MAX_WAVEFORM_LENGTH			2048	/*!< Maximum waveform length */
-#define MAX_LIST_SIZE				2048	/*!< Maximum hits list size */
+#define MAX_LIST_SIZE				1024	/*!< Maximum hits list size */
 #define MAX_TEST_NWORDS				4		/*!< Maximum number of words in test event (5203) */
 #define MAX_SERV_NWORDS				6		/*!< Max number of words in service event */
 
@@ -327,6 +347,7 @@ typedef enum {
 #define MEASMODE_LEAD_TRAIL			0x03	/*!< Leading and trailing edges mode */
 #define MEASMODE_LEAD_TOT8			0x05	/*!< Leading edge + ToT 8 bits mode */
 #define MEASMODE_LEAD_TOT11			0x09	/*!< Leading edge + ToT 11 bits mode */
+#define MEASMODE_LEAD_TOT			0x11	/*!< Leading and trailing edges mode; Trailing used to calculate ToT in SW, then suppressed */
 #define MEASMODE_OWLT(m)			(((m) == MEASMODE_LEAD_TOT8) || ((m) == MEASMODE_LEAD_TOT11))  /*! True if TDC MeasMode includes ToT */
 /*! @} */
 
@@ -340,10 +361,29 @@ typedef enum {
 */
 typedef enum {
 	STARTRUN_ASYNC = 0,	/*!< Run start sent to each board individually */
-	STARTRUN_CHAIN_T0 = 1,	/*!< Run start sent to board 0 and propagate in daisy chain through T0-out/T0-in */
-	STARTRUN_CHAIN_T1 = 2,	/*!< Run start sent to board 0 and propagate in daisy chain through T1-out-T1-in */
-	STARTRUN_TDL = 3,	/*!< Run start sent thorugh concentrator to all board in sync */
+	STARTRUN_TDL = 0x11,				/*!< Run start sent thorugh concentrator to all its board in sync and eventually propagate to cnc slaves */
+	STARTRUN_TDL_EXTRUN = 0x12,			/*!< Run start sent from external source (e.g. CNC LEMO) and eventually propagate to cnc slaves. The system is armed */
+	STARTRUN_TDL_EXTRUN_EXTCLK = 0x13,	/*!< Run start sent from external source, same for the cnc clock */
+	STARTRUN_TDL_EXTCLK = 0x14,			/*!< Run start sent to through concentrator, concentrator clock from external source*/
+	STARTRUN_TDL_GPS = 0x16,			/*!< Run start sent from GPS PPS signal */
+	STARTRUN_CHAIN_T0 = 4,				/*!< Run start sent to board 0 and propagate in daisy chain through T0-out/T0-in */
+	STARTRUN_CHAIN_T1 = 5				/*!< Run start sent to board 0 and propagate in daisy chain through T1-out-T1-in */
 } FERSLIB_StartMode;
+
+/*!
+* @ingroup FERSlib_Enum
+* @brief External source for start run signal
+* 
+*/
+typedef enum {
+	EXTRUN_SYNCIN = VR_IO_CMD_SYNC_B,	/*!< Start run signal from CNC SyncIn  */
+	EXTRUN_LEMORA = VR_IO_CMD_R_A,		/*!< Start run signal from CNC LEMO RA */
+	EXTRUN_LEMORB = VR_IO_CMD_R_B,		/*!< Start run signal from CNC LEMO RB */
+	EXTRUN_LEMOFA = VR_IO_CMD_F_A,		/*!< Start run signal from CNC LEMO FA */
+	EXTRUN_LEMOFB = VR_IO_CMD_F_B,		/*!< Start run signal from CNC LEMO FB */
+	EXTRUN_GPS	= VR_IO_CMD_GPS_PULSE// GPS_PPS		/*!< Start run signal from CNC GPS/PPS */
+} FERSLIB_ExtRunSource;
+
 
 #define	STOPRUN_MANUAL			0	/*!< Janus parameter */
 #define	STOPRUN_PRESET_TIME		1	/*!< Janus parameter */
@@ -365,7 +405,7 @@ typedef enum {
 #define ENERGY_NBIT					14	/*!< Max nbits for PHA (5202) */
 #define TOA_NBIT					16	/*!< Max nbits for ToA (5202) */
 #define TOA_LSB_ns					0.5 /*!< LSB value of ToA in ns (5202) */
-#define TOT_NBIT					9   /*!< Max #bits for ToT (5202) */
+#define TOT_NBIT					9   /*!< Max num of bits for ToT (5202) */
 
 
 // Parameter Options
@@ -469,16 +509,20 @@ typedef enum {
 
 /*!
 * @ingroup Macros
+* @defgroup CFGMODE Configuration Modes
 * @brief Configuration Mode
+* @{
 */
 #define CFG_HARD	0	/*!< reset + configure (acq must be restarted) */
 #define CFG_SOFT	1	/*!< runtime reconfigure params (no restart required) */
+/*! @} */
+
 
 // Other macros
 /*!
 * @ingroup Macros
 * @defgroup mM Min/Max
-* @brief Re-define of Max and min
+* @brief Re-define of Max and min11
 * @{
 */
 #ifndef max
@@ -521,6 +565,7 @@ typedef struct {
 	char FPGA_FWrev[20];	//!< FPGA FW revision 
 	char SW_rev[20];		//!< Software Revision (embedded ARM)
 	char MACaddr_10GbE[20];	//!< MAC address of 10 GbE
+	uint8_t MasterSlave;		//!< Master = 1, Slave = 0
 	uint16_t NumLink;		//!< Number of links
 	FERS_TDL_ChainInfo_t ChainInfo[8];	//!< TDL Chain info
 } FERS_CncInfo_t;
@@ -571,6 +616,8 @@ typedef struct {
 typedef struct {
 	double tstamp_us;		//!< Timestamp in us
 	double rel_tstamp_us;	//!< Relative timestamp in us, reset by Tref
+	uint64_t tstamp_clk;	//!< Timestamp in LSB
+	uint32_t Tref_tstamp;	//!< Timestamp of reference time signal	
 	uint64_t trigger_id;	//!< Trigger ID
 	uint64_t chmask;		//!< Channel Mask
 	uint64_t qdmask;		//!< QD Mask
@@ -594,6 +641,21 @@ typedef struct {
 	uint32_t t_or_counts;	//!< T-OR counts
 	uint32_t q_or_counts;	//!< Q-OR counts
 } CountingEvent_t;
+
+// Counting Event
+/*!
+ * @brief Counting Event data structure for A5204
+ * @ingroup FERSlib_DStructs
+ */
+typedef struct {
+	double tstamp_us;		//!< Timestamp in us
+	double rel_tstamp_us;	//!< Relative timestamp in us, reset by Tref
+	uint64_t trigger_id;	//!< Trigger ID
+	uint64_t chmask;		//!< Channel Mask from zero suppression
+	uint32_t counts[64];	//!< Counts per channel
+	uint32_t t1_or_counts;	//!< T1-OR counts
+	uint32_t t2_or_counts;	//!< T2-OR counts
+} CountingEvent_5204_t;
 
 // Waveform Event
 /*!
@@ -631,6 +693,22 @@ typedef struct {
 } ListEvent_t; // 5202 + 5203
 
 /*!
+ * @brief List Event data structure for timing mode (for 5204)
+ * @ingroup FERSlib_DStructs
+ */
+typedef struct {
+	double tstamp_us;		//!< Timestamp in microseconds
+	uint64_t tstamp_clk;	//!< Timestamp in LSB
+	uint64_t trigger_id;	//!< Trigger ID
+	uint16_t nhits;			//!< Number of hits
+	uint64_t ch_flags;		//!< ch Flags
+	uint32_t gr_flags;		//!< group Flags
+	uint8_t  channel[MAX_LIST_SIZE];	//!< List of channels
+	uint32_t ToA[MAX_LIST_SIZE];		//!< List of ToA in LSB
+	uint16_t ToT[MAX_LIST_SIZE];		//!< List of ToT in LSB
+} ListEvent_5204_t; // 5204
+
+/*!
  * @brief Service Event data structure, common to all FERS module
  * @ingroup FERSlib_DStructs
  */
@@ -640,9 +718,11 @@ typedef struct {
 	uint16_t pkt_size;			//!< Event size
 	uint8_t version;			//!< Service event version
 	uint8_t format;				//!< Event Format
-	uint32_t ch_trg_cnt[FERSLIB_MAX_NCH_5202];  // Channel trigger counts 
-	uint32_t q_or_cnt;			//!< Q-OR counts value
-	uint32_t t_or_cnt;			//!< T-OR counts value
+	uint32_t ch_trg_cnt[FERSLIB_MAX_NCH_5202];  //!< Channel trigger counts 
+	uint32_t q_or_cnt;			//!< Q-OR counts value (5202)
+	uint32_t t_or_cnt;			//!< T-OR counts value (5202)
+	uint32_t t1_or_cnt;			//!< T1-OR counts value (5204)
+	uint32_t t2_or_cnt;			//!< T2-OR counts value (5204)
 	float tempFPGA;				//!< FPGA core temperature 
 	float tempBoard;			//!< Board temperature (near uC PIC)
 	float tempTDC[2];			//!< Temperature of TDC0 and TDC1
@@ -661,7 +741,50 @@ typedef struct {
 	uint32_t TotTrg_cnt;		//!< Total triggers counter
 	uint32_t RejTrg_cnt;		//!< Rejected triggers counter
 	uint32_t SupprTrg_cnt;		//!< Zero suppressed triggers counter
-} ServEvent_t; // 5202 + 5203
+} ServEvent5204_t; // 5202 + 5203
+
+
+typedef struct {
+	double tstamp_us;			//!< Time stamp of service event
+	uint64_t update_time;		//!< Update time (epoch, ms)
+	uint16_t pkt_size;			//!< Event size
+	uint8_t version;			//!< Service event version
+	uint8_t format;				//!< Event Format
+	uint32_t ch_trg_cnt[FERSLIB_MAX_NCH_5202];  //!< Channel trigger counts    
+	uint32_t q_or_cnt;			//!< Q-OR counts value
+	uint32_t t_or_cnt;			//!< T-OR counts value
+	float tempFPGA;				//!< FPGA core temperature
+	float tempBoard;			//!< Board temperature (near uC PIC)
+	float tempHV;				//!< High-voltage module temperature
+	float tempDetector;			//!< Detector temperature (referred to ?)
+	float hv_Vmon;				//!< HV voltage monitor
+	float hv_Imon;				//!< HV current monitor
+	uint8_t hv_status_on;		//!< HV status ON/OFF
+	uint8_t hv_status_ramp;		//!< HV ramp status
+	uint8_t hv_status_ovv;		//!< HV over-voltage status
+	uint8_t hv_status_ovc;		//!< HV over-current status
+	uint16_t Status;			//!< Status Register
+} ServEvent5202_t;
+
+
+typedef struct {
+	double tstamp_us;			//!< Time stamp of service event
+	uint64_t update_time;		//!< Update time (epoch, ms)
+	uint16_t pkt_size;			//!< Event size
+	//uint8_t version;			//!< Service event version
+	uint8_t format;				//!< Event Format
+	uint32_t ch_trg_cnt[FERSLIB_MAX_NCH_5202];  //!< Channel trigger counts 
+	float tempFPGA;				//!< FPGA core temperature 
+	float tempBoard;			//!< Board temperature (near uC PIC)
+	float tempTDC[2];			//!< Temperature of TDC0 and TDC1
+	uint16_t Status;			//!< Status Register
+	uint16_t TDCROStatus;		//!< TDC Readout Status Register
+	uint64_t ChAlmFullFlags[2];	//!< Channel Almost Full flag (from picoTDC)
+	uint32_t ReadoutFlags;		//!< Readout Flags from picoTDC and FPGA
+	uint32_t TotTrg_cnt;		//!< Total triggers counter
+	uint32_t RejTrg_cnt;		//!< Rejected triggers counter
+	uint32_t SupprTrg_cnt;		//!< Zero suppressed triggers counter
+} ServEvent5203_t;
 
 
 // Test Mode Event (fixed data patterns)
@@ -729,7 +852,7 @@ extern "C" {
 	extern int FERS_RunningCnt;									//!< Number of boards currently running
 	extern int FERS_ReadoutStatus;								//!< Status of the readout processes (idle, running, flushing, etc...)
 	extern int FERS_TotalAllocatedMem;							//!< Total allocated memory for library in byte 
-	extern int DebugLogs;										//!< Level of debug logs to be generated
+	extern uint32_t DebugLogs;										//!< Level of debug logs to be generated
 
 	//extern mutex_t FERS_mutex;									//!< Mutex for access to shared resources (FERScfg, InitBuffers ...)
 	/*! 
@@ -743,8 +866,7 @@ extern "C" {
 	* @defgroup Functions API
 	* @brief FERSlib Application programmin interface
 	*/
-	
-	CAEN_FERS_DLLAPI int ConfigureProbe(int handle);
+		CAEN_FERS_DLLAPI int ConfigureProbe(int handle);
 
 	// -----------------------------------------------------------------
 	// Get FERSlib info
@@ -801,56 +923,48 @@ extern "C" {
 	// -----------------------------------------------------------------
 	// DNIN: Is it better to have an API to enable both RawData and LimitFileSize
 	//		 and then do the open directly inside the StartAcquisition?
-	///*!
-	//* @ingroup Functions
-	//* @defgroup RawData RawData Saving/Loading
-	//*/
-	///*!
-	// * @brief   Enable the rawdata file saving and set default file name
-	// * @param[in] RawDataEnable		bool to activate rawdata file saving
-	// * @param[in] DataOutputPath	path where rawdata will be saved
-	// * @param[in] RunNumber			number of the current run
-	// * @return						0
-	// * @ingroup RawData
-	//*/
+
 	//CAEN_FERS_DLLAPI int FERS_EnableRawdataWriteFile(uint8_t RawDataEnable, char* DataOutputPath, int RunNumber);
 
-	///*!
-	// * @brief   Enable and set the size limit for rawdata file
-	// * @param[in] LimitSizeEnable		Flag to enable the size limit
-	// * @param[in] MaxSizeRawOutputFile	Maximum size of output file
-	// * @return	 0
-	// * @ingroup RawData
-	//*/
 	//CAEN_FERS_DLLAPI int FERS_EnableLimitRawdataFileSize(uint8_t LimitSizeEnable, float MaxSizeRawOutputFile);
 
 	//CAEN_FERS_DLLAPI int FERS_SetRawdataReadFile(char DataRawFilePath[500], int brd);
 
 	/*!
+	 * @ingroup Functions
+	 * @defgroup RawData RawData Saving/Loading
+	*/
+
+	/*!
 	 * @brief   Open raw data file, to be done before starting the run
 	 * @param[in] *handle		pointer to the handles array
 	 * @param[in] RunNum		number of the starting run
+	 * @param[in] NumBrd		number of raw data file to open
 	 * @return					0 
 	 * @ingroup RawData
 	*/
-	CAEN_FERS_DLLAPI int FERS_OpenRawDataFile(int* handle, int RunNum);
+	CAEN_FERS_DLLAPI int FERS_OpenRawDataFile(int* handle, int RunNum, int NumBrd);
 
 	/*!
      * @brief   Close raw data file after run stops
      * @param[in] *handle		pointer to the board handles array
+	 * @param[in] NumBrd		number of raw data file to close
      * @return					0
      * @ingroup RawData
     */
-	CAEN_FERS_DLLAPI int FERS_CloseRawDataFile(int* handle);
+	CAEN_FERS_DLLAPI int FERS_CloseRawDataFile(int* handle, int NumBrd);
 	
 	/*!
 	* @brief	Get the clock of the FERS board
-	* @parma[in] handle		board handle
+	* @param[in] handle		board handle
 	* return				Clock period in ns
 	* @ingroup	OC
 	*/
 	CAEN_FERS_DLLAPI float FERS_GetClockPeriod(int handle);
 	//CAEN_FERS_DLLAPI int FERS_SetPedestalOffline(uint16_t PedLG[FERSLIB_MAX_NCH_5202], uint16_t PedHG[FERSLIB_MAX_NCH_5202], int handle);
+	
+	CAEN_FERS_DLLAPI int FERS_ConvertUTCtoEpoch(char* UTC, uint32_t* epoch_time_s);
+	CAEN_FERS_DLLAPI int FERS_ConvertEpochToUTC(uint32_t epoch_time_s, char* UTC);
 	
 	// -----------------------------------------------------------------
 	// Open/Close
@@ -859,7 +973,6 @@ extern "C" {
 	* @ingroup Functions
 	* @defgroup OC Open/Close
 	*/
-
 	/*!
 	 * @brief   Open a device (either FERS board, concentrator or offline)
 	 * @param[in] path				device path (e.g. eth:192.168.50.125:tdl:0:0)
@@ -867,15 +980,25 @@ extern "C" {
 	 * @return						0 in case of success, or a negative error code specified in #FERSLIB_ErrorCodes
 	 * @ingroup OC
 	*/
-	CAEN_FERS_DLLAPI int FERS_OpenDevice(char* path, int* handle);
+	CAEN_FERS_DLLAPI int FERS_OpenDevice(const char* path, int* handle);
+	CAEN_FERS_DLLAPI int FERS_OpenBoard(const char* path, int* handle);
 
 	/*!
      * @brief   Check if a device is already opened
      * @param[in] *path				path to be checked
-     * @return						0 in case of success, or a negative error code specified in #FERSLIB_ErrorCodes
+     * @return						1 if connected, 0 if not connected
      * @ingroup OC
     */
 	CAEN_FERS_DLLAPI int FERS_IsOpen(char* path);
+
+	/*!
+	 * @brief		Check if a device is already opened, with handle
+	 * @param[in] handle			device handle
+	 * @param[in] *path				path to be checked
+	 * @return						1 if connected, 0 if not connected
+	 * @ingroup OC
+	*/
+	CAEN_FERS_DLLAPI int FERS_IsOpenByHandle(int handle, char* path);
 
 	/*!
      * @brief   Cloase a device (either FERS board or concentrator)
@@ -910,12 +1033,22 @@ extern "C" {
 	CAEN_FERS_DLLAPI int FERS_Get_CncPath(char* dev_path, char* cnc_path);
 
 	/*!
-     * @brief   Send a sync broadcast command via TDL 
+     * @brief						Enumerate TDL chains 
      * @param[in] handle			concentrator handel
+	 * @param[in] DelayAdjust		array with delay adjustments for each TDL chain and node
      * @return						0 in case of success, or a negative error code specified in #FERSLIB_ErrorCodes
      * @ingroup OC
     */
-	CAEN_FERS_DLLAPI int FERS_InitTDLchains(int handle, float DelayAdjust[FERSLIB_MAX_NTDL][FERSLIB_MAX_NNODES]);
+	CAEN_FERS_DLLAPI int FERS_EnumTDLchains(int handle, float DelayAdjust[FERSLIB_MAX_NTDL][FERSLIB_MAX_NNODES]);
+
+	/*!
+	 * @brief						Send synchronization commands to TDL chains and set nodes fibers delay
+	 * @param[in] *cnchandle		pointer to concentrator handle
+	 * @param[in] StartRunMode		Start run mode
+	 * @return						0 in case of success, or a negative error code specified in #FERSLIB_ErrorCodes
+	 * @ingroup OC
+	 */
+	CAEN_FERS_DLLAPI int FERS_SyncTDLchains(int *cnchandle, uint32_t StartRunMode);
 
 	/*!
      * @brief   Check if TDL chains are initialized
@@ -923,7 +1056,7 @@ extern "C" {
      * @return						0 in case of success, or a negative error code specified in #FERSLIB_ErrorCodes
      * @ingroup OC
     */
-	CAEN_FERS_DLLAPI bool FERS_TDLchainsInitialized(int handle);
+	CAEN_FERS_DLLAPI bool FERS_TDLchainsInitialized(int cnchandle);
 
 	//CAEN_FERS_DLLAPI int FERS_SetOffline(int offline);
 	//CAEN_FERS_DLLAPI int FERS_SetBoardInfo(FERS_BoardInfo_t* BrdInfo, int b);
@@ -992,7 +1125,7 @@ extern "C" {
 	CAEN_FERS_DLLAPI int FERS_SendCommand(int handle, uint32_t cmd);
 
 	/*!
-	 * @brief						Send a broadcast command to multiple boards connected to a concentrator
+	 * @brief						Send a synchornus broadcast command to multiple boards connected to a single concentrator
 	 * 
 	 * @param[in] handle			device handles of all the board that should receive the command
 	 * @param[in] cmd				command opcode
@@ -1001,6 +1134,43 @@ extern "C" {
 	 * @ingroup RW
 	*/
 	CAEN_FERS_DLLAPI int FERS_SendCommandBroadcast(int* handle, uint32_t cmd, uint32_t delay);
+
+	/*!
+	 * @brief						Send a synchronus command broadcast to multiple boards connected to one or more concentrators
+	 *
+	 * @param[in] handle			device handles of all the board that should receive the command
+	 * @param[in] cmd				command opcode
+	 * @param[in] delay				execution delay (0 for automatic)
+	 * @return						0 in case of success, or a negative error code specified in #FERSLIB_ErrorCodes
+	 * @ingroup RW
+	*/
+	CAEN_FERS_DLLAPI int FERS_SendDCommandBroadcast(int *cnchandle, uint32_t cmd, uint32_t delay);
+
+	/*!
+	 * @brief						Send a command broadcast to multiple boards connected to concentrator.
+	 *								The execution is triggered by an external signla as input in concentrator.
+	 *								Mainly used for send start acquisition command
+	 *
+	 * @param[in] cnchandle			concentrator handle
+	 * @param[in] cmd				command opcode
+	 * @param[in] delay				execution delay (0 for automatic)
+	 * @return						0 in case of success, or a negative error code specified in #FERSLIB_ErrorCodes
+	 * @ingroup RW
+	*/ 
+	CAEN_FERS_DLLAPI int FERS_SetDCommandBroadcast(int cnchandle, uint32_t cmd, uint32_t delay);
+
+	/*!
+	 * @brief						Set the command trigger source and input logic level for concentrator commands execution
+	 *								It is mainly used to switch between start acquisition and other commands trigger
+	 * 
+	 * @param[in] cnchandle			pointer to concentrator handle
+	 * @param[in] CmdTrgSrc			command trigger source (defined in FERS_Registers_5215.h VR_IO_CMD_XXX)
+	 * @param[in] CmdTrgLvl			command trigger logic level (VR_IO_STANDARD_IO_TTL or VR_IO_STANDARD_IO_NIM)
+	 * @param[in] numcnc			number of concentrators the command trigger source should be set (debug purpose)
+	 * @return						0 in case of success, or a negative error code specified in #FERSLIB_ErrorCodes
+	 * @ingroup RW
+	 */
+	CAEN_FERS_DLLAPI int FERS_SetCncCmdTrgSource(int* cnchandle, uint32_t CmdTrgSrc, uint32_t CmdTrgLvl, int numcnc);
 
 	/*!
 	 * @brief						Read a register of an I2C register (picoTDC, PLL, ...)
@@ -1025,6 +1195,37 @@ extern "C" {
 	 * @ingroup RW
 	*/
 	CAEN_FERS_DLLAPI int FERS_I2C_WriteRegister(int handle, uint32_t i2c_dev_addr, uint32_t reg_addr, uint32_t reg_data);
+
+	/*!
+	 * @brief						Write a register of a generic I2C device on the external I2C bus
+	 *
+	 * @param[in] handle			device handle
+	 * @param[in] i2c_dev_addr		I2C device address (7 bit)
+	 * @param[in] endianess			Byte order (0=little endian, 1=big endian)
+	 * @param[in] reg_addr_nb		register width (1 or 2 bytes)
+	 * @param[in] reg_addr			register address (in the device)
+	 * @param[in] reg_data_nb		data width (1, 2 or 4 bytes)
+	 * @param[in] reg_data			register data
+	 * @return						0 in case of success, or a negative error code specified in #FERSLIB_ErrorCodes
+	 * @ingroup RW
+	*/
+	CAEN_FERS_DLLAPI int FERS_I2C_WriteRegister_External(int handle, uint32_t i2c_dev_addr, int endianess, int reg_addr_nb, uint32_t reg_addr, int reg_data_nb, uint32_t reg_data);
+
+	/*!
+	 * @brief						Read a register of a generic I2C device on the external I2C bus
+	 *
+	 * @param[in] handle			device handle
+	 * @param[in] i2c_dev_addr		I2C device address (7 bit)
+	 * @param[in] endianess			Byte order (0=little endian, 1=big endian)
+	 * @param[in] reg_addr_nb		register width (1 or 2 bytes)
+	 * @param[in] reg_addr			register address (in the device)
+	 * @param[in] reg_data_nb		data width (1, 2 or 4 bytes)
+	 * @param[in] reg_data			register data
+	 * @return						0 in case of success, or a negative error code specified in #FERSLIB_ErrorCodes
+	 * @ingroup RW
+	*/
+	CAEN_FERS_DLLAPI int FERS_I2C_ReadRegister_External(int handle, uint32_t i2c_dev_addr, int endianess, int reg_addr_nb, uint32_t reg_addr, int reg_data_nb, uint32_t* reg_data);
+
 
 	/*!
 	 * @brief						Write a slice of a register of an I2C device 
@@ -1120,7 +1321,27 @@ extern "C" {
 	 * @return					0 in case of success, or a negative error code specified in #FERSLIB_ErrorCodes
 	 * @ingroup RW
 	*/
-	CAEN_FERS_DLLAPI int FERS_ReadConcentratorInfo(int handle, FERS_CncInfo_t* cinfo);
+	CAEN_FERS_DLLAPI int FERS_ReadConcentratorInfo(int cnchandle, FERS_CncInfo_t* cinfo);
+
+	/*!
+	 * @brief                   Get Master or Slave concentrator status
+	 * 
+	 * @param[in] cindex		concentrator index
+	 * @return					1 if the concentrator is a master, 0 if it is a slave
+	 * @ingroup RW
+	 */
+	CAEN_FERS_DLLAPI int FERS_isCncMaster(int cindex);
+
+	/*!
+	 * @brief						Get concentrator info saved into the library structure,
+	 *								concentrator is retrieved from the cconcentrator index.
+	 *
+	 * @param[out] BrdInfo			concentrator information saved in library
+	 * @param[in] handle			concentrator handle
+	 * @return						0 in case of success, or a negative error code specified in #FERSLIB_ErrorCodes
+	 * @ingroup FERS_BInfo
+	*/
+	CAEN_FERS_DLLAPI int FERS_GetCncInfo2(int cindex, FERS_CncInfo_t* cinfo);
 
 	/*!
 	 * @brief					Write Board info into the relevant flash memory page 
@@ -1217,13 +1438,23 @@ extern "C" {
 	CAEN_FERS_DLLAPI int FERS_GetBoardInfo(int handle, FERS_BoardInfo_t* BrdInfo);
 
 	/*!
-	 * @brief   Get concentrator info saved into the library structure
+	 * @brief						Get concentrator info saved into the library structure, 
+	 *								cnc is retrieved from the board handle.
+	 * 
 	 * @param[out] BrdInfo			concentrator information saved in library
 	 * @param[in] handle			concentrator handle
-	 * @return						0
+	 * @return						0 in case of success, or a negative error code specified in #FERSLIB_ErrorCodes
 	 * @ingroup FERS_BInfo
 	*/
 	CAEN_FERS_DLLAPI int FERS_GetCncInfo(int handle, FERS_CncInfo_t* BrdInfo);
+
+	/*!
+	 * @brief						Set the concentrator as master or slave		
+	 * 
+	 * @param[in] cnchandle			concentrator handle
+	 * @param[in] MasterSlave		1 for master, 0 for slave
+	 */
+	CAEN_FERS_DLLAPI int FERS_SetCncMasterSlave(int cnchandle, int MasterSlave);
 
 	/*!
 	* @brief				Get the board PID
@@ -1315,7 +1546,7 @@ extern "C" {
 	*/
 	CAEN_FERS_DLLAPI bool FERS_IsXROC(int handle);
 
-	// DNIN: This 2 should be intern function. The user should only set the DebugLogMask
+	// DNIN: Ideally, these 2 should be intern function. The user should only set the DebugLogMask
 	/*!
 	* @ingroup Functions
 	* @brief					Dump the board register information to a file
@@ -1451,9 +1682,19 @@ extern "C" {
 
 	/*!
 	 * @ingroup HV
+	 * @brief				Get the Firmware Version of the high voltage module
+	 *
+	 * @param[out] FWver	Pointer to  Fimware version
+	 * @param[in] handle	Handle to the get FERS device
+	 * @return				0 on success, or a negative error code as defined in #FERSLIB_ErrorCodes
+	 */
+	CAEN_FERS_DLLAPI int FERS_HV_Get_FWVer(int handle, uint32_t* FWver);
+
+	/*!
+	 * @ingroup HV
 	 * @brief				Get the serial number of the high voltage module
 	 * 
-	 * @param[out] sernum	Pointer to the Getd serial number
+	 * @param[out] sernum	Pointer to the get serial number
 	 * @param[in] handle	Handle to the FERS device
 	 * @return				0 on success, or a negative error code as defined in #FERSLIB_ErrorCodes
 	 */
@@ -1584,10 +1825,11 @@ extern "C" {
 	 * @brief				Configures a FERS board
 	 *
 	 * @param[in] handle	Board handle
-	 * @param[in] mode		Configuration mode
+	 * @param[in] mode		Configuration mode, as in @ref #CFGMODE
 	 * @return				0 on success, or a negative error code as defined in #FERSLIB_ErrorCodes
 	 */
 	CAEN_FERS_DLLAPI int FERS_configure(int handle, int mode);
+	CAEN_FERS_DLLAPI int FERS_PostConfigure();
 
 	/*!
 	 * @ingroup cfg
@@ -1603,10 +1845,10 @@ extern "C" {
 	 * @brief					Set a parameter by name. The function assigns the value to the relevant parameter in the 
 	 *							FERScfg struct, but it doesn't actually write it into the board (this is done by the "FERS_configure" function)
 	 * 
-	 * @param[in] handle		Board handle
-	 * @param[in] param_name	Name of the parameter to set
-	 * @param[in] value			Value to set for the parameter
-	 * @return					0 on success, or a negative error code as defined in #FERSLIB_ErrorCodes
+	 * @param[in] handle			Board handle
+	 * @param[in] param_name		Name of the parameter to set
+	 * @param[in] value_original	Value to set for the parameter
+	 * @return						0 on success, or a negative error code as defined in #FERSLIB_ErrorCodes
 	 */
 	CAEN_FERS_DLLAPI int FERS_SetParam(int handle, const char* param_name, const char* value_original);
 
@@ -1620,7 +1862,7 @@ extern "C" {
 	 * @param[in]  param_name	Name of the parameter to get
 	 * @return					0 on success, or a negative error code as defined in #FERSLIB_ErrorCodes
 	 */
-	CAEN_FERS_DLLAPI int FERS_GetParam(int handle, char* param_name, char* value);
+	CAEN_FERS_DLLAPI int FERS_GetParam(int handle, const char* param_name, char* value);
 
 
 	// -----------------------------------------------------------------
@@ -1758,7 +2000,8 @@ extern "C" {
 
 	/*!
 	 * @ingroup FWupg
-	 * @brief					Reboot the firmware application via TDL
+	 * @brief					Reboot the firmware application via TDL. Must be called after 
+	 *							FERS_FimrwareUpgrade is done in TDL connection.
 	 *
 	 * @param[in] handle		Array of board handles
 	 * @return					0 on success, or a negative error code as defined in #FERSLIB_ErrorCodes
@@ -1840,10 +2083,11 @@ extern "C" {
 	 * @brief						Check A5256 presence
 	 *
 	 * @param[in] handle			Board handle,
-	 * @param[in] tinfo				A5256 info structure (it will be removedfrom v2.0.0)
-	 * @return						0 on success, or a negative error code as defined in #FERSLIB_ErrorCodes
+	 * @param[in] tinfo				A5256 info structure (it will be removedfrom v2.0.0)	 * @return						0 on success, or a negative error code as defined in #FERSLIB_ErrorCodes
 	 */
-	CAEN_FERS_DLLAPI int FERS_checkA5256presence(int handle, FERS_A5256_Info_t* tinfo);
+	CAEN_FERS_DLLAPI int FERS_checkA5256presence(int handle);
+
+	//CAEN_FERS_DLLAPI int FERS_checkA5256presenceV2(int handle);
 
 	/*!
 	* @ingroup A5256F
@@ -1884,7 +2128,7 @@ extern "C" {
 	 * @ingroup calib
 	 * @brief						Find the source where calibration is stored (if present EEPROM is default)
 	 * 
-	 * @param[in]					Board handle
+	 * @param[in] handle			Board handle
 	 * @return						Source code (0 = flash,  1 = EEPROM)
 	 */
 	CAEN_FERS_DLLAPI int FERS_FindMemThrDest(int handle);
@@ -1964,7 +2208,7 @@ extern "C" {
 	 *
 	 * @param[in] handle		handle of the board to calibrate
 	 * @param[in] npts			number of values to write
-	 * @param[in] MemThrCalib	Flag indicating the source (0 = flash, 1 = EEPROM) (see @ref FERS_FindMemThrDest function)
+	 * @param[in] MemThrDest	Flag indicating the source (0 = flash, 1 = EEPROM) (see @ref FERS_FindMemThrDest function)
 	 * @param[in] ThrOffset		Threshold offsets (use NULL pointer to keep old values)
 	 * @return					0 in case of success, or a negative error code specified in #FERSLIB_ErrorCodes
 	 * @ingroup calib

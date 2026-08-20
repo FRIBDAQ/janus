@@ -343,6 +343,49 @@ static void LoadMacro(char* parval, Janus_Config_t* J_cfg2, int ParsingMode) {
 
 
 // ---------------------------------------------------------------------------------
+// Description: check return value of FERS_SetParam
+// Inputs:      parameter name
+//              return value of FERS_SetParam
+// ---------------------------------------------------------------------------------
+static void CheckSetParamStatus(int ret, char* parname, char* parval) {
+
+	ValidParameterName = (ret == FERSLIB_ERR_INVALID_PARAM) ? 0 : 1;
+	ValidParameterValue = (ret == FERSLIB_ERR_INVALID_PARAM_VALUE) ? 0 : 1;
+	ValidUnits = (ret == FERSLIB_ERR_INVALID_PARAM_UNIT) ? 0 : 1;
+
+
+	if (!ValidParameterName)
+		Con_printf("LCSw", "WARNING: %s: unkwown parameter\n", parname);
+	else if (!ValidParameterValue)
+		Con_printf("LCSw", "WARNING: %s: unkwown value '%s'\n", parname, parval);
+	else if (!ValidUnits)
+		Con_printf("LCSw", "WARNING: %s: unkwown units. Janus use as default V, mA, ns\n", parname);
+
+}
+
+
+// ---------------------------------------------------------------------------------
+// Description: Mapping Trigger:Tref value for SpectTiming mode
+// Inputs:		TriggerMask as returned from GetParam
+// Outputs:		
+// Return:		TrefMask value pointing to the same source of trigger, or -1 if the input is incorrect
+// ---------------------------------------------------------------------------------
+static uint32_t TriggerTrefMap(uint32_t TrgMask)
+{
+	if (TrgMask == 0x3)  return 0x2;  // T1-In  Trg=0x3:  Tref=0x2
+	else if (TrgMask == 0x5)  return 0x4;  // Q-OR   Trg=0x5:  Tref=0x4
+	else if (TrgMask == 0x9)  return 0x8;  // T-OR   Trg=0x9:  Tref=0x8
+	else if (TrgMask == 0x11) return 0x1;  // T0-In  Trg=0x11: Tref=0x1
+	else if (TrgMask == 0x21) return 0x10; // PTRG   Trg=0x21: Tref=0x10
+	else if (TrgMask == 0x41) return 0x40; // TLOGIC Trg=0x41: Tref=0x40
+	else {
+		Con_printf("LCSw", "Trigger Source Mask 0x%X unknown. Cannot set Tref Source properly\n", TrgMask);
+		return -1;
+	}
+}
+
+
+// ---------------------------------------------------------------------------------
 // Description: Read a config file, parse the parameters and set the relevant fields in the J_cfg structure
 // Inputs:		f_ini: config file pinter
 // Outputs:		J_cfg: struct with all parameters
@@ -353,9 +396,11 @@ int ParseConfigFile(FILE* f_ini, Janus_Config_t* J_cfg, int ParseMode)
 	int i, b;
 	int brd, ch;  // target board/ch defined as ParamName[b][ch] (-1 = all)
 	int brd_l, brd_h;  // low/high index for multiboard settings
+	int idx = 0;
+	int RawDataVal = 0;
 	char tstr[1000], str1[1000], * parval, * tparval, * parname, * token;
 
-	if ((ParseMode & PARSEMODE_PARSE_CONNECTION) & PARSEMODE_FIRST_CALL) 
+	if ((ParseMode & PARSEMODE_PARSE_CONNECTION) & PARSEMODE_RESET) 
 		memset(J_cfg, 0, sizeof(Janus_Config_t));
 		//J_cfg->NumBrd = 0;
 	
@@ -389,6 +434,7 @@ int ParseConfigFile(FILE* f_ini, Janus_Config_t* J_cfg, int ParseMode)
 		J_cfg->MaxOutFileSize = 1e9; // 1 GB
 		J_cfg->EnableRawDataRead = 0;
 		J_cfg->EnableMaxFileSize = 0;
+		J_cfg->EnableListZeroSuppr = 0;
 
 	}
 	
@@ -454,15 +500,18 @@ int ParseConfigFile(FILE* f_ini, Janus_Config_t* J_cfg, int ParseMode)
 						Con_printf("LCSw", "WARNING: Maximum number of supported boards reached (NumBoards = %d)\n", J_cfg->NumBrd);
 						continue;
 					}
-					if (streq(J_cfg->ConnPath[brd], ""))
+					if (streq(J_cfg->ConnPath[brd], "")) {
+						strcpy(J_cfg->ConnPath[brd], parval);
 						J_cfg->NumBrd++;
-					strcpy(J_cfg->ConnPath[brd], parval);
-
+					} else {
+						Con_printf("LCSw", "WARNING: Board %d already has a connection path assigned. Please, check the Janus_Config.txt file\n", brd);
+					}
+					
 					if (streq(J_cfg->ConnPath[brd], ""))
 						Con_printf("LCSw", "%s: connection path cannot be empty\n", parval);
 				}
 			}
-			// Also FiberDelayAdjust can be read and used in Lib during InitTdlChains
+			// Other parameters can be read and used in Lib before do the complete parser
 			if (streq(parname, "Load"))
 				LoadMacro(parval, J_cfg, ParseMode);
 			if (streq(parname, "FiberDelayAdjust")) {
@@ -472,6 +521,23 @@ int ParseConfigFile(FILE* f_ini, Janus_Config_t* J_cfg, int ParseMode)
 				if ((np == 4) && (cnc >= 0) && (cnc < FERSLIB_MAX_NCNC) && (chain >= 0) && (chain < 8) && (node >= 0) && (node < 16))
 					J_cfg->FiberDelayAdjust[cnc][chain][node] = length;
 			}
+			if (streq(parname, "DebugLogMask")) {
+				FERS_SetParam(0, "DebugLogMask", parval);
+			}
+
+			// These parameters must be set for synchronizing conncetrator with other devices - Not TRUE ANYMORE, can be removed
+			if (streq(parname, "StartRunMode")) {
+				int ret = FERS_SetParam(0, "StartRunMode", parval);
+				if		(streq(parval, "ASYNC"))				J_cfg->StartRunMode = STARTRUN_ASYNC;
+				else if (streq(parval, "CHAIN_T0"))				J_cfg->StartRunMode = STARTRUN_CHAIN_T0;
+				else if (streq(parval, "CHAIN_T1"))				J_cfg->StartRunMode = STARTRUN_CHAIN_T1;
+				else if (streq(parval, "TDL"))					J_cfg->StartRunMode = STARTRUN_TDL;
+				else if (streq(parval, "TDL_EXTRUN"))			J_cfg->StartRunMode = STARTRUN_TDL_EXTRUN;
+				else if (streq(parval, "TDL_GPS"))				J_cfg->StartRunMode = STARTRUN_TDL_GPS;
+				if (ret < 0) ValidParameterValue = 0;
+			}
+
+			//if (strstr(parname, "CncProbe"))
 			continue; // Skip the rest of the code
 		} 
 
@@ -534,6 +600,7 @@ int ParseConfigFile(FILE* f_ini, Janus_Config_t* J_cfg, int ParseMode)
 		if (streq(parname, "PresetCounts"))				J_cfg->PresetCounts			= GetInt(parval);
 		if (streq(parname, "RunNumber_AutoIncr"))		J_cfg->RunNumber_AutoIncr	= GetInt(parval);
 		if (streq(parname, "AskHVShutDownOnExit"))		J_cfg->AskHVShutDownOnExit  = GetInt(parval);
+		if (streq(parname, "EnableListZeroSuppr"))		J_cfg->EnableListZeroSuppr	= GetInt(parval);	
 
 			
 		if (streq(parname, "Load")) {
@@ -543,8 +610,7 @@ int ParseConfigFile(FILE* f_ini, Janus_Config_t* J_cfg, int ParseMode)
 				Con_printf("LCSm", "Loading Additional config file \"%s\"\n", parval);
 				ParseConfigFile(n_cfg, J_cfg, ParseMode & 0xE);
 				fclose(n_cfg);
-			}
-			else {
+			} else {
 				Con_printf("LCSw", "WARNING: Loading Macro: Macro file \"%s\" not found\n", parval);
 				ValidParameterValue = 0;
 			}
@@ -574,10 +640,20 @@ int ParseConfigFile(FILE* f_ini, Janus_Config_t* J_cfg, int ParseMode)
 					sprintf(tmp_name, "%.98s[%d]", parname, ch);
 					sprintf(parname, "%s", tmp_name);
 				}
+				char desc_err[100][1024];
+				if (streq(parname, "OF_RawData")) RawDataVal = GetInt(parval);
+				if (RawDataVal && !strstr(J_cfg->ConnPath[0], "offline"))
+					J_cfg->OutFileEnableMask = SETBIT(J_cfg->OutFileEnableMask, OUTFILE_RUN_INFO, 1);
+
 				for (b = brd_l; b < brd_h; b++) {
 					int ret;
 					//printf("%s %s\n", parname, parval);
 					ret = FERS_SetParam(handle[b], parname, parval);
+					if (ret < 0) {
+						char desc_err[1024];
+						FERS_GetLastError(desc_err);
+						Con_printf("LCSw", "%s\n", desc_err);
+					}
 					ValidParameterName = (ret == FERSLIB_ERR_INVALID_PARAM) ? 0 : 1;
 					ValidParameterValue = (ret == FERSLIB_ERR_INVALID_PARAM_VALUE) ? 0 : 1;
 					ValidUnits = (ret == FERSLIB_ERR_INVALID_PARAM_UNIT) ? 0 : 1;
@@ -600,37 +676,68 @@ int ParseConfigFile(FILE* f_ini, Janus_Config_t* J_cfg, int ParseMode)
 	if (J_cfg->ToAHistoNbin > (1 << TOA_NBIT))	J_cfg->ToAHistoNbin = (1 << TOA_NBIT);	// DNIN: misleading. This is just for plot visualization
 	if (J_cfg->ToTHistoNbin > (1 << TOT_NBIT))	J_cfg->ToTHistoNbin = (1 << TOT_NBIT);
 	
+	
 	J_cfg->AcquisitionMode = FERS_GetParam_int(handle[0], "AcquisitionMode");
-	J_cfg->StartRunMode = FERS_GetParam_int(handle[0], "StartRunMode");
+	J_cfg->StartRunMode = FERS_GetParam_int(handle[0], "StartRunMode"); // Performed during connection
 	J_cfg->StopRunMode = FERS_GetParam_int(handle[0], "StopRunMode");
 
 	J_cfg->PtrgPeriod = FERS_GetParam_float(handle[0], "PtrgPeriod");
 	for (int b = 0; b < J_cfg->NumBrd; ++b) {
 		J_cfg->HV_Vbias[b] = FERS_GetParam_float(handle[b], "HV_Vbias");
 	}
-	J_cfg->TriggerMask = FERS_GetParam_hex(handle[0], "TriggerMask");
+	J_cfg->TriggerMask = FERS_GetParam_uint32(handle[0], "TriggerMask");
 	J_cfg->EnableServiceEvent = FERS_GetParam_int(handle[0], "EnableServiceEvents");
 
-
-
+	// If Spect_Timing force Tref = Ptrg
+	if (J_cfg->AcquisitionMode == ACQMODE_TSPECT) {
+		char mypar[20];
+		uint32_t maskVal = TriggerTrefMap(FERS_GetParam_uint32(handle[0], "BunchTrgSource"));
+		uint32_t TrefMask = FERS_GetParam_uint32(handle[0], "TrefSource");
+		if (maskVal != TrefMask) {
+			Con_printf("LCSw", "WARNING:In SpectTiming mode Tref source must match Trigger source. Overwriting TrefSource\n");
+			sprintf(mypar, "MASK 0x%x", maskVal);
+			for (int j = 0; j < J_cfg->NumBrd; ++j)
+				FERS_SetParam(handle[j], "TrefSource", mypar);
+			Con_printf("SM", "TrefSource:0x%X", maskVal);
+		}
+	}		
 #ifdef linux
 	if (J_cfg->DataFilePath[strlen(J_cfg->DataFilePath)-1] != '/')	strcat(J_cfg->DataFilePath, "/");
 #else
 	if (J_cfg->DataFilePath[strlen(J_cfg->DataFilePath)-1] != '\\')	strcat(J_cfg->DataFilePath, "\\");
 #endif
 
+
+	// If AcquisitionMode is WaveForm, file saving disabled
+	if (J_cfg->AcquisitionMode == ACQMODE_WAVE) {
+		Con_printf("LCSw", "WARNING:Waveform acquisition mode is selected. Output files saving is disabled\n");
+		J_cfg->OutFileEnableMask = 0;
+		for (int i = 0; i < J_cfg->NumBrd; ++i)
+			FERS_SetParam(handle[i], "OF_RawData", "0");
+	}
+
 	// Force options when connection is offline
 	for (i = 0; i < J_cfg->NumBrd; ++i) {
 		if (strstr(J_cfg->ConnPath[i], "offline") != NULL) {
 			if (J_cfg->StopRunMode != STOPRUN_MANUAL) {
-				Con_printf("LCSw", "WARNING: Manual Stop Run must be set when Raw Data are processed\n");
+				Con_printf("LCSw", "WARNING:Manual Stop Run must be set when Raw Data are processed\nSetting MANUAL option ...\n");
 				J_cfg->StopRunMode = STOPRUN_MANUAL;
-				Con_printf("SM", "STOPRUNMODE:%d", STOPRUN_MANUAL);
+				Con_printf("SM", "StopRunMode:%d", STOPRUN_MANUAL);
+			}
+			if (J_cfg->StartRunMode != STARTRUN_ASYNC) {
+				Con_printf("LCSw", "Offline connection need ASYNC StartRunMode. Switching to ASYNC\n");
+				J_cfg->StartRunMode = STARTRUN_ASYNC;
+				Con_printf("SM", "StartRunMode:%d", J_cfg->StartRunMode);
 			}
 			if (J_cfg->EnableJobs != 0) {
-				Con_printf("LCSw", "WARNING: Jobs are not permitted when Raw Data are processed\n");
+				Con_printf("LCSw", "WARNING:Jobs are not permitted when Raw Data are processed\nDisabling Jobs ...\n");
 				J_cfg->EnableJobs = 0;
 				Con_printf("SM", "EnableJobs:%d", J_cfg->EnableJobs);
+			}
+			if (RawDataVal) {	// FERSlib already unset RawData saving if offline mode is on.
+				Con_printf("LCSw", "WARNING:Cannot save Raw Data file when Raw Data are processed\nDisabling Raw Data saving...\n");
+				Con_printf("SM", "OF_RawData:0");
+				RawDataVal = 0;
 			}
 			break;
 		}
@@ -641,11 +748,14 @@ int ParseConfigFile(FILE* f_ini, Janus_Config_t* J_cfg, int ParseMode)
 	char buffMS[50];
 	sprintf(buffLS, "%" PRIu8, J_cfg->EnableMaxFileSize);
 	sprintf(buffMS, "%f", J_cfg->MaxOutFileSize);
+	int ret = 0;
 	for (int i = 0; i < J_cfg->NumBrd; ++i) {
-		FERS_SetParam(handle[i], "OF_RawDataPath", J_cfg->DataFilePath);
-		FERS_SetParam(handle[i], "OF_LimitedSize", buffLS);
-		FERS_SetParam(handle[i], "MaxSizeOutputDataFile", buffMS);
-	}
+		ret = FERS_SetParam(handle[i], "OF_RawDataPath", J_cfg->DataFilePath);
+		CheckSetParamStatus(ret, "OF_RawDataPath", J_cfg->DataFilePath);
+		ret = FERS_SetParam(handle[i], "OF_LimitedSize", buffLS);
+		CheckSetParamStatus(ret, "OF_LimitedSize", buffLS);
+		ret = FERS_SetParam(handle[i], "MaxSizeDataOutputFile", buffMS);
+		CheckSetParamStatus(ret, "MaxSizeDataOutputFile", buffMS);	}
 
 	return 0;
 }

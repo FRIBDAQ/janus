@@ -4,6 +4,84 @@
   +390594388398 - www.caen.it
 *************************************************************************************************************************
 
+-------------------------------------------------------------------------------------------------------------------------
+Release 2.2.1 - 21/07/26
+-------------------------------------------------------------------------------------------------------------------------
+- Fix the DebugLogMask setting in FERS_SetParam
+
+-------------------------------------------------------------------------------------------------------------------------
+Release 2.2.0 - 13/07/26
+-------------------------------------------------------------------------------------------------------------------------
+- First implementation of support for the FERS 5204 module
+- Added TriggerLogic option OR16_AND4
+- Replaced the generic ServEvent_t structure with the board-specific ServEvent520X_t
+- Updated RawData file to version 2
+- Improved USB flushing process
+- Added generic I2C Read/Write for devices on the external I2C bus
+- Bug fix in processing RawData files larger than 2 GB
+- Bug fix in write threshold calibration offset for A5256 adapter
+- Bug fix in setting ch0 polarity for A5256 adapter
+- Bug fix in setting probes for FERS module 5203
+- Bug fix in reading almost full flags from FERS 5203 module
+- Bug fix in FERS_CloseDevice by clearing board path
+- Bug fix in FERS_ReadRegister for concentrator registers only
+- Bug fix in FERS_SetParam for GlitchFilterDelay assignment
+
+-------------------------------------------------------------------------------------------------------------------------
+Release 2.1.0 - 31/03/26
+-------------------------------------------------------------------------------------------------------------------------
+- FERS_checkA5256presence now takes only "handle" as input parameter
+- Minor bug fixes for mispelled error messages and incorrect return values
+- Bug fix in setting adapter threshold from FERS_Configure5203 function
+
+-------------------------------------------------------------------------------------------------------------------------
+Release 2.0.0 - 26/02/26
+-------------------------------------------------------------------------------------------------------------------------
+- Added support for multi-concentrator synchronization in configuration Master-Slave, or with an external system 
+- Added FERS_isCncMaster function to get the Master/Slave status of the concentrators
+- Added FERS_SendDCommandBroadcast and FERS_SetDCommandBroadcast functions to manage the broadcast commands across multiple concentrators
+- Introduced FERS_SetCncCmdTrgSource function to configure the signal source that triggers command execution in SetDCommandBroadcast
+- Divided TDL initialization into two functions: FERS_EnumTDLchains (enumeration) and FERS_SyncTDLchains (timing synchronization)
+- Added new options for StartRunMode: 
+     TDL_EXTRUN (start from external signal), 
+     TDL_GPS (start from GPS, clock from GPS on CLK IN) 
+- Added ExtRunSource to select the external start signal
+- Increased timeout for readout completion of events
+- Minor bug fix during close device process
+- Improved logging system for error reporting
+- Bug fix in test pulse setting
+
+-------------------------------------------------------------------------------------------------------------------------
+Release 1.3.0 - 07/01/26
+-------------------------------------------------------------------------------------------------------------------------
+- Bug fix for analog probe: correctly addressing PREAMP_LG and PREAM_HG probes
+- Added decoding for TrefTstamp in SpectTiming mode
+- Updated FERS_GetParam to accept const char* for parameter param_name
+- Changed all "mask" parameters in FERS_GetParam to return decimal format instead of hexadecimal
+- Improved demo configuration file parsing
+- Bug fix in reading timing list in SepctTiming mode
+- Bug fix in setting TestPulsePreamp
+- Bug fix in PREAMP_LG and PREAM_HG analog probes
+- Bug fix in TestPulseDestination when set to NONE
+- Bug fix in FERS_IsOpen function
+
+-------------------------------------------------------------------------------------------------------------------------
+Release 1.2.3 - 07/10/25
+-------------------------------------------------------------------------------------------------------------------------
+- Bug fix in analog probe configuration: PREAMP_LG and PREAM_HG probes are now correctly address
+- Bug fix: documentation was missing in the Linux package
+
+-------------------------------------------------------------------------------------------------------------------------
+Release 1.2.2 - 10/09/25
+-------------------------------------------------------------------------------------------------------------------------
+- Bug fix on Start/Stop acquisition during threshold and hold delay scans
+
+-------------------------------------------------------------------------------------------------------------------------
+Release 1.2.1 - 10/07/25
+-------------------------------------------------------------------------------------------------------------------------
+- Bug fix on TriggerSource parameter setting in FERS_SetParam for 5203- Bug fix on setting default parameters configuration
+
+-------------------------------------------------------------------------------------------------------------------------
 Release 1.2.0 - 06/06/25
 -------------------------------------------------------------------------------------------------------------------------
 - Ensured compliance with the C++17 standard
@@ -38,7 +116,7 @@ Release 1.1.1 - 01/04/25
 - Increased the max number of board supported by FERSlib to the 128 (max number of boards handled by the DT5215)
 - Added check on BIC information
 - Added information on FPGA firmware upgrade in FERSlib Log file 
-- Bug fix on nodes syncronization of DT5215
+- Bug fix on nodes synchronization of DT5215
 - Bug fix to make the library compatible with g++/gcc-14
 - Bug fix in saving RawData with TDL connection
 
@@ -47,8 +125,8 @@ Release 1.1.0 - 28/02/25
 -------------------------------------------------------------------------------------------------------------------------
 - Added API to check if A5256 adapter is connected
 - Bug fix in USB connection handling
-- Bug fix on threshold talibration for A5256 adapter 
-- Bug fix on dumping the library paramters configuration for FERS 5202 
+- Bug fix on threshold calibration for A5256 adapter 
+- Bug fix on dumping the library parameters configuration for FERS 5202 
 - Bug fix on total allocate memory computation
 
 -------------------------------------------------------------------------------------------------------------------------
