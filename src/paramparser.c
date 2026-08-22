@@ -20,6 +20,7 @@
 #include "paramparser.h"
 #include "JanusC.h"
 #include "console.h"
+#include "frib.h"
 //#include "FERSlib.h"
 
 
@@ -600,7 +601,9 @@ int ParseConfigFile(FILE* f_ini, Janus_Config_t* J_cfg, int ParseMode)
 		if (streq(parname, "PresetCounts"))				J_cfg->PresetCounts			= GetInt(parval);
 		if (streq(parname, "RunNumber_AutoIncr"))		J_cfg->RunNumber_AutoIncr	= GetInt(parval);
 		if (streq(parname, "AskHVShutDownOnExit"))		J_cfg->AskHVShutDownOnExit  = GetInt(parval);
-		if (streq(parname, "EnableListZeroSuppr"))		J_cfg->EnableListZeroSuppr	= GetInt(parval);	
+		if (streq(parname, "EnableListZeroSuppr"))		J_cfg->EnableListZeroSuppr	= GetInt(parval);
+
+		FRIB_ParseParam(parname, parval, J_cfg);	// FRIB: RingBuffer, SourceID, RingBufferName, RunTitle
 
 			
 		if (streq(parname, "Load")) {
