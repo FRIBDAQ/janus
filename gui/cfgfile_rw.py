@@ -284,7 +284,7 @@ def WriteConfigFile(sections, params, filename, show_popup): # DNIN: need to pas
 		ff.write("# ------------------------------------------------------------------------------------------\n")
 		for p in params.keys():
 			if (params[p].section == s) and (params[p].type != '-') and (params[p].type != 'm'):
-				if params[p].default.split(" ")[0] == "":
+				if params[p].default.split(" ")[0] == "" and p != 'RunTitle':	# FRIB: empty RunTitle is valid
 					if manage_empty_entries(params, p, show_popup):
 						params[p].set_default()
 						num_empty_field += 1

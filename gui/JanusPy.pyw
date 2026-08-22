@@ -27,6 +27,7 @@ import socket2daq as comm
 import leds as leds
 import ctrl as ctrl
 import tabs as tabs
+import server_for_fribdaq as frib
 import ctypes
 
 # ------------------------------------------------------------------
@@ -117,6 +118,11 @@ class Open_GUI(Frame):
 		self.update_guimode()
 		self.Ctrl.SaveCfgFile()  # Save the config file at the end of the initialization
 		self.bglabel.place_forget()
+
+		# start the FRIBDAQ remote-control server (FRIB)
+		self.server = Thread(target=frib.ServerForFRIBDAQ, args=[self.Ctrl, self.Tabs])
+		self.server.daemon = True
+		self.server.start()
 
 		# start thread for reading messages from the client and print to output window
 		# (DEPRECATED, the thread start when JanusPy connects to the DAQ)
