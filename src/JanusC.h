@@ -95,6 +95,10 @@
 #define OUTFILE_MCS_HISTO				0x0200
 #define OUTFILE_SYNC					0x0400
 #define OUTFILE_SERVICE_INFO			0x0800
+#define OUTFILE_RAW_DATA_RINGBUFFER		0x8000	// FRIB: NSCLDAQ ring buffer outlet (top bit, clear of future CAEN additions)
+
+// FRIB: any output that needs the event list produced (used at the SaveList call sites)
+#define OUTFILE_LIST_ANY				(OUTFILE_LIST_ASCII | OUTFILE_LIST_BIN | OUTFILE_SYNC | OUTFILE_LIST_CSV | OUTFILE_RAW_DATA_RINGBUFFER)
 
 #define OF_UNIT_LSB						0
 #define OF_UNIT_NS						1
@@ -193,7 +197,10 @@ typedef struct Config_t {
 
 	int EnLiveParamChange;			// Enable param change while running (when disabled, Janus will stops and restarts the acq. when a param changes)
 	int AskHVShutDownOnExit;		// Ask if the HV must be shut down before quitting
-	int OutFileEnableMask;			// Enable/Disable output files 
+	int OutFileEnableMask;			// Enable/Disable output files
+	int SourceID;					// FRIB: source ID in the FRIBDAQ event stream
+	char RingBufferName[50];		// FRIB: output ring buffer name
+	char RunTitle[81];				// FRIB: run title for the ring state change items
 	char DataFilePath[500];			// Output file data path
 	uint8_t EnableMaxFileSize;		// Enable the Limited size for list output files. Value set in MaxOutFileSize parameter
 	float MaxOutFileSize;			// Max size of list output files in bytes. Minimum size allowed 1 MB

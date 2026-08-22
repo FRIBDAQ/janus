@@ -23,6 +23,7 @@
 #include "FERSutils.h"
 #include "JanusC.h"
 #include "Statistics.h"
+#include "frib.h"
 
 
 #define _MONITOR      0
@@ -54,6 +55,13 @@ static int LocalRunNum = 0;
 // ****************************************************
 // Local functions
 // ****************************************************
+// FRIB: fan the binary list stream out to the ring buffer, so the ring
+// payload always tracks the of_list_b format byte for byte
+static void list_write(const void *ptr, size_t size, size_t num) {
+	if (of_list_b != NULL) fwrite(ptr, size, num, of_list_b);
+	FRIB_RingWrite(ptr, size, num);
+}
+
 static uint16_t rebin_energy(uint16_t energy) {
 	if		(J_cfg.EHistoNbin == 8192) return energy;
 	else if (J_cfg.EHistoNbin == 4096) return (energy >> 1);
@@ -153,6 +161,7 @@ int OpenOutputFiles(int RunNumber)
 		CreateOutFileName("ServiceInfo", RunNumber, 2, filename);
 		of_servInfo = fopen(filename, "w");
 	}
+	FRIB_RingOpen(RunNumber);
 	return 0;
 }
 
@@ -179,6 +188,7 @@ int CloseOutputFiles()
 	ascii_srun = 0;
 	csv_size = 0;
 	csv_srun = 0;
+	FRIB_RingClose();
 	return 0;
 }
 
@@ -224,29 +234,31 @@ int WriteListfileHeader() {
 	int16_t rn = (int16_t)RunVars.RunNumber;
 	// Write headers, common for all the list files
 	type_file = (J_cfg.AcquisitionMode & 0x0F) | (Enable_2nd_tstamp<<7);  // dtq & 0x0F;
-	if (of_list_b != NULL) {   // Binary ASCII
+	FRIB_RingBegin();
+	if (of_list_b != NULL || FRIB_RingActive()) {   // Binary ASCII
 		float tmpLSB = (float)TOA_LSB_ns;
 		uint16_t enbin = J_cfg.EHistoNbin;
 		//uint32_t tmask = J_cfg.ChEnableMask1[brd];	// see below
-		uint8_t header_size = 
+		uint8_t header_size =
 			sizeof(header_size) + 5 * sizeof(fnumFVer) + sizeof(brdVer) + sizeof(rn) + sizeof(type_file) +
 			sizeof(enbin) + sizeof(J_cfg.OutFileUnit) + sizeof(tmpLSB) + sizeof(Stats.start_time);
 
-		//fwrite(&header_size, sizeof(header_size), 1, of_list_b);
-		fwrite(&fnumFVer, sizeof(fnumFVer), 1, of_list_b);
-		fwrite(&snumFVer, sizeof(snumFVer), 1, of_list_b);
-		fwrite(&fnumSW, sizeof(fnumSW), 1, of_list_b);
-		fwrite(&snumSW, sizeof(snumSW), 1, of_list_b);
-		fwrite(&tnumSW, sizeof(tnumSW), 1, of_list_b);
-		fwrite(&brdVer, sizeof(brdVer), 1, of_list_b);	// next File Format
-		fwrite(&rn, sizeof(rn), 1, of_list_b);
-		fwrite(&type_file, sizeof(type_file), 1, of_list_b); // Acquisition Mode
-		fwrite(&enbin, sizeof(enbin), 1, of_list_b);
-		fwrite(&J_cfg.OutFileUnit, sizeof(J_cfg.OutFileUnit), 1, of_list_b);	// Type of unit used for Time. 0 LSB, 1 ns
-		fwrite(&tmpLSB, sizeof(tmpLSB), 1, of_list_b);	// Keep it as float for homogenity with A5203, the value of the LSB of which is not fixed
-		//fwrite(&tmask, sizeof(tmask), 1, of_list_b);	// uncomment if we want the Channel Mask
-		fwrite(&Stats.start_time, sizeof(Stats.start_time), 1, of_list_b);
-		bin_size += header_size;
+		//list_write(&header_size, sizeof(header_size), 1);
+		list_write(&fnumFVer, sizeof(fnumFVer), 1);
+		list_write(&snumFVer, sizeof(snumFVer), 1);
+		list_write(&fnumSW, sizeof(fnumSW), 1);
+		list_write(&snumSW, sizeof(snumSW), 1);
+		list_write(&tnumSW, sizeof(tnumSW), 1);
+		list_write(&brdVer, sizeof(brdVer), 1);	// next File Format
+		list_write(&rn, sizeof(rn), 1);
+		list_write(&type_file, sizeof(type_file), 1); // Acquisition Mode
+		list_write(&enbin, sizeof(enbin), 1);
+		list_write(&J_cfg.OutFileUnit, sizeof(J_cfg.OutFileUnit), 1);	// Type of unit used for Time. 0 LSB, 1 ns
+		list_write(&tmpLSB, sizeof(tmpLSB), 1);	// Keep it as float for homogenity with A5203, the value of the LSB of which is not fixed
+		//list_write(&tmask, sizeof(tmask), 1);	// uncomment if we want the Channel Mask
+		list_write(&Stats.start_time, sizeof(Stats.start_time), 1);
+		FRIB_RingCommit(1);
+		if (of_list_b != NULL) bin_size += header_size;
 	}
 	char unit[10];
 	if (J_cfg.OutFileUnit) strcpy(unit, "ns");
@@ -401,7 +413,7 @@ int SaveList(int brd, double ts, uint64_t trgid, void *generic_ev, int dtq)
 			}
 		}
 
-		if (of_list_b != NULL && (J_cfg.OutFileEnableMask && OUTFILE_LIST_BIN)) {
+		if ((of_list_b != NULL && (J_cfg.OutFileEnableMask && OUTFILE_LIST_BIN)) || FRIB_RingActive()) {
 			uint16_t size = sizeof(size) + sizeof(b8) + sizeof(ts) + sizeof(trgid) + sizeof(ev->chmask) + sizeof(num_of_hits);
 			if (dtq & 0x80) size += sizeof(ev->rel_tstamp_us);
 			if (isTSpect) size += sizeof(DeltaTref_f);
@@ -431,15 +443,15 @@ int SaveList(int brd, double ts, uint64_t trgid, void *generic_ev, int dtq)
 				}
 				data_t[i] = datatype;
 			}
-			bin_size += size;
-			fwrite(&size, sizeof(size), 1, of_list_b);
-			fwrite(&b8, sizeof(b8), 1, of_list_b);
-			fwrite(&ts, sizeof(ts), 1, of_list_b);
-			if (dtq & 0x80)	fwrite(&ev->rel_tstamp_us, sizeof(ev->rel_tstamp_us), 1, of_list_b);
-			if (isTSpect) fwrite(&DeltaTref_f, sizeof(DeltaTref_f), 1, of_list_b);
-			fwrite(&trgid, sizeof(trgid), 1, of_list_b);
-			fwrite(&ev->chmask, sizeof(ev->chmask), 1, of_list_b);
-			fwrite(&num_of_hits, sizeof(num_of_hits), 1, of_list_b);
+			if (of_list_b != NULL) bin_size += size;
+			list_write(&size, sizeof(size), 1);
+			list_write(&b8, sizeof(b8), 1);
+			list_write(&ts, sizeof(ts), 1);
+			if (dtq & 0x80)	list_write(&ev->rel_tstamp_us, sizeof(ev->rel_tstamp_us), 1);
+			if (isTSpect) list_write(&DeltaTref_f, sizeof(DeltaTref_f), 1);
+			list_write(&trgid, sizeof(trgid), 1);
+			list_write(&ev->chmask, sizeof(ev->chmask), 1);
+			list_write(&num_of_hits, sizeof(num_of_hits), 1);
 			for(uint8_t i=0; i<MAX_NCH; i++) {				
 				if ((ev->chmask >> i) & 1) {
 					uint8_t tmp_type = data_t[i];
@@ -447,20 +459,21 @@ int SaveList(int brd, double ts, uint64_t trgid, void *generic_ev, int dtq)
 					uint16_t tmp_nrgH = tmp_enH[i];
 					float tmpToA = (float)(ev->tstamp[i] * TOA_LSB_ns);
 					float tmpToT = (tmpToA == 0) ? 0 : (float)(ev->ToT[i] * TOA_LSB_ns);  // don't write ToT if there is no ToA
-					fwrite(&i, sizeof(i), 1, of_list_b);	// Channel	
-					fwrite(&tmp_type, sizeof(tmp_type), 1, of_list_b);
-					if (data_t[i] & 0x01) fwrite(&tmp_nrgL, sizeof(ev->energyLG[i]), 1, of_list_b);
-					if (data_t[i] & 0x02) fwrite(&tmp_nrgH, sizeof(ev->energyHG[i]), 1, of_list_b);
+					list_write(&i, sizeof(i), 1);	// Channel	
+					list_write(&tmp_type, sizeof(tmp_type), 1);
+					if (data_t[i] & 0x01) list_write(&tmp_nrgL, sizeof(ev->energyLG[i]), 1);
+					if (data_t[i] & 0x02) list_write(&tmp_nrgH, sizeof(ev->energyHG[i]), 1);
 					if (data_t[i] & 0x10) {	
-						if (J_cfg.OutFileUnit) fwrite(&tmpToA, sizeof(float), 1, of_list_b);
-						else fwrite(&ev->tstamp[i], sizeof(ev->tstamp[i]), 1, of_list_b);
+						if (J_cfg.OutFileUnit) list_write(&tmpToA, sizeof(float), 1);
+						else list_write(&ev->tstamp[i], sizeof(ev->tstamp[i]), 1);
 					}
 					if (data_t[i] & 0x20) {
-						if (J_cfg.OutFileUnit) fwrite(&tmpToT, sizeof(float), 1, of_list_b);
-						else fwrite(&ev->ToT[i], sizeof(ev->ToT[i]), 1, of_list_b);
+						if (J_cfg.OutFileUnit) list_write(&tmpToT, sizeof(float), 1);
+						else list_write(&ev->ToT[i], sizeof(ev->ToT[i]), 1);
 					}
 				}
 			}
+			FRIB_RingCommit(0);
 		}
 		if (of_list_a != NULL) {
 			int evg = 1;
@@ -610,23 +623,24 @@ int SaveList(int brd, double ts, uint64_t trgid, void *generic_ev, int dtq)
 			}
 		}
 
-		if ((of_list_b != NULL) && (num_of_hits > 0)) {
+		if ((of_list_b != NULL || FRIB_RingActive()) && (num_of_hits > 0)) {
 			uint16_t size = sizeof(size) + sizeof(b8) + sizeof(ts) + sizeof(trgid) + sizeof(ev->chmask) + sizeof(num_of_hits);
 			if (dtq & 0x80) size += sizeof(ev->rel_tstamp_us);
 			size += num_of_hits * (sizeof(uint8_t) + sizeof(uint64_t));
-			bin_size += size;
-			fwrite(&size, sizeof(size), 1, of_list_b);
-			fwrite(&b8, sizeof(b8), 1, of_list_b);
-			fwrite(&ts, sizeof(ts), 1, of_list_b);
-			if (dtq & 0x80)	fwrite(&ev->rel_tstamp_us, sizeof(ev->rel_tstamp_us), 1, of_list_b);
-			fwrite(&trgid, sizeof(trgid), 1, of_list_b);
-			//fwrite(&ChEnableMask, sizeof(ev->chmask), 1, of_list_b);
-			fwrite(&ev_chmask, sizeof(ev_chmask), 1, of_list_b);
-			fwrite(&num_of_hits, sizeof(num_of_hits), 1, of_list_b);
+			if (of_list_b != NULL) bin_size += size;
+			list_write(&size, sizeof(size), 1);
+			list_write(&b8, sizeof(b8), 1);
+			list_write(&ts, sizeof(ts), 1);
+			if (dtq & 0x80)	list_write(&ev->rel_tstamp_us, sizeof(ev->rel_tstamp_us), 1);
+			list_write(&trgid, sizeof(trgid), 1);
+			//list_write(&ChEnableMask, sizeof(ev->chmask), 1);
+			list_write(&ev_chmask, sizeof(ev_chmask), 1);
+			list_write(&num_of_hits, sizeof(num_of_hits), 1);
 			for (uint8_t i = 0; i < num_of_hits; ++i) {				
-				fwrite(&chId[i], sizeof(uint8_t), 1, of_list_b);
-				fwrite(&cntW[i], sizeof(uint64_t), 1, of_list_b);
+				list_write(&chId[i], sizeof(uint8_t), 1);
+				list_write(&cntW[i], sizeof(uint64_t), 1);
 			}
+			FRIB_RingCommit(0);
 		}
 		if ((of_list_a != NULL) && (num_of_hits > 0)) {
 			int evg = 1;
@@ -700,7 +714,7 @@ int SaveList(int brd, double ts, uint64_t trgid, void *generic_ev, int dtq)
 		datatype = 0x0;
 		uint8_t b8 = brd;
 		
-		if (of_list_b != NULL && (J_cfg.OutFileEnableMask && OUTFILE_LIST_BIN)) {
+		if ((of_list_b != NULL && (J_cfg.OutFileEnableMask && OUTFILE_LIST_BIN)) || FRIB_RingActive()) {
 			uint8_t* mydtype = NULL;
 			mydtype = (uint8_t*)malloc(ev->nhits * sizeof(uint8_t));
 			uint16_t size = sizeof(size) + sizeof(b8) + sizeof(fine_tstamp) + sizeof(ev->nhits); // +sizeof(trgid); //trgid = 0 in timing mode
@@ -722,30 +736,31 @@ int SaveList(int brd, double ts, uint64_t trgid, void *generic_ev, int dtq)
 				mydtype[chit] = datatype;
 			}
 
-			bin_size += size;
-			fwrite(&size, sizeof(size), 1, of_list_b);
-			fwrite(&b8, sizeof(b8), 1, of_list_b);
-			fwrite(&fine_tstamp, sizeof(fine_tstamp), 1, of_list_b);
-			//fwrite(&trgid, sizeof(trgid), 1, of_list_b);
-			fwrite(&ev->nhits, sizeof(ev->nhits), 1, of_list_b);
+			if (of_list_b != NULL) bin_size += size;
+			list_write(&size, sizeof(size), 1);
+			list_write(&b8, sizeof(b8), 1);
+			list_write(&fine_tstamp, sizeof(fine_tstamp), 1);
+			//list_write(&trgid, sizeof(trgid), 1);
+			list_write(&ev->nhits, sizeof(ev->nhits), 1);
 			for(uint32_t i=0; i<ev->nhits; i++) {
 				float tmpToA = (float)(ev->tstamp[i] * TOA_LSB_ns);
 				float tmpToT = (float)(ev->ToT[i] * TOA_LSB_ns);
 				datatype = mydtype[i];
-				fwrite(&ev->channel[i], 1, sizeof(ev->channel[i]), of_list_b);
+				list_write(&ev->channel[i], 1, sizeof(ev->channel[i]));
 				// Write Datatype as specttiming
-				fwrite(&datatype, 1, sizeof(datatype), of_list_b);
+				list_write(&datatype, 1, sizeof(datatype));
 				if (datatype & 0x10) {
-					if (J_cfg.OutFileUnit) fwrite(&tmpToA, sizeof(float), 1, of_list_b);
-					else fwrite(&ev->tstamp[i], sizeof(ev->tstamp[i]), 1, of_list_b);
+					if (J_cfg.OutFileUnit) list_write(&tmpToA, sizeof(float), 1);
+					else list_write(&ev->tstamp[i], sizeof(ev->tstamp[i]), 1);
 				}
 				if (datatype & 0x20) {
-					if (J_cfg.OutFileUnit) fwrite(&tmpToT, sizeof(float), 1, of_list_b);
-					else fwrite(&ev->ToT[i], sizeof(ev->ToT[i]), 1, of_list_b);
+					if (J_cfg.OutFileUnit) list_write(&tmpToT, sizeof(float), 1);
+					else list_write(&ev->ToT[i], sizeof(ev->ToT[i]), 1);
 				}
 			}
 			free(mydtype);	// Deallocating memory
 			mydtype = NULL;
+			FRIB_RingCommit(0);
 		}
 
 		if (of_list_a != NULL) {

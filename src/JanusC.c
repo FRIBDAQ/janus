@@ -2248,8 +2248,7 @@ Restart:  // when config file changes or a new run of the job is scheduled, the 
 						if (ToAbin > 0) Stats.HitCnt[b][ch].cnt++;
 					}
 				}
-				if ((J_cfg.OutFileEnableMask & OUTFILE_LIST_ASCII) || (J_cfg.OutFileEnableMask & OUTFILE_LIST_BIN) 
-					|| (J_cfg.OutFileEnableMask & OUTFILE_SYNC) || (J_cfg.OutFileEnableMask & OUTFILE_LIST_CSV)) {
+				if (J_cfg.OutFileEnableMask & OUTFILE_LIST_ANY) {
 					SaveList(b, Stats.current_tstamp_us[b], Stats.current_trgid[b], Ev, dtq);
 				}
 
@@ -2273,8 +2272,7 @@ Restart:  // when config file changes or a new run of the job is scheduled, the 
 						if (ToTbin > 0) Histo1D_AddCount(&Stats.H1_ToT[b][ch], ToTbin);
 					}
 				}
-				if ((J_cfg.OutFileEnableMask & OUTFILE_LIST_ASCII) || (J_cfg.OutFileEnableMask & OUTFILE_LIST_BIN) 
-					|| (J_cfg.OutFileEnableMask & OUTFILE_SYNC) || (J_cfg.OutFileEnableMask & OUTFILE_LIST_CSV)) {
+				if (J_cfg.OutFileEnableMask & OUTFILE_LIST_ANY) {
 					SaveList(b, Stats.current_tstamp_us[b], Stats.current_trgid[b], Ev, dtq);
 				}
 			} else if ((dtq & 0x0F) == DTQ_COUNT)  {
@@ -2290,8 +2288,7 @@ Restart:  // when config file changes or a new run of the job is scheduled, the 
 					Stats.Q_OR_Cnt[b].cnt += Ev->q_or_counts;
 					Stats.trgcnt_update_us[b] = curr_tstamp_us;
 				}
-				if ((J_cfg.OutFileEnableMask & OUTFILE_LIST_ASCII) || (J_cfg.OutFileEnableMask & OUTFILE_LIST_BIN) 
-					|| (J_cfg.OutFileEnableMask & OUTFILE_SYNC) || (J_cfg.OutFileEnableMask & OUTFILE_LIST_CSV)) {
+				if (J_cfg.OutFileEnableMask & OUTFILE_LIST_ANY) {
 					SaveList(b, Stats.current_tstamp_us[b], Stats.current_trgid[b], Ev, dtq);
 				}
 			} else if (dtq == DTQ_WAVE) {
