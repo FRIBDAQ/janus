@@ -23,6 +23,7 @@
 #include "paramparser.h"
 //#include "configure.h"
 #include "outputfiles.h"
+#include "frib.h"
 
 #include <stdlib.h>
 #include <time.h>
@@ -841,6 +842,7 @@ int RunTimeCmd(int c)
 	}
 
 	//sscanf(RunVars.PlotTraces[0], "%d %d", &bb, &cc);
+	if (FRIB_RunTimeCmd(c)) return 0;
 	if (c == 'q') {
 		// Check if HV is ON
 		//CheckHVBeforeClosing(); 
@@ -1497,6 +1499,7 @@ int RunTimeCmd(int c)
 			Con_printf("Cm", "[!] Reset IP address\n");
 			Con_printf("Cm", "[#] Print Pixel Map\n");
 			Con_printf("Cm", "[T] Set Discriminator Threshold\n");
+			FRIB_PrintRunTimeMenu();
 			Con_printf("Cm", "[e] Exit this menu\n");
 		} else {
 			Con_printf("Cm", "[q] Quit\n");
@@ -1511,6 +1514,7 @@ int RunTimeCmd(int c)
 			Con_printf("Cm", "[f] Freeze plot\n");
 			Con_printf("Cm", "[o] One shot plot\n");
 			Con_printf("Cm", "[r] Reset histograms\n");
+			FRIB_PrintRunTimeMenu();
 			Con_printf("Cm", "[e] Exit this menu\n");
 		}
 		c = Con_getch(); 
@@ -1601,11 +1605,15 @@ int main(int argc, char* argv[])
 	int tdlstart = 0;
 
 	char description[1024];
+	char port[16] = "";		// FRIB: -p<port> custom GUI socket port
+	bool devnull = false;	// FRIB: -d headless mode (no gnuplot)
 
 	// Get command line options
 	for (i = 1; i < argc; i++) {
 		if (argv[i][0] == '-') {
 			if (strcmp(argv[i] + 1, "g") == 0) SockConsole = 1;
+			if (argv[i][1] == 'p') strncpy(port, &argv[i][2], sizeof(port) - 1);
+			if (argv[i][1] == 'd') devnull = true;
 			if (argv[i][1] == 'c') strcpy(ConfigFileName, &argv[i][2]);
 			if (argv[i][1] == 'u') {
 				if (argc > (i + 2)) {
@@ -1618,7 +1626,7 @@ int main(int argc, char* argv[])
 	}
 
 	MsgLog = fopen("MsgLog.txt", "w");
-	ret = InitConsole(SockConsole, MsgLog);
+	ret = InitConsole(SockConsole, MsgLog, port);
 	if (ret) {
 		printf(FONT_STYLE_BOLD COLOR_RED "ERROR: init console failed\n" COLOR_RESET);
 		exit(0);
@@ -1985,7 +1993,7 @@ ReadCfg:
 	// -----------------------------------------------------
 	// Open plotter
 	// -----------------------------------------------------
-	OpenPlotter();
+	OpenPlotter(devnull);
 
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++
 Restart:  // when config file changes or a new run of the job is scheduled, the acquisition restarts here // BUG: it does not restart when job is enabled, just when preset time or count is active

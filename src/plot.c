@@ -48,18 +48,29 @@ const int debug = 1;
 // --------------------------------------------------------------------------------
 // Open Gnuplot
 // --------------------------------------------------------------------------------
-int OpenPlotter()
+static bool plot_devnull = false;
+
+int OpenPlotter(bool devnull)
 {
+	plot_devnull = devnull;
 #ifdef linux
 	setenv("GDK_BACKEND", "x11", 1);
 #endif
 	char str[200];
 	//strcpy(str, ConfigVar->GnuPlotPath);
 	strcpy(str, "");
-	strcat(str, GNUPLOT_COMMAND);
+	if (devnull) {	// FRIB: headless mode, discard all plotting
+		strcat(str, "/dev/null");
+	} else {
+		strcat(str, GNUPLOT_COMMAND);
+	}
 	strcat(str, " 2> ");  
 	strcat(str, NULL_PATH); // redirect stderr to nul (to hide messages showing up in the console output)
-	if ((plotpipe = popen(str, "w")) == NULL) return -1;
+	if (devnull) {
+		if ((plotpipe = fopen(str, "w")) == NULL) return -1;
+	} else {
+		if ((plotpipe = popen(str, "w")) == NULL) return -1;
+	}
 
 	fprintf(plotpipe, "set terminal wxt noraise title 'FERS Readout' size 1200,800 position 700,10\n");
 	fprintf(plotpipe, "set grid\n");
@@ -75,12 +86,15 @@ int ClosePlotter()
 {
 	LastPlotType = -1;
 	LastPlotName = -1;
-	if (plotpipe != NULL)
+	if (plotpipe != NULL) {
+		if (plot_devnull) fclose(plotpipe);	// FRIB: /dev/null was fopen'd, not popen'd
+		else
 #ifdef _WIN32
 		_pclose(plotpipe);
 #else
 		pclose(plotpipe);
 #endif
+	}
 	return 0;
 }
 
