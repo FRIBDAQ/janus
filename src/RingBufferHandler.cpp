@@ -14,6 +14,7 @@
        East Lansing, MI 48824-1321
 */
 
+#include <cmath>
 #include <cstddef>
 #include <cstring>
 #include <ctime>
@@ -107,7 +108,8 @@ void RingBufferHandler::writeToRing(bool isHeader) {
             tstamp.element[iByte] = m_Buffer[3 + iByte];
         }
 
-        tstamp_int = tstamp.value*10000;
+        // Round, not truncate: e.g. 16989.296 us * 10000 = 169892959.99999997
+        tstamp_int = llround(tstamp.value*10000);
     }
 
     CPhysicsEventItem item(tstamp_int, m_SourceId, 0, m_SizeToWrite + 1024);
