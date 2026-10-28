@@ -15,6 +15,7 @@
 */
 
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <ctime>
 
@@ -150,7 +151,7 @@ void RingBufferHandler::writeToRing(bool isHeader) {
 }
 
 void RingBufferHandler::emitStateChangeToRing(bool isBegin, bool useBarrier) {
-    CRingStateChangeItem item(time(NULL), m_SourceId, (useBarrier ? (isBegin ? 1 : 2) : 0), (isBegin ? BEGIN_RUN : END_RUN), m_RunNumber, 0, time(NULL), m_Title);
+    CRingStateChangeItem item(UINT64_MAX, m_SourceId, (useBarrier ? (isBegin ? 1 : 2) : 0), (isBegin ? BEGIN_RUN : END_RUN), m_RunNumber, 0, time(NULL), m_Title);
     
     CRingBuffer* pR = m_RingBuffer.get();
     item.commitToRing(*pR);
