@@ -107,19 +107,25 @@ void GetDatapath(FILE* f_ini, Config_t* WDcfg) {
 }
 
 void GetTitle(FILE* f_ini, Config_t *WDcfg) {
+	char str[1000];
+	char *begin, *end;
+
 	memset(WDcfg->RunTitle, 0, 81);
 
-	while (true) {
-		char str[1000];
-		fscanf(f_ini, "%s", str);
+	// Read the rest of the line so that spaces in the title are kept
+	if (fgets(str, 1000, f_ini) == NULL)
+		return;
 
-		if (str[0] == '#') {
-			fgets(str, 1000, f_ini);
-			break;
-		}
+	// Cut off the trailing comment, then trim the surrounding whitespace
+	end = strchr(str, '#');
+	if (end == NULL) end = str + strlen(str);
+	while (end > str && isspace((unsigned char)end[-1])) end--;
+	*end = 0;
 
-		strcat(WDcfg->RunTitle, str);
-	}
+	begin = str;
+	while (isspace((unsigned char)*begin)) begin++;
+
+	strncpy(WDcfg->RunTitle, begin, 80);
 }
 
 // ---------------------------------------------------------------------------------
